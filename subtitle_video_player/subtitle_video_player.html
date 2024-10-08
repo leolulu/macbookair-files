@@ -1360,6 +1360,8 @@
                                     await loadSubtitlesFromJSON(blob);
                                 }
                                 loadDiarizationInfo(blob);
+                            } else if (fileUrl.toLowerCase().endsWith('.html')) {
+                                await loadHtmlFromSup(blob);
                             }
 
                         } catch (error) {
