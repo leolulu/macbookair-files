@@ -654,7 +654,7 @@
                         }
                         loadDiarizationInfo(files[i]);
                     } else if (files[i].name.toLowerCase().endsWith('.html')) {
-                        await loadHtmlFromSup(files[i])
+                        await loadSupFromHtml(files[i])
                     }
                 }
             }
@@ -669,7 +669,7 @@
             $('#videoFile').change(processFiles);
             $('#VideoUrlWithFile').change(processFiles);
 
-            function loadHtmlFromSup(file) {
+            function loadSupFromHtml(file) {
                 return new Promise((resolve, reject) => {
                     clearAllSub()
                     var reader = new FileReader();
@@ -1361,7 +1361,7 @@
                                 }
                                 loadDiarizationInfo(blob);
                             } else if (fileUrl.toLowerCase().endsWith('.html')) {
-                                await loadHtmlFromSup(blob);
+                                await loadSupFromHtml(blob);
                             }
 
                         } catch (error) {
