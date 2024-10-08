@@ -1319,7 +1319,14 @@
                     .then(data => {
                         var files = data.split('\n');
                         var fileListHtml = files.map(file => {
-                            if (file.toLowerCase().endsWith('.mp4') || file.toLowerCase().endsWith('.webm') || file.toLowerCase().endsWith('.json') || file.toLowerCase().endsWith('.srt') || file.toLowerCase().endsWith('.ass')) {
+                            if (
+                                file.toLowerCase().endsWith('.mp4') ||
+                                file.toLowerCase().endsWith('.webm') ||
+                                file.toLowerCase().endsWith('.json') ||
+                                file.toLowerCase().endsWith('.srt') ||
+                                file.toLowerCase().endsWith('.ass') ||
+                                file.toLowerCase().endsWith('.html')
+                            ) {
                                 return `<label><input type="checkbox" name="file" value="${file}">${file}</label><br>`;
                             }
                         }).join('');
@@ -1465,7 +1472,7 @@
 
             (function () {
                 const subtitlesWidthSequence = [50, 60, 70, 80, 40, 30, 20];
-                let currentWidthIndex = 0; 
+                let currentWidthIndex = 0;
 
                 const cycleButton = $('#cycleSubtitlesWidth');
 
