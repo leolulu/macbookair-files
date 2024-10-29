@@ -52,6 +52,8 @@ class ConcatPrioritizer:
 
 concat_prioritizer = ConcatPrioritizer()
 
+global_encode_task_executor_pool = None
+
 
 def check_video_corrupted(video_file_path):
     command = f'ffprobe "{video_file_path}"'
@@ -220,8 +222,11 @@ def gen_video_thumbnail(
         concat_prioritizer.block_if_concatting()
         subprocess.run(command, shell=True)
 
-    with ThreadPoolExecutor(low_load_mode if low_load_mode else os.cpu_count()) as exe:
-        exe.map(run_with_blocking, gen_footage_commands)
+    if global_encode_task_executor_pool:
+        list(global_encode_task_executor_pool.map(run_with_blocking, gen_footage_commands))
+    else:
+        with ThreadPoolExecutor(low_load_mode if low_load_mode else os.cpu_count()) as exe:
+            exe.map(run_with_blocking, gen_footage_commands)
 
     # 检查中间文件是否损坏
     print("开始检查中间文件是否损坏...")
@@ -419,6 +424,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--full", help="是否要生成多个缩略图以覆盖视频完整时长", action="store_true")
     parser.add_argument("-l", "--low", help="低负载模式，可指定线程数量，默认使用单线程进行转换", type=int, const=1, nargs="?")
+    parser.add_argument(
+        "-gl", "--global_low", help="全局低负载模式，所有任务共享指定数量线程，参数指定方式同low模式", type=int, const=1, nargs="?"
+    )
     parser.add_argument("-m", "--max", help="指定生成单个视频缩略图的最大时长", type=int, default=30)
     parser.add_argument("-ao", "--alternative_output_folder_path", help="指定结果文件的生成路径，而不是和源文件相同目录", type=str)
     parser.add_argument(
@@ -437,6 +445,9 @@ if __name__ == "__main__":
     if args.pic_only and args.video_only:
         print(f"-p和-v模式只能二选一，不能同时设置!")
         exit()
+
+    if args.global_low:
+        global_encode_task_executor_pool = ThreadPoolExecutor(args.global_low)
 
     def process_video(args):
         video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
