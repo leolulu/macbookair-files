@@ -412,7 +412,7 @@ def generate_thumbnail(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("video_path", help="视频路径或视频目录路径，如果不提供的话，则进入循环模式", type=str, nargs="?")
+    parser.add_argument("video_path", help="视频路径或视频目录路径，如果不提供的话，则进入交互式输入模式", type=str, nargs="?")
     parser.add_argument("rows", help="缩略图行数", type=int, nargs="?")
     parser.add_argument("cols", help="缩略图列数", type=int, nargs="?")
     parser.add_argument(
@@ -423,9 +423,9 @@ if __name__ == "__main__":
         choices=["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
     )
     parser.add_argument("--full", help="是否要生成多个缩略图以覆盖视频完整时长", action="store_true")
-    parser.add_argument("-l", "--low", help="低负载模式，可指定线程数量，默认使用单线程进行转换", type=int, const=1, nargs="?")
+    parser.add_argument("-l", "--low", help="低负载模式，可指定转码线程数量，默认使用单线程进行转换", type=int, const=1, nargs="?")
     parser.add_argument(
-        "-gl", "--global_low", help="全局低负载模式，所有任务共享指定数量线程，参数指定方式同low模式", type=int, const=1, nargs="?"
+        "-gl", "--global_low", help="全局低负载模式，所有并发任务共享指定数量转码线程，参数指定方式同low模式", type=int, const=1, nargs="?"
     )
     parser.add_argument("-m", "--max", help="指定生成单个视频缩略图的最大时长", type=int, default=30)
     parser.add_argument("-ao", "--alternative_output_folder_path", help="指定结果文件的生成路径，而不是和源文件相同目录", type=str)
