@@ -357,9 +357,14 @@ def generate_thumbnail(
     video_thumbnail_only=False,
     delete_seg_file_in_full_mode=False,
 ):
-    if skip_completed_file and any(map(os.path.exists, [os.path.splitext(video_path)[0] + i for i in [".tbnl", ".jpg"]])):
-        print(f"视频【{video_path}】已经存在结果文件，跳过...")
-        return
+    if skip_completed_file:
+        self_result_file_exists = any(map(os.path.exists, [os.path.splitext(video_path)[0] + i for i in [".tbnl", ".jpg"]]))
+        derivative_result_file_exists = any(
+            [i.startswith(os.path.splitext(os.path.basename(video_path))[0] + "-seg") for i in os.listdir(os.path.dirname(video_path))]
+        )
+        if self_result_file_exists or derivative_result_file_exists:
+            print(f"视频【{video_path}】已经存在结果文件，跳过...")
+            return
 
     if "/" in screen_ratio_raw:
         screen_ratio = int(screen_ratio_raw.split("/")[0]) / int(screen_ratio_raw.split("/")[-1])
