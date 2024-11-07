@@ -416,8 +416,15 @@ def generate_thumbnail(
 
 
 if __name__ == "__main__":
+    download_folder_alias = "dl"
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("video_path", help="视频路径或视频目录路径，如果不提供的话，则进入交互式输入模式", type=str, nargs="?")
+    parser.add_argument(
+        "video_path",
+        help=f'视频路径或视频目录路径(使用"{download_folder_alias}"指代系统下载目录)；如果不提供的话，则进入交互式输入模式',
+        type=str,
+        nargs="?",
+    )
     parser.add_argument("rows", help="缩略图行数", type=int, nargs="?")
     parser.add_argument("cols", help="缩略图列数", type=int, nargs="?")
     parser.add_argument(
@@ -457,7 +464,7 @@ if __name__ == "__main__":
     def process_video(args):
         video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
         video_path = args.video_path
-        if video_path.lower() == "dl":
+        if video_path.lower() == download_folder_alias:
             video_path = str(Path.home() / "Downloads")
         if (args.rows is None) and (args.cols is None):
             rows = 7
