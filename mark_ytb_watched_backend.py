@@ -20,7 +20,7 @@ def download_video():
     payload = request.form
     video_url = payload["video_url"]
     download_dir = r"\\192.168.123.222\dufs\faster_whisper_result"
-    download_command = f'python yt_dlp_tool.py --dl_dir "{download_dir}" "{video_url}"'
+    download_command = f'python yt_dlp_tool.py --dl_dir "{download_dir}" --prefix "㊟" "{video_url}"'
 
     def run_command():
         s = subprocess.run(download_command, shell=True, capture_output=True, text=True)
