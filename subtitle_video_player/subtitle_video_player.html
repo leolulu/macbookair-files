@@ -1031,21 +1031,49 @@
             }
 
             var previousSpeed = 1;
+            var fastForwarding = false
+            var fastForwardTaskTimer = null
+            var fastForwardTaskInstance = null
             function fastForwardUntilDetach(detach_time, need_calibration = false, fastForwardSpeed = 8) {
-                $('#video').off('timeupdate', highlightSubtitle)
-                setTimeout(() => {
-                    hideVideoSpeedControllerTemporarily();
-                    $('#video')[0].playbackRate = previousSpeed;
-                    if (need_calibration) {
-                        $('#video')[0].currentTime = detach_time;
+                $('#video').off('timeupdate', highlightSubtitle);
+                $('#video').off('seeking', highlightSubtitle);
+                fastForwardTaskInstance = {
+                    needCalibration: need_calibration,
+                    taskFunction() {
+                        fastForwarding = false;
+                        hideVideoSpeedControllerTemporarily();
+                        $('#video')[0].playbackRate = previousSpeed;
+                        if (fastForwardTaskInstance.needCalibration) {
+                            $('#video')[0].currentTime = detach_time;
+                        }
+                        $('#video').on('timeupdate', highlightSubtitle);
+                        $('#video').on('seeking', highlightSubtitle);
+                        $('#ff-sign').addClass('hide-element');
                     }
-                    $('#video').on('timeupdate', highlightSubtitle);
-                    $('#ff-sign').addClass('hide-element')
-                }, (detach_time - $('#video')[0].currentTime) / fastForwardSpeed * 1000);
+                }
+                fastForwardTaskTimer = setTimeout(
+                    fastForwardTaskInstance.taskFunction,
+                    (detach_time - $('#video')[0].currentTime) / fastForwardSpeed * 1000
+                );
+                fastForwarding = true;
                 hideVideoSpeedControllerTemporarily();
                 $('#video')[0].playbackRate = fastForwardSpeed;
-                $('#ff-sign').removeClass('hide-element')
+                $('#ff-sign').removeClass('hide-element');
             }
+
+            function fastForwardMonitor() {
+                if (!fastForwarding) return
+                let currentTime = accTime($('#video')[0].currentTime);
+                let subActivating = subtitles.some((sub) => {
+                    return currentTime >= sub.start && currentTime < sub.end;
+                });
+                if (subActivating) {
+                    clearTimeout(fastForwardTaskTimer);
+                    fastForwardTaskInstance.needCalibration = false;
+                    setTimeout(fastForwardTaskInstance.taskFunction, 0);
+                }
+            }
+            $('#video').on('timeupdate', fastForwardMonitor);
 
             var hideProgressBarTempTimer = null;
             // Set up event listener for video time updates
