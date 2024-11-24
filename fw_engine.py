@@ -269,9 +269,13 @@ class FasterWhisper:
     def detect_language(self, media_path):
         audio = os.path.abspath(media_path)
         audio = decode_audio(audio, sampling_rate=self.model.feature_extractor.sampling_rate)
-        features = self.model.feature_extractor(audio)
+        features = self.model.feature_extractor(audio)  # type: ignore
         segment = features[:, : self.model.feature_extractor.nb_max_frames]
         encoder_output = self.model.encode(segment)
+        # result = self.model.detect_language(audio)
+        # 如上所示，新版WhisperModel自身新增了detect_language方法，直接使用decode的audio，不需要再encode
+        # 输出格式略有变化
+        # 目前基于WhisperModel的self.model的方法仍然可用，暂时不变更。未来如果被移除了，再做修改
         result = self.model.model.detect_language(encoder_output)
         return max(result[0], key=lambda x: x[-1])[0].replace("<|", "").replace("|>", "")
 
