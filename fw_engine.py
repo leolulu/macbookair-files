@@ -91,8 +91,10 @@ class FasterWhisper:
         ) as pbar:
             for segment in segments:
                 if info.language == "zh":
-                    segment = segment._replace(text=zhconv.convert(segment.text, "zh-cn"))
-                    segment = segment._replace(words=[w._replace(word=zhconv.convert(w.word, "zh-cn")) for w in segment.words])  # type: ignore
+                    segment.text = zhconv.convert(segment.text, "zh-cn")
+                    if segment.words is not None:
+                        for word in segment.words:
+                            word.word = zhconv.convert(word.word, "zh-cn")
                 timestamp_last = round(segment.end)
                 time_now = time.time()
                 if time_now - last_burst > set_delay:  # catch new chunk
@@ -322,6 +324,7 @@ class FasterWhisper:
 
 if __name__ == "__main__":
     support_media_type_in_folder_processing_mode = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".webm", ".mp3"]
+    with_diarization = False
 
     def process_media(media_path):
         if os.path.exists(os.path.splitext(media_path)[0] + ".srt") or os.path.exists(os.path.splitext(media_path)[0] + ".json"):
@@ -334,7 +337,7 @@ if __name__ == "__main__":
                 with_srt=True,
                 with_json=True,
                 with_txt=True,
-                with_diarization=True,
+                with_diarization=with_diarization,
                 with_png=False,
                 language="auto",
                 vad_filter=True,
@@ -345,7 +348,10 @@ if __name__ == "__main__":
     w = FasterWhisper(local_files_only=True)
 
     if len(sys.argv) > 1:
-        process_media(sys.argv[1].strip())
+        if sys.argv[1] == "dia":
+            with_diarization = True
+        else:
+            process_media(sys.argv[1].strip())
 
     while True:
         input_path = input("请输入媒体文件或文件夹的绝对路径：").strip()
