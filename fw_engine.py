@@ -345,7 +345,7 @@ if __name__ == "__main__":
         except:
             traceback.print_exc()
 
-    w = FasterWhisper(local_files_only=True)
+    w = FasterWhisper(local_files_only=True, model_size="large-v3-turbo")
 
     if len(sys.argv) > 1:
         if sys.argv[1] == "dia":
