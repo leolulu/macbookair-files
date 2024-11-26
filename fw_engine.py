@@ -13,13 +13,13 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Thread
-from typing import Iterable, List, Union
+from typing import Iterable, List, Union, cast
 
 import stable_whisper
 import torch
 import torchaudio
 import zhconv
-from faster_whisper import WhisperModel
+from faster_whisper import BatchedInferencePipeline, WhisperModel
 from faster_whisper.audio import decode_audio
 from faster_whisper.transcribe import Segment
 from pyannote.audio import Pipeline
@@ -41,7 +41,14 @@ class LockManager:
 
 
 class FasterWhisper:
-    def __init__(self, model_size="large-v3", local_files_only=True, enable_lock_for_rich=False, compute_type="float16") -> None:
+    def __init__(
+        self,
+        model_size="large-v3",
+        local_files_only=True,
+        enable_lock_for_rich=False,
+        compute_type="float16",
+        batch_pipeline_mode=False,
+    ) -> None:
         gpu_device_count = torch.cuda.device_count()
         self.model = WhisperModel(
             model_size,
@@ -50,6 +57,9 @@ class FasterWhisper:
             local_files_only=local_files_only,
             device_index=list(range(gpu_device_count))[::-1],
         )
+        self.batch_pipeline_mode = batch_pipeline_mode
+        if batch_pipeline_mode:
+            self.model = BatchedInferencePipeline(model=self.model)
         self.pyannote_pipeline = None
         self.enable_lock_for_rich = enable_lock_for_rich
         self.lock_manager = LockManager()
@@ -270,15 +280,20 @@ class FasterWhisper:
 
     def detect_language(self, media_path):
         audio = os.path.abspath(media_path)
-        audio = decode_audio(audio, sampling_rate=self.model.feature_extractor.sampling_rate)
-        features = self.model.feature_extractor(audio)  # type: ignore
-        segment = features[:, : self.model.feature_extractor.nb_max_frames]
-        encoder_output = self.model.encode(segment)
+        if self.batch_pipeline_mode:
+            model = cast(BatchedInferencePipeline, self.model).model
+        else:
+            model = cast(WhisperModel, self.model)
+
+        audio = decode_audio(audio, sampling_rate=model.feature_extractor.sampling_rate)
+        features = model.feature_extractor(audio)  # type: ignore
+        segment = features[:, : model.feature_extractor.nb_max_frames]
+        encoder_output = model.encode(segment)
         # result = self.model.detect_language(audio)
         # 如上所示，新版WhisperModel自身新增了detect_language方法，直接使用decode的audio，不需要再encode
         # 输出格式略有变化
         # 目前基于WhisperModel的self.model的方法仍然可用，暂时不变更。未来如果被移除了，再做修改
-        result = self.model.model.detect_language(encoder_output)
+        result = model.model.detect_language(encoder_output)
         return max(result[0], key=lambda x: x[-1])[0].replace("<|", "").replace("|>", "")
 
     def detect_language_by_longer_material(self, media_path):
@@ -325,6 +340,7 @@ class FasterWhisper:
 if __name__ == "__main__":
     support_media_type_in_folder_processing_mode = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".webm", ".mp3"]
     with_diarization = False
+    batch_pipeline_mode = False
 
     def process_media(media_path):
         if os.path.exists(os.path.splitext(media_path)[0] + ".srt") or os.path.exists(os.path.splitext(media_path)[0] + ".json"):
@@ -345,13 +361,15 @@ if __name__ == "__main__":
         except:
             traceback.print_exc()
 
-    w = FasterWhisper(local_files_only=True, model_size="large-v3-turbo")
-
     if len(sys.argv) > 1:
         if sys.argv[1] == "dia":
             with_diarization = True
+        elif sys.argv[1] == "batch":
+            batch_pipeline_mode = True
         else:
             process_media(sys.argv[1].strip())
+
+    w = FasterWhisper(local_files_only=True, model_size="large-v3-turbo", batch_pipeline_mode=batch_pipeline_mode)
 
     while True:
         input_path = input("请输入媒体文件或文件夹的绝对路径：").strip()
