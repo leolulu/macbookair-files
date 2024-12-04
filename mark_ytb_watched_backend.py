@@ -1,3 +1,4 @@
+import os
 import subprocess
 from threading import Thread
 
@@ -23,7 +24,9 @@ def download_video():
     download_command = f'python yt_dlp_tool.py --dl_dir "{download_dir}" --prefix "㊟" "{video_url}"'
 
     def run_command():
-        s = subprocess.run(download_command, shell=True, capture_output=True, text=True)
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        s = subprocess.run(download_command, shell=True, capture_output=True, text=True, env=env)
         print(video_url, s.stdout, s.stderr)
 
     Thread(target=run_command).start()
