@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import pickle
+import re
 import subprocess
 import time
 import traceback
@@ -12,7 +13,7 @@ from typing import Optional
 import chardet
 import requests
 
-from utils import establish_temp_proxy_server_legacy, kill_subprocess_recursively, test_by_youtube
+from utils import LocalKVDatabase, establish_temp_proxy_server_legacy, kill_subprocess_recursively, test_by_youtube
 
 
 class ProxyNode:
@@ -91,7 +92,11 @@ class ProxyNode:
 
 
 class BLL_PROXY_GETTER:
+    STREAM_ID = "stream_id"
+    KVDB_PATH = "config.db"
+
     def __init__(self, top_node_count=5) -> None:
+        self.kvdb = LocalKVDatabase(BLL_PROXY_GETTER.KVDB_PATH)
         self.default_proxy = "http://127.0.0.1:10809"
         self.active_proxy = self.default_proxy
         self.last_frame_file_name = "last.jpg"
@@ -155,22 +160,44 @@ class BLL_PROXY_GETTER:
 
         raise UserWarning("没有可用的代理服务器(默认的与存量proxy节点)，跳过本轮环节...")
 
-    def get_streaming_url(self):
+    def _obtain_stream_video_url_from_stream_id(self):
         self.set_proxy()
-        command = "yt-dlp -g cS6zS5hi1w0 | head -n 1"
+        stream_id = self.kvdb.read_value_by_key(BLL_PROXY_GETTER.STREAM_ID)
+        if stream_id is None:
+            self.kvdb.write_value_by_key(BLL_PROXY_GETTER.STREAM_ID, "在这里填入直播id")
+            raise UserWarning(f'需要在"{BLL_PROXY_GETTER.KVDB_PATH}"中设置直播id')
+        command = f"yt-dlp -g {self.kvdb.read_value_by_key(BLL_PROXY_GETTER.STREAM_ID)} | head -n 1"
         print(f"开始尝试获取直播视频地址...")
         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, error = process.communicate()
         self.unset_proxy()
+        return process, output, error
+
+    def _parse_stream_info_response(self, process, output, error):
+        output_string = output.decode(str(chardet.detect(output)["encoding"])).strip()
+        error_string = error.decode(str(chardet.detect(error)["encoding"])).strip()
 
         if process.returncode == 0:
-            self.steaming_url = output.decode(str(chardet.detect(output)["encoding"])).strip()
+            if "This live stream recording is not available" in error_string:
+                print("直播id已过期，尝试获取新id...")
+                return True
+            self.steaming_url = output_string
             if not self.steaming_url:
-                raise UserWarning(f"没有成功获取到视频地址：{error.decode(str(chardet.detect(error)['encoding'])).strip()}")
+                raise UserWarning(f"没有成功获取到视频地址：{error_string}")
             print(f"获取到直播视频真地址：{self.steaming_url[:50]}...")
         else:
-            print("Error:", error.decode(str(chardet.detect(error)["encoding"])).strip())
+            print("Error:", error_string)
             self.steaming_url = None
+
+    def get_streaming_url(self):
+        if self._parse_stream_info_response(*self._obtain_stream_video_url_from_stream_id()):
+            self.set_proxy()
+            res = requests.get("https://www.youtube.com/@bulianglin/streams")
+            self.unset_proxy()
+            new_stream_id = re.findall(r'"videoId":"(\S+?)".*?在线直播分享免费节点', res.text)[0]
+            self.kvdb.write_value_by_key(BLL_PROXY_GETTER.STREAM_ID, new_stream_id)
+            print(f"成功更新直播id...")
+            self._parse_stream_info_response(*self._obtain_stream_video_url_from_stream_id())
 
     def get_last_frame(self):
         self.set_proxy()

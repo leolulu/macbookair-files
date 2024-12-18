@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import subprocess
 from copy import deepcopy
 from time import sleep
@@ -208,3 +209,31 @@ def test_by_website_with_retry(test_website_url, max_retry=5, retry_interval=1):
             fail_times += 1
             sleep(retry_interval)
     return False
+
+
+class LocalKVDatabase:
+    KV_DELIMITER = ": "
+    ITEM_DELIMITER = "\n"
+
+    def __init__(self, db_file_path) -> None:
+        self.db_file_path = db_file_path
+
+    def get_all_kv(self):
+        if not os.path.exists(self.db_file_path):
+            return dict()
+        with open(self.db_file_path, "r", encoding="utf-8") as f:
+            data = f.read().strip()
+        data = {
+            k: v for (k, v) in [item.split(LocalKVDatabase.KV_DELIMITER, maxsplit=1) for item in data.split(LocalKVDatabase.ITEM_DELIMITER)]
+        }
+        return data
+
+    def read_value_by_key(self, key):
+        data = self.get_all_kv()
+        return data.get(key)
+
+    def write_value_by_key(self, key, value):
+        data = self.get_all_kv()
+        data[key] = value
+        with open(self.db_file_path, "w", encoding="utf-8") as f:
+            f.write(LocalKVDatabase.ITEM_DELIMITER.join([LocalKVDatabase.KV_DELIMITER.join(item) for item in data.items()]))
