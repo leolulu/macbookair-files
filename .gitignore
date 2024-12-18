@@ -5,6 +5,7 @@
 Pipfile
 
 bll_get_proxy_url/v2ray_config.json
+bll_get_proxy_url/config.db
 
 subtitle_video_player/sup/
 
