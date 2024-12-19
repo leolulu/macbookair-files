@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import subprocess
+import time
 from copy import deepcopy
 from time import sleep
 from typing import Any, Dict, List
@@ -237,3 +238,7 @@ class LocalKVDatabase:
         data[key] = value
         with open(self.db_file_path, "w", encoding="utf-8") as f:
             f.write(LocalKVDatabase.ITEM_DELIMITER.join([LocalKVDatabase.KV_DELIMITER.join(item) for item in data.items()]))
+
+
+def get_current_time_formatted_string():
+    return "更新时间: {}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))

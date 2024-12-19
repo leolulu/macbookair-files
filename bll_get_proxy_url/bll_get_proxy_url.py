@@ -6,6 +6,7 @@ import re
 import subprocess
 import time
 import traceback
+import urllib.parse
 from collections import deque
 from datetime import datetime
 from typing import Optional
@@ -13,7 +14,13 @@ from typing import Optional
 import chardet
 import requests
 
-from utils import LocalKVDatabase, establish_temp_proxy_server_legacy, kill_subprocess_recursively, test_by_youtube
+from utils import (
+    LocalKVDatabase,
+    establish_temp_proxy_server_legacy,
+    get_current_time_formatted_string,
+    kill_subprocess_recursively,
+    test_by_youtube,
+)
 
 
 class ProxyNode:
@@ -165,7 +172,7 @@ class BLL_PROXY_GETTER:
         stream_id = self.kvdb.read_value_by_key(BLL_PROXY_GETTER.STREAM_ID)
         if stream_id is None:
             self.kvdb.write_value_by_key(BLL_PROXY_GETTER.STREAM_ID, "在这里填入直播id")
-            raise UserWarning(f'需要在"{BLL_PROXY_GETTER.KVDB_PATH}"中设置直播id')
+            return None, None, UserWarning(f'"{BLL_PROXY_GETTER.KVDB_PATH}"中没有设置直播id')
         command = f"yt-dlp -g {self.kvdb.read_value_by_key(BLL_PROXY_GETTER.STREAM_ID)} | head -n 1"
         print(f"开始尝试获取直播视频地址...")
         process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -174,6 +181,10 @@ class BLL_PROXY_GETTER:
         return process, output, error
 
     def _parse_stream_info_response(self, process, output, error):
+        if isinstance(error, UserWarning):
+            print(f"{error}，尝试获取直播id")
+            return True
+
         output_string = output.decode(str(chardet.detect(output)["encoding"])).strip()
         error_string = error.decode(str(chardet.detect(error)["encoding"])).strip()
 
@@ -290,10 +301,10 @@ class BLL_PROXY_GETTER:
             )
 
         if top_nodes:
-            result_output_content = "{}\n\n{}\n\n更新时间: {}".format(
+            result_output_content = "{}\n\n{}\n\n{}".format(
                 "\n".join([i.link for i in top_nodes]),
                 "\n".join([f"{round(i.longterm_avg_speed/1024/1024,2)}MB/S - {i.name}" for i in top_nodes]),
-                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                get_current_time_formatted_string(),
             )
             with open(self.result_file_name_links, "w", encoding="utf-8") as f:
                 f.write(result_output_content)
@@ -329,6 +340,7 @@ class BLL_PROXY_GETTER:
         url = f"http://t.bad-sql.top:1127/Saladict/{self.result_file_name_subscription}"
         with open(self.result_file_name_links, "r", encoding="utf-8") as f:
             result = f.read()
+        result = f"trojan://@0.0.0.0:1#{urllib.parse.quote(get_current_time_formatted_string())}\n" + result
         with open(self.result_file_name_subscription, "w", encoding="utf-8") as f:
             f.write(base64.b64encode(result.encode("utf-8")).decode("utf-8"))
         with open(self.result_file_name_subscription, "rb") as f:
