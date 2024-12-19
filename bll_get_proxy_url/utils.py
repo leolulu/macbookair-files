@@ -241,4 +241,4 @@ class LocalKVDatabase:
 
 
 def get_current_time_formatted_string():
-    return "更新时间: {}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    return "更新时间：{}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
