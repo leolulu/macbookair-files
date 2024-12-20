@@ -1,6 +1,7 @@
-from pathlib import Path
-import subprocess
 import argparse
+import os
+import subprocess
+from pathlib import Path
 
 
 def process_url(url):
@@ -9,7 +10,12 @@ def process_url(url):
     else:
         prefix = ""
 
-    download_command_template = 'yt-dlp --ignore-errors --windows-filenames --proxy socks5://127.0.0.1:10808 --mark-watched --retries 99 --file-access-retries 99 --fragment-retries 99 -o "{temp_folder}/{prefix}%(title)s.%(ext)s" #encode-video-placeholder# #remux-video-placeholder# {simulate} --cookies-from-browser chrome --no-playlist "{url}"'
+    if os.path.exists(r"C:\Users\yuanx\AppData\Roaming\Python\Python313\Scripts\yt-dlp.exe"):
+        download_command_template = '"C:/Users/yuanx/AppData/Roaming/Python/Python313/Scripts/yt-dlp.exe"'
+    else:
+        download_command_template = "yt-dlp"
+
+    download_command_template += ' --ignore-errors --windows-filenames --proxy socks5://127.0.0.1:10808 --mark-watched --retries 99 --file-access-retries 99 --fragment-retries 99 -o "{temp_folder}/{prefix}%(title)s.%(ext)s" #encode-video-placeholder# #remux-video-placeholder# {simulate} --cookies-from-browser chrome --no-playlist "{url}"'
     download_command_template = download_command_template.format(
         url=url,
         temp_folder=args.dl_dir.replace("\\", "/").replace("\\\\", "/"),
