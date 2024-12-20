@@ -1,1 +1,1 @@
-python mark_ytb_watched_backend.py
+"C:\Program Files\Python313\python.exe" mark_ytb_watched_backend.py
