@@ -11,10 +11,7 @@ app = Flask(__name__)
 def mark_video_watched():
     payload = request.form
     video_url = payload["video_url"]
-    if os.path.exists(r"C:\Program Files\Python313\python.exe"):
-        s = subprocess.run(f'"C:/Program Files/Python313/python.exe" yt_dlp_tool.py -d "{video_url}"', shell=True)
-    else:
-        s = subprocess.run(f'python yt_dlp_tool.py -d "{video_url}"', shell=True)
+    s = subprocess.run(f'python yt_dlp_tool.py -d "{video_url}"', shell=True)
     print(video_url, s.stdout, s.stderr)
     return "ok", 200
 
@@ -24,7 +21,11 @@ def download_video():
     payload = request.form
     video_url = payload["video_url"]
     download_dir = r"\\192.168.123.222\dufs\faster_whisper_result"
-    download_command = f'python yt_dlp_tool.py --dl_dir "{download_dir}" --prefix "㊟" "{video_url}"'
+    if os.path.exists(r"C:\Program Files\Python313\python.exe"):
+        python_exe = '"C:/Program Files/Python313/python.exe"'
+    else:
+        python_exe = "python"
+    download_command = python_exe + f' yt_dlp_tool.py --dl_dir "{download_dir}" --prefix "㊟" "{video_url}"'
 
     def run_command():
         env = os.environ.copy()
