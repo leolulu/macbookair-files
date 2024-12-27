@@ -27,6 +27,8 @@ class ProxyNode:
     TYPE_VMESS = "vmess"
     TYPE_TROJAN = "trojan"
     TYPE_UNDEFINE = "undefine"
+    TYPE_IP = "ip"
+    TYPE_DOMAIN = "domain"
 
     def __init__(self, link: str) -> None:
         self.link = link
@@ -36,6 +38,7 @@ class ProxyNode:
         self.type = self.judge_node_type(link)
         self.birth_time = datetime.now()
         self.parse_link()
+        self.parse_addr_type()
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ProxyNode):
@@ -53,13 +56,25 @@ class ProxyNode:
 
     def parse_link(self):
         try:
-            if self.link.lower().startswith("vmess"):
+            if self.type == ProxyNode.TYPE_VMESS:
                 self.link_info = json.loads(base64.b64decode(self.link.replace("vmess://", "")).decode("utf-8"))
                 self.addr = self.link_info["add"]
+            elif self.type == ProxyNode.TYPE_TROJAN:
+                addr = re.findall(r"//\S+@(\S+):\d+", self.link)
+                self.addr = addr[0] if addr else None
             else:
                 self.addr = None
         except:
             self.addr = None
+
+    def parse_addr_type(self):
+        if self.addr is None:
+            self.addr_type = None
+            return
+        if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", self.addr):
+            self.addr_type = ProxyNode.TYPE_IP
+        else:
+            self.addr_type = ProxyNode.TYPE_DOMAIN
 
     def judge_node_type(self, link):
         if link.lower().startswith(ProxyNode.TYPE_VMESS):
@@ -294,7 +309,7 @@ class BLL_PROXY_GETTER:
         if len(top_nodes) < self.top_node_count:
             top_nodes.extend(
                 sorted(
-                    [i for i in self.proxy_nodes if i.isok and i.type == ProxyNode.TYPE_TROJAN],
+                    [i for i in self.proxy_nodes if i.isok and i.type == ProxyNode.TYPE_TROJAN and i.addr_type == ProxyNode.TYPE_DOMAIN],
                     key=lambda x: x.longterm_avg_speed,
                     reverse=True,
                 )[: self.top_node_count - len(top_nodes)]
