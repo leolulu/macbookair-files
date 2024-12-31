@@ -57,10 +57,7 @@ global_encode_task_executor_pool = None
 
 def check_video_corrupted(video_file_path):
     command = f'ffprobe "{video_file_path}"'
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
-    except UnicodeDecodeError:
-        result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
     is_corrupted, width, height = True, None, None
     for line_content in result.stderr.split("\n"):
         if "Stream" in line_content and "Video" in line_content:
