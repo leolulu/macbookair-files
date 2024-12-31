@@ -552,6 +552,7 @@ if __name__ == "__main__":
                 args.full_delete_mode,
             )
         else:
+            args.skip = False
             generate_thumbnail(
                 video_path,
                 rows,
