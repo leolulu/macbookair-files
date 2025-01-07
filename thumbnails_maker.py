@@ -571,10 +571,22 @@ if __name__ == "__main__":
 
     if args.video_path is None:
         while True:
-            input_string = input("请输入视频地址和行数，以空格隔开，若有列数则'row-col'的形式：")
+            input_string = input("请输入视频地址和行数，以空格隔开，若有列数则'row-col'的形式，若要旋转则在最后输入'l|r'：")
             if not input_string:
                 continue
             video_path, rows_input = input_string.rsplit(" ", 1)
+
+            if rotate_sign := re.findall(r"[lr]$", rows_input):
+                rotate_sign = rotate_sign[0]
+                rows_input = rows_input[:-1]
+                rotated_video_path = f"_rotated_{rotate_sign}".join(os.path.splitext(video_path))
+                rotate_angle = {"l": "90", "r": "270"}[rotate_sign]
+                subprocess.run(
+                    f'ffmpeg -i "{video_path}" -metadata:s:v rotate="{rotate_angle}" -c copy -y "{rotated_video_path}"',
+                    shell=True,
+                )
+                video_path = rotated_video_path
+
             try:
                 rows = int(rows_input)
                 cols = None
