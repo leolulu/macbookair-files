@@ -412,6 +412,26 @@ def generate_thumbnail(
         process_video(video_path, rows_calced, cols_calced)
 
 
+def preprocessing_rotate_video(video_path: str, rotate_sign):
+    if rotate_sign is None:
+        return video_path
+    rotated_video_path = f"_rotated_{rotate_sign}".join([os.path.splitext(video_path)[0], ".mp4"])
+    if os.path.splitext(video_path.lower())[-1] == ".mp4":
+        rotate_angle = {"l": "90", "r": "270"}[rotate_sign]
+        command = f'ffmpeg -i "{video_path}" -metadata:s:v rotate="{rotate_angle}" -c copy -y "{rotated_video_path}"'
+    else:
+        transpose_angle = {"l": "2", "r": "1"}[rotate_sign]
+        command = f'ffmpeg -i "{video_path}" -vf "transpose={transpose_angle}" -y "{rotated_video_path}"'
+    print(f"开始旋转视频，指令：\n{command}")
+    subprocess.run(command, shell=True)
+    return rotated_video_path
+
+
+def preprocessing(video_path: str, kwargs):
+    video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
+    return video_path
+
+
 if __name__ == "__main__":
     download_folder_alias = "dl"
 
@@ -458,7 +478,7 @@ if __name__ == "__main__":
     if args.global_low:
         global_encode_task_executor_pool = ThreadPoolExecutor(args.global_low)
 
-    def process_video(args):
+    def process_video(args, **kwargs):
         video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
         video_path = args.video_path
         if video_path.lower() == download_folder_alias:
@@ -473,7 +493,7 @@ if __name__ == "__main__":
             rows = args.rows
             cols = args.cols
 
-        if os.path.isdir(video_path):
+        if os.path.isdir(video_path):  # 处理目录
             if args.recursion:
                 video_paths = []
                 for dir_, _, files_ in os.walk(video_path):
@@ -490,7 +510,7 @@ if __name__ == "__main__":
                     for video_path in video_paths:
                         exe.submit(
                             generate_thumbnail,
-                            video_path,
+                            preprocessing(video_path, kwargs),
                             rows,
                             cols,
                             args.preset,
@@ -508,7 +528,7 @@ if __name__ == "__main__":
                 for video_path in video_paths:
                     try:
                         generate_thumbnail(
-                            video_path,
+                            preprocessing(video_path, kwargs),
                             rows,
                             cols,
                             args.preset,
@@ -524,7 +544,7 @@ if __name__ == "__main__":
                         )
                     except:
                         traceback.print_exc()
-        elif str(video_path).lower().startswith("http"):
+        elif str(video_path).lower().startswith("http"):  # 处理网络视频
             file_name = os.path.basename(video_path)
             file_path = os.path.join(str(Path.home() / "Downloads"), file_name)
             if not os.path.exists(file_path):
@@ -537,7 +557,7 @@ if __name__ == "__main__":
                 with open(file_path, "wb") as f:
                     f.write(download_video(video_path))
             generate_thumbnail(
-                file_path,
+                preprocessing(file_path, kwargs),
                 rows,
                 cols,
                 args.preset,
@@ -551,10 +571,10 @@ if __name__ == "__main__":
                 args.video_only,
                 args.full_delete_mode,
             )
-        else:
+        else:  # 处理单个视频
             args.skip = False
             generate_thumbnail(
-                video_path,
+                preprocessing(video_path, kwargs),
                 rows,
                 cols,
                 args.preset,
@@ -576,16 +596,11 @@ if __name__ == "__main__":
                 continue
             video_path, rows_input = input_string.rsplit(" ", 1)
 
-            if rotate_sign := re.findall(r"[lr]$", rows_input):
-                rotate_sign = rotate_sign[0]
+            if rotate_sign_match := re.findall(r"[lr]$", rows_input):
+                rotate_sign = rotate_sign_match[0]
                 rows_input = rows_input[:-1]
-                rotated_video_path = f"_rotated_{rotate_sign}".join(os.path.splitext(video_path))
-                rotate_angle = {"l": "90", "r": "270"}[rotate_sign]
-                subprocess.run(
-                    f'ffmpeg -i "{video_path}" -metadata:s:v rotate="{rotate_angle}" -c copy -y "{rotated_video_path}"',
-                    shell=True,
-                )
-                video_path = rotated_video_path
+            else:
+                rotate_sign = None
 
             try:
                 rows = int(rows_input)
@@ -613,6 +628,9 @@ if __name__ == "__main__":
                         full_delete_mode=args.full_delete_mode,
                     ),
                 ),
+                kwargs={
+                    "rotate_sign": rotate_sign,
+                },
             ).start()
     else:
         process_video(args)
