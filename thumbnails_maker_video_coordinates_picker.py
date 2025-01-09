@@ -42,6 +42,7 @@ class VideoCoordPicker:
         self.slider = Slider(
             ax=self.ax_slider, label="进度条", valmin=0, valmax=self.total_frames - 1, valinit=0, valfmt="%d", initcolor="none"
         )
+        self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
         self.slider.on_changed(self.on_slider_change)
 
         # 添加按钮
@@ -114,6 +115,6 @@ def crop_with_ffmpeg(video_path, coord):
 
 
 if __name__ == "__main__":
-    video_path = r"C:\Users\sisplayer\Downloads\543f9cd9f170a8c7d6952a9fab19e0a2.mp4"
+    video_path = r"C:\Users\sisplayer\Downloads\让老婆的姐姐成为我的老婆 Chinese homemade video.mp4"
     player = VideoCoordPicker(video_path)
     crop_with_ffmpeg(video_path, player.pick_coord())
