@@ -1,10 +1,11 @@
-import cv2
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button
-from matplotlib.widgets import RectangleSelector
-from types import SimpleNamespace
 import os
 import subprocess
+from types import SimpleNamespace
+from typing import Tuple
+
+import cv2
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button, RectangleSelector, Slider
 
 
 class VideoCoordPicker:
@@ -34,6 +35,7 @@ class VideoCoordPicker:
         ret, frame = self.cap.read()
         if not ret:
             raise ValueError("无法读取视频的第一帧")
+        self.video_height, self.video_width, _ = frame.shape
         self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.im = self.ax_video.imshow(self.frame)
         self.ax_video.axis("off")  # 隐藏坐标轴
@@ -72,18 +74,36 @@ class VideoCoordPicker:
             self.im.set_data(self.frame)
             self.fig.canvas.draw_idle()
 
+    def snap_coords(self, selected_rect: Tuple[int, int, int, int]):
+        ratio = 0.02
+        threshold_x = self.video_width * ratio
+        threshold_y = self.video_height * ratio
+        (x, y, w, h) = selected_rect
+        if x < threshold_x:
+            w += x
+            x = 0
+        if y < threshold_y:
+            h += y
+            y = 0
+        if x+w > self.video_width - threshold_x:
+            w = self.video_width - x
+        if y+h > self.video_height - threshold_y:
+            h = self.video_height - y
+        self.RS.extents = (x, x + w, y, y + h)
+        return (x, y, w, h)
+
     def on_select(self, eclick, erelease):
         """回调函数，当矩形选择完成时调用"""
         x1, y1 = int(eclick.xdata), int(eclick.ydata)
         x2, y2 = int(erelease.xdata), int(erelease.ydata)
         self.selected_rect = (min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+        self.selected_rect = self.snap_coords(self.selected_rect)
         print(f"选中的矩形坐标: {self.selected_rect}")
 
     def on_button_click(self, event):
         """当点击按钮时，返回坐标并关闭窗口"""
         if self.selected_rect:
             print(f"最终选中的矩形坐标: {self.selected_rect}")  # (x, y, width, height)
-            # 这里您可以将坐标保存到文件或其他处理
             plt.close(self.fig)
         else:
             print("尚未选择矩形。请先框选一个区域。")
@@ -115,6 +135,7 @@ def crop_with_ffmpeg(video_path, coord):
 
 
 if __name__ == "__main__":
-    video_path = r"C:\Users\sisplayer\Downloads\让老婆的姐姐成为我的老婆 Chinese homemade video.mp4"
+    video_path = r"C:\Users\sisplayer\Downloads\input2.mkv"
     player = VideoCoordPicker(video_path)
-    crop_with_ffmpeg(video_path, player.pick_coord())
+    print(video_path, player.pick_coord())
+    # crop_with_ffmpeg(video_path, player.pick_coord())
