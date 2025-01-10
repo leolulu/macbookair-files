@@ -743,7 +743,8 @@ if __name__ == "__main__":
             if preprocessing_signs_match := re.findall(r"[lrc]+$", rows_input):
                 preprocessing_signs = preprocessing_signs_match[0]
                 if "l" in preprocessing_signs and "r" in preprocessing_signs:
-                    raise UserWarning(f"'l'和r'不能同时指定")
+                    print(f"'l'和r'不能同时指定!")
+                    continue
                 if "l" in preprocessing_signs:
                     rotate_sign = "l"
                 if "r" in preprocessing_signs:
@@ -756,7 +757,11 @@ if __name__ == "__main__":
                 rows = int(rows_input)
                 cols = None
             except ValueError:
-                rows, cols = [int(i) for i in rows_input.split("-")]
+                try:
+                    rows, cols = [int(i) for i in rows_input.split("-")]
+                except:
+                    print(f"行列数解析失败，输入为：{rows_input}")
+                    continue
             multiprocessing.Process(
                 target=process_video,
                 args=(
