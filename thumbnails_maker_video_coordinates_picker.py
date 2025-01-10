@@ -45,18 +45,18 @@ class VideoCoordPicker:
             ax=self.ax_slider, label="进度条", valmin=0, valmax=self.total_frames - 1, valinit=0, valfmt="%d", initcolor="none"
         )
         self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
-        self.slider.on_changed(self.on_slider_change)
+        self.slider.on_changed(self._on_slider_change)
 
         # 添加按钮
         self.button = Button(self.ax_button, "确认")
-        self.button.on_clicked(self.on_button_click)
+        self.button.on_clicked(self._on_button_click)
 
         # 初始化 RectangleSelector 使用左键
         self.RS = RectangleSelector(
             self.ax_video,
-            self.on_select,
+            self._on_select,
             useblit=True,
-            button=[1],  # 仅响应左键
+            button=[1],  # 仅响应左键 # type: ignore
             minspanx=5,
             minspany=5,
             spancoords="pixels",
@@ -64,7 +64,7 @@ class VideoCoordPicker:
             interactive=True,
         )
 
-    def on_slider_change(self, val):
+    def _on_slider_change(self, val):
         """当滑动条被拖动时，跳转到相应的帧"""
         self.current_frame = int(val)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
@@ -85,14 +85,14 @@ class VideoCoordPicker:
         if y < threshold_y:
             h += y
             y = 0
-        if x+w > self.video_width - threshold_x:
+        if x + w > self.video_width - threshold_x:
             w = self.video_width - x
-        if y+h > self.video_height - threshold_y:
+        if y + h > self.video_height - threshold_y:
             h = self.video_height - y
         self.RS.extents = (x, x + w, y, y + h)
         return (x, y, w, h)
 
-    def on_select(self, eclick, erelease):
+    def _on_select(self, eclick, erelease):
         """回调函数，当矩形选择完成时调用"""
         x1, y1 = int(eclick.xdata), int(eclick.ydata)
         x2, y2 = int(erelease.xdata), int(erelease.ydata)
@@ -100,7 +100,7 @@ class VideoCoordPicker:
         self.selected_rect = self.snap_coords(self.selected_rect)
         print(f"选中的矩形坐标: {self.selected_rect}")
 
-    def on_button_click(self, event):
+    def _on_button_click(self, event):
         """当点击按钮时，返回坐标并关闭窗口"""
         if self.selected_rect:
             print(f"最终选中的矩形坐标: {self.selected_rect}")  # (x, y, width, height)
@@ -136,6 +136,6 @@ def crop_with_ffmpeg(video_path, coord):
 
 if __name__ == "__main__":
     video_path = r"C:\Users\sisplayer\Downloads\input2.mkv"
-    player = VideoCoordPicker(video_path)
-    print(video_path, player.pick_coord())
+    player = VideoCoordPicker()
+    # print(video_path, player.pick_coord())
     # crop_with_ffmpeg(video_path, player.pick_coord())

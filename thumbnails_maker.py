@@ -1,5 +1,6 @@
 import argparse
 import math
+import multiprocessing
 import os
 import re
 import shutil
@@ -14,10 +15,132 @@ from types import SimpleNamespace
 from typing import Optional, Tuple, Union
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import requests
+from matplotlib.widgets import Button, RectangleSelector, Slider
 from retrying import retry
 from tqdm import tqdm
+
+download_folder_alias = "dl"
+
+
+class VideoCoordPicker:
+    def __init__(self, video_path):
+        plt.rcParams["font.sans-serif"] = ["SimHei"]  # 指定中文字体
+        plt.rcParams["axes.unicode_minus"] = False  # 解决负号 '-' 显示为方块的问题
+
+        # 打开视频文件
+        self.cap = cv2.VideoCapture(video_path)
+        if not self.cap.isOpened():
+            raise IOError("无法打开视频文件")
+
+        # 获取视频属性
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+
+        # 初始化播放器状态
+        self.current_frame = 0
+        self.selected_rect = None  # 存储选中的矩形
+
+        # 设置 Matplotlib 图形和子图
+        self.fig, axes = plt.subplot_mosaic("AAAAA;CBBBB", height_ratios=[10, 1], figsize=(12, 9), layout="constrained")
+        self.ax_video = axes["A"]
+        self.ax_slider = axes["B"]
+        self.ax_button = axes["C"]
+
+        # 初始化视频显示
+        ret, frame = self.cap.read()
+        if not ret:
+            raise ValueError("无法读取视频的第一帧")
+        self.video_height, self.video_width, _ = frame.shape
+        self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        self.im = self.ax_video.imshow(self.frame)
+        self.ax_video.axis("off")  # 隐藏坐标轴
+
+        # 添加滑动条
+        self.slider = Slider(
+            ax=self.ax_slider, label="进度条", valmin=0, valmax=self.total_frames - 1, valinit=0, valfmt="%d", initcolor="none"
+        )
+        self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
+        self.slider.on_changed(self._on_slider_change)
+
+        # 添加按钮
+        self.button = Button(self.ax_button, "确认")
+        self.button.on_clicked(self._on_button_click)
+
+        # 初始化 RectangleSelector 使用左键
+        self.RS = RectangleSelector(
+            self.ax_video,
+            self._on_select,
+            useblit=True,
+            button=[1],  # 仅响应左键 # type: ignore
+            minspanx=5,
+            minspany=5,
+            spancoords="pixels",
+            drag_from_anywhere=True,
+            interactive=True,
+        )
+
+    def _on_slider_change(self, val):
+        """当滑动条被拖动时，跳转到相应的帧"""
+        self.current_frame = int(val)
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
+        ret, frame = self.cap.read()
+        if ret:
+            self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            self.im.set_data(self.frame)
+            self.fig.canvas.draw_idle()
+
+    def snap_coords(self, selected_rect: Tuple[int, int, int, int]):
+        ratio = 0.02
+        threshold_x = self.video_width * ratio
+        threshold_y = self.video_height * ratio
+        (x, y, w, h) = selected_rect
+        if x < threshold_x:
+            w += x
+            x = 0
+        if y < threshold_y:
+            h += y
+            y = 0
+        if x + w > self.video_width - threshold_x:
+            w = self.video_width - x
+        if y + h > self.video_height - threshold_y:
+            h = self.video_height - y
+        self.RS.extents = (x, x + w, y, y + h)
+        return (x, y, w, h)
+
+    def _on_select(self, eclick, erelease):
+        """回调函数，当矩形选择完成时调用"""
+        x1, y1 = int(eclick.xdata), int(eclick.ydata)
+        x2, y2 = int(erelease.xdata), int(erelease.ydata)
+        self.selected_rect = (min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+        self.selected_rect = self.snap_coords(self.selected_rect)
+        print(f"选中的矩形坐标: {self.selected_rect}")
+
+    def _on_button_click(self, event):
+        """当点击按钮时，返回坐标并关闭窗口"""
+        if self.selected_rect:
+            print(f"最终选中的矩形坐标: {self.selected_rect}")  # (x, y, width, height)
+            plt.close(self.fig)
+        else:
+            print("尚未选择矩形。请先框选一个区域。")
+
+    def pick_coord(self):
+        self.show()
+        if self.selected_rect:
+            return SimpleNamespace(
+                x=self.selected_rect[0],
+                y=self.selected_rect[1],
+                w=self.selected_rect[2],
+                h=self.selected_rect[3],
+            )
+        else:
+            return None
+
+    def show(self):
+        plt.show()
+        self.cap.release()
 
 
 class ConcatPrioritizer:
@@ -415,6 +538,7 @@ def generate_thumbnail(
 def preprocessing_rotate_video(video_path: str, rotate_sign):
     if rotate_sign is None:
         return video_path
+    print(f"开始预处理环节：旋转")
     rotated_video_path = f"_rotated_{rotate_sign}".join([os.path.splitext(video_path)[0], ".mp4"])
     if os.path.splitext(video_path.lower())[-1] == ".mp4":
         rotate_angle = {"l": "90", "r": "270"}[rotate_sign]
@@ -427,13 +551,140 @@ def preprocessing_rotate_video(video_path: str, rotate_sign):
     return rotated_video_path
 
 
+def preprocessing_crop_video(video_path: str, crop_sign):
+    if crop_sign is None:
+        return video_path
+    print(f"开始预处理环节：裁剪")
+    coord = VideoCoordPicker(video_path).pick_coord()
+    if coord is None:
+        raise UserWarning("没有框选裁剪坐标，取消处理...")
+    x, y, w, h = coord.x, coord.y, coord.w, coord.h
+    crop_video_path = os.path.splitext(video_path)[0] + "_cropped.mp4"
+    command = f'ffmpeg -i "{video_path}" -vf "crop={w}:{h}:{x}:{y}" -y "{crop_video_path}"'
+    print(f"开始裁剪视频，指令：\n{command}")
+    subprocess.run(command, shell=True)
+    return crop_video_path
+
+
 def preprocessing(video_path: str, kwargs):
+    video_path = preprocessing_crop_video(video_path, kwargs["crop_sign"])
     video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
     return video_path
 
 
+def process_video(args, **kwargs):
+    video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
+    video_path = args.video_path
+    if video_path.lower() == download_folder_alias:
+        video_path = str(Path.home() / "Downloads")
+    if (args.rows is None) and (args.cols is None):
+        rows = 7
+        cols = 7
+    elif args.cols is None:
+        rows = args.rows
+        cols = None
+    else:
+        rows = args.rows
+        cols = args.cols
+
+    if os.path.isdir(video_path):  # 处理目录
+        if args.recursion:
+            video_paths = []
+            for dir_, _, files_ in os.walk(video_path):
+                for file_ in files_:
+                    f = os.path.join(dir_, file_)
+                    if os.path.splitext(f)[-1].lower() in video_file_extensions:
+                        video_paths.append(f)
+        else:
+            video_paths = [
+                os.path.join(video_path, f) for f in os.listdir(video_path) if os.path.splitext(f)[-1].lower() in video_file_extensions
+            ]
+        if args.parallel_processing_directory > 1:
+            with ThreadPoolExecutor(args.parallel_processing_directory) as exe:
+                for video_path in video_paths:
+                    exe.submit(
+                        generate_thumbnail,
+                        preprocessing(video_path, kwargs),
+                        rows,
+                        cols,
+                        args.preset,
+                        args.full,
+                        args.low,
+                        args.max,
+                        args.alternative_output_folder_path,
+                        args.screen_ratio,
+                        args.skip,
+                        args.pic_only,
+                        args.video_only,
+                        args.full_delete_mode,
+                    )
+        else:
+            for video_path in video_paths:
+                try:
+                    generate_thumbnail(
+                        preprocessing(video_path, kwargs),
+                        rows,
+                        cols,
+                        args.preset,
+                        args.full,
+                        args.low,
+                        args.max,
+                        args.alternative_output_folder_path,
+                        args.screen_ratio,
+                        args.skip,
+                        args.pic_only,
+                        args.video_only,
+                        args.full_delete_mode,
+                    )
+                except:
+                    traceback.print_exc()
+    elif str(video_path).lower().startswith("http"):  # 处理网络视频
+        file_name = os.path.basename(video_path)
+        file_path = os.path.join(str(Path.home() / "Downloads"), file_name)
+        if not os.path.exists(file_path):
+            print(f"视频在本地不存在，开始下载: {file_name}")
+
+            @retry(wait_fixed=6000, stop_max_attempt_number=10)
+            def download_video(video_path):
+                return requests.get(video_path, proxies={"http": "http://127.0.0.1:10809", "https": "http://127.0.0.1:10809"}).content
+
+            with open(file_path, "wb") as f:
+                f.write(download_video(video_path))
+        generate_thumbnail(
+            preprocessing(file_path, kwargs),
+            rows,
+            cols,
+            args.preset,
+            args.full,
+            args.low,
+            args.max,
+            args.alternative_output_folder_path,
+            args.screen_ratio,
+            args.skip,
+            args.pic_only,
+            args.video_only,
+            args.full_delete_mode,
+        )
+    else:  # 处理单个视频
+        args.skip = False
+        generate_thumbnail(
+            preprocessing(video_path, kwargs),
+            rows,
+            cols,
+            args.preset,
+            args.full,
+            args.low,
+            args.max,
+            args.alternative_output_folder_path,
+            args.screen_ratio,
+            args.skip,
+            args.pic_only,
+            args.video_only,
+            args.full_delete_mode,
+        )
+
+
 if __name__ == "__main__":
-    download_folder_alias = "dl"
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
@@ -478,136 +729,35 @@ if __name__ == "__main__":
     if args.global_low:
         global_encode_task_executor_pool = ThreadPoolExecutor(args.global_low)
 
-    def process_video(args, **kwargs):
-        video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
-        video_path = args.video_path
-        if video_path.lower() == download_folder_alias:
-            video_path = str(Path.home() / "Downloads")
-        if (args.rows is None) and (args.cols is None):
-            rows = 7
-            cols = 7
-        elif args.cols is None:
-            rows = args.rows
-            cols = None
-        else:
-            rows = args.rows
-            cols = args.cols
-
-        if os.path.isdir(video_path):  # 处理目录
-            if args.recursion:
-                video_paths = []
-                for dir_, _, files_ in os.walk(video_path):
-                    for file_ in files_:
-                        f = os.path.join(dir_, file_)
-                        if os.path.splitext(f)[-1].lower() in video_file_extensions:
-                            video_paths.append(f)
-            else:
-                video_paths = [
-                    os.path.join(video_path, f) for f in os.listdir(video_path) if os.path.splitext(f)[-1].lower() in video_file_extensions
-                ]
-            if args.parallel_processing_directory > 1:
-                with ThreadPoolExecutor(args.parallel_processing_directory) as exe:
-                    for video_path in video_paths:
-                        exe.submit(
-                            generate_thumbnail,
-                            preprocessing(video_path, kwargs),
-                            rows,
-                            cols,
-                            args.preset,
-                            args.full,
-                            args.low,
-                            args.max,
-                            args.alternative_output_folder_path,
-                            args.screen_ratio,
-                            args.skip,
-                            args.pic_only,
-                            args.video_only,
-                            args.full_delete_mode,
-                        )
-            else:
-                for video_path in video_paths:
-                    try:
-                        generate_thumbnail(
-                            preprocessing(video_path, kwargs),
-                            rows,
-                            cols,
-                            args.preset,
-                            args.full,
-                            args.low,
-                            args.max,
-                            args.alternative_output_folder_path,
-                            args.screen_ratio,
-                            args.skip,
-                            args.pic_only,
-                            args.video_only,
-                            args.full_delete_mode,
-                        )
-                    except:
-                        traceback.print_exc()
-        elif str(video_path).lower().startswith("http"):  # 处理网络视频
-            file_name = os.path.basename(video_path)
-            file_path = os.path.join(str(Path.home() / "Downloads"), file_name)
-            if not os.path.exists(file_path):
-                print(f"视频在本地不存在，开始下载: {file_name}")
-
-                @retry(wait_fixed=6000, stop_max_attempt_number=10)
-                def download_video(video_path):
-                    return requests.get(video_path, proxies={"http": "http://127.0.0.1:10809", "https": "http://127.0.0.1:10809"}).content
-
-                with open(file_path, "wb") as f:
-                    f.write(download_video(video_path))
-            generate_thumbnail(
-                preprocessing(file_path, kwargs),
-                rows,
-                cols,
-                args.preset,
-                args.full,
-                args.low,
-                args.max,
-                args.alternative_output_folder_path,
-                args.screen_ratio,
-                args.skip,
-                args.pic_only,
-                args.video_only,
-                args.full_delete_mode,
-            )
-        else:  # 处理单个视频
-            args.skip = False
-            generate_thumbnail(
-                preprocessing(video_path, kwargs),
-                rows,
-                cols,
-                args.preset,
-                args.full,
-                args.low,
-                args.max,
-                args.alternative_output_folder_path,
-                args.screen_ratio,
-                args.skip,
-                args.pic_only,
-                args.video_only,
-                args.full_delete_mode,
-            )
-
     if args.video_path is None:
         while True:
-            input_string = input("请输入视频地址和行数，以空格隔开，若有列数则'row-col'的形式，若要旋转则在最后输入'l|r'：")
+            input_string = input(
+                "请输入视频地址和行数，以空格隔开，若有列数则'row-col'的形式，若要旋转则在最后输入'l|r'，若要裁剪则在最后输入'c'："
+            )
             if not input_string:
                 continue
             video_path, rows_input = input_string.rsplit(" ", 1)
 
-            if rotate_sign_match := re.findall(r"[lr]$", rows_input):
-                rotate_sign = rotate_sign_match[0]
-                rows_input = rows_input[:-1]
-            else:
-                rotate_sign = None
+            crop_sign = None
+            rotate_sign = None
+            if preprocessing_signs_match := re.findall(r"[lrc]+$", rows_input):
+                preprocessing_signs = preprocessing_signs_match[0]
+                if "l" in preprocessing_signs and "r" in preprocessing_signs:
+                    raise UserWarning(f"'l'和r'不能同时指定")
+                if "l" in preprocessing_signs:
+                    rotate_sign = "l"
+                if "r" in preprocessing_signs:
+                    rotate_sign = "r"
+                if "c" in preprocessing_signs:
+                    crop_sign = "c"
+                rows_input = rows_input.replace(preprocessing_signs, "")
 
             try:
                 rows = int(rows_input)
                 cols = None
             except ValueError:
                 rows, cols = [int(i) for i in rows_input.split("-")]
-            threading.Thread(
+            multiprocessing.Process(
                 target=process_video,
                 args=(
                     SimpleNamespace(
@@ -630,6 +780,7 @@ if __name__ == "__main__":
                 ),
                 kwargs={
                     "rotate_sign": rotate_sign,
+                    "crop_sign": crop_sign,
                 },
             ).start()
     else:
