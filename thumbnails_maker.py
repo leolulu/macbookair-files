@@ -539,13 +539,25 @@ def preprocessing_rotate_video(video_path: str, rotate_sign):
     if rotate_sign is None:
         return video_path
     print(f"开始预处理环节：旋转")
+
+    if os.path.splitext(video_path.lower())[-1] != ".mp4":
+        nise_mp4_path = os.path.splitext(video_path)[0] + "_nise.mp4"
+        copy_to_mp4_command = f'ffmpeg -i "{video_path}" -y -c copy "{nise_mp4_path}"'
+        print(f"视频格式不是mp4，尝试copy为mp4格式，指令：\n{copy_to_mp4_command}")
+        result = subprocess.run(copy_to_mp4_command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if result.returncode != 0:
+            print(f"尝试copy成mp4格式失败，错误日志：\n{result.stderr}\n将采用re-encoding的方式将视频转换为mp4格式...")
+            re_encode_to_mp4_command = f'ffmpeg -i "{video_path}" -y "{nise_mp4_path}"'
+            print(f"re-encoding指令：\n{re_encode_to_mp4_command}")
+            subprocess.run(re_encode_to_mp4_command, shell=True, check=True)
+        video_path = nise_mp4_path
+
     rotated_video_path = f"_rotated_{rotate_sign}".join([os.path.splitext(video_path)[0], ".mp4"])
-    if os.path.splitext(video_path.lower())[-1] == ".mp4":
-        rotate_angle = {"l": "90", "r": "270"}[rotate_sign]
-        command = f'ffmpeg -i "{video_path}" -metadata:s:v rotate="{rotate_angle}" -c copy -y "{rotated_video_path}"'
-    else:
-        transpose_angle = {"l": "2", "r": "1"}[rotate_sign]
-        command = f'ffmpeg -i "{video_path}" -vf "transpose={transpose_angle}" -y "{rotated_video_path}"'
+    rotate_angle = {"l": "90", "r": "270"}[rotate_sign]
+    command = f'ffmpeg -i "{video_path}" -metadata:s:v rotate="{rotate_angle}" -c copy -y "{rotated_video_path}"'
+    # 存档：原本非mp4格式视频，直接使用transpose滤镜进行重编码。这次改成先转成mp4格式，然后统一应用metadata进行旋转
+    #     transpose_angle = {"l": "2", "r": "1"}[rotate_sign]
+    #     command = f'ffmpeg -i "{video_path}" -vf "transpose={transpose_angle}" -y "{rotated_video_path}"'
     print(f"开始旋转视频，指令：\n{command}")
     subprocess.run(command, shell=True)
     return rotated_video_path
