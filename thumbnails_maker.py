@@ -568,7 +568,8 @@ def preprocessing_crop_video(video_path: str, crop_sign):
 
 def preprocessing(video_path: str, kwargs):
     video_path = preprocessing_crop_video(video_path, kwargs["crop_sign"])
-    video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
+    with multiprocessing.Lock():
+        video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
     return video_path
 
 
