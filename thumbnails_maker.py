@@ -12,7 +12,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, cast
 
 import cv2
 import matplotlib.pyplot as plt
@@ -66,22 +66,7 @@ class VideoCoordPicker:
         self.ax_video.axis("off")  # 隐藏坐标轴
 
         # 添加滑动条
-        # self.slider = Slider(
-        #     ax=self.ax_slider, label="进度条", valmin=0, valmax=self.total_frames - 1, valinit=0, valfmt="%d", initcolor="none"
-        # )
-        # self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
-        # self.slider.on_changed(self._on_slider_change)
-        self.slider = RangeSlider(
-            ax=self.ax_slider,
-            label="进度条",
-            valmin=0,
-            valmax=self.total_frames - 1,
-            valinit=(0, self.total_frames - 1),
-            valfmt="%d",
-        )
-        self.slider_val_min, self.slider_val_max = self.slider.val
-        self.slider.on_changed(self._get_rangeslider_changed_value)
-        self.slider.valtext.set_visible(False)
+        self._add_slider()
 
         # 添加按钮
         self.button = Button(self.ax_button, "确认")
@@ -89,6 +74,7 @@ class VideoCoordPicker:
 
         # 添加checkbox
         self.checkbox = CheckButtons(ax=self.ax_checkbox, labels=["截取时长"], label_props={"fontsize": [12]})
+        self.checkbox.on_clicked(self._on_checkbox_click)
 
         # 初始化 RectangleSelector 使用左键
         self.RS = RectangleSelector(
@@ -103,15 +89,52 @@ class VideoCoordPicker:
             interactive=True,
         )
 
+    def _on_checkbox_click(self, label):
+        if self.checkbox.get_status()[0]:
+            self._add_rangeslider()
+        else:
+            self._add_slider()
+        self.fig.canvas.draw_idle()
+
+    def _add_slider(self):
+        self.slider = Slider(
+            ax=self.ax_slider,
+            label="进度条",
+            valmin=0,
+            valmax=self.total_frames - 1,
+            valinit=0,
+            valfmt="%d",
+            initcolor="none",
+            handle_style={"size": 0},
+        )
+        self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
+        self.slider.on_changed(self._on_slider_change)
+
+    def _add_rangeslider(self):
+        self.slider = RangeSlider(
+            ax=self.ax_slider,
+            label="进度条",
+            valmin=0,
+            valmax=self.total_frames - 1,
+            valinit=(0, self.total_frames - 1),
+            valfmt="%d",
+            handle_style={"size": 0},
+        )
+        self.slider_val_min, self.slider_val_max = self.slider.val
+        self.slider.on_changed(self._get_rangeslider_changed_value)
+        self.slider.valtext.set_visible(False)
+
     def _get_rangeslider_changed_value(self, val):
         (val_min, val_max) = val
         if val_min != self.slider_val_min:
             changed_value = val_min
         elif val_max != self.slider_val_max:
             changed_value = val_max
-        self.slider_val_min, self.slider_val_max = self.slider.val
-        self._on_slider_change(changed_value)
-
+        self.slider_val_min, self.slider_val_max = cast(Tuple[float, float], self.slider.val)
+        try:
+            self._on_slider_change(changed_value)
+        except:
+            pass
 
     def _on_slider_change(self, val):
         """当滑动条被拖动时，跳转到相应的帧"""
