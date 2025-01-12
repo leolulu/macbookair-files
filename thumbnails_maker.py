@@ -18,7 +18,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
-from matplotlib.widgets import Button, RectangleSelector, Slider
+from matplotlib.widgets import Button, CheckButtons, RectangleSelector, Slider
 from retrying import retry
 from tqdm import tqdm
 
@@ -44,10 +44,17 @@ class VideoCoordPicker:
         self.selected_rect = None  # 存储选中的矩形
 
         # 设置 Matplotlib 图形和子图
-        self.fig, axes = plt.subplot_mosaic("AAAAA;CBBBB", height_ratios=[10, 1], figsize=(12, 9), layout="constrained")
+        self.fig, axes = plt.subplot_mosaic(
+            "AA;DB;CB",
+            height_ratios=[10, 0.5, 1],
+            width_ratios=[1, 9],
+            figsize=(12, 9),
+            layout="constrained",
+        )
         self.ax_video = axes["A"]
         self.ax_slider = axes["B"]
         self.ax_button = axes["C"]
+        self.ax_checkbox = axes["D"]
 
         # 初始化视频显示
         ret, frame = self.cap.read()
@@ -68,6 +75,9 @@ class VideoCoordPicker:
         # 添加按钮
         self.button = Button(self.ax_button, "确认")
         self.button.on_clicked(self._on_button_click)
+
+        # 添加checkbox
+        self.checkbox = CheckButtons(ax=self.ax_checkbox, labels=["截取时长"], label_props={"fontsize": [12]})
 
         # 初始化 RectangleSelector 使用左键
         self.RS = RectangleSelector(
