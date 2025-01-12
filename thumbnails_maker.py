@@ -18,7 +18,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
-from matplotlib.widgets import Button, CheckButtons, RectangleSelector, Slider
+from matplotlib.widgets import Button, CheckButtons, RangeSlider, RectangleSelector, Slider
 from retrying import retry
 from tqdm import tqdm
 
@@ -66,11 +66,22 @@ class VideoCoordPicker:
         self.ax_video.axis("off")  # 隐藏坐标轴
 
         # 添加滑动条
-        self.slider = Slider(
-            ax=self.ax_slider, label="进度条", valmin=0, valmax=self.total_frames - 1, valinit=0, valfmt="%d", initcolor="none"
+        # self.slider = Slider(
+        #     ax=self.ax_slider, label="进度条", valmin=0, valmax=self.total_frames - 1, valinit=0, valfmt="%d", initcolor="none"
+        # )
+        # self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
+        # self.slider.on_changed(self._on_slider_change)
+        self.slider = RangeSlider(
+            ax=self.ax_slider,
+            label="进度条",
+            valmin=0,
+            valmax=self.total_frames - 1,
+            valinit=(0, self.total_frames - 1),
+            valfmt="%d",
         )
-        self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
-        self.slider.on_changed(self._on_slider_change)
+        self.slider_val_min, self.slider_val_max = self.slider.val
+        self.slider.on_changed(self._get_rangeslider_changed_value)
+        self.slider.valtext.set_visible(False)
 
         # 添加按钮
         self.button = Button(self.ax_button, "确认")
@@ -91,6 +102,16 @@ class VideoCoordPicker:
             drag_from_anywhere=True,
             interactive=True,
         )
+
+    def _get_rangeslider_changed_value(self, val):
+        (val_min, val_max) = val
+        if val_min != self.slider_val_min:
+            changed_value = val_min
+        elif val_max != self.slider_val_max:
+            changed_value = val_max
+        self.slider_val_min, self.slider_val_max = self.slider.val
+        self._on_slider_change(changed_value)
+
 
     def _on_slider_change(self, val):
         """当滑动条被拖动时，跳转到相应的帧"""
