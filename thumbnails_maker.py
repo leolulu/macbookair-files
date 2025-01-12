@@ -180,17 +180,25 @@ class VideoCoordPicker:
         else:
             print("尚未选择矩形。请先框选一个区域。")
 
-    def pick_coord(self):
+    def pick_coord_and_optionally_trim(self):
         self.show()
         if self.selected_rect:
-            return SimpleNamespace(
+            coord = SimpleNamespace(
                 x=self.selected_rect[0],
                 y=self.selected_rect[1],
                 w=self.selected_rect[2],
                 h=self.selected_rect[3],
             )
         else:
-            return None
+            coord = None
+        if self.checkbox.get_status()[0]:
+            trim_range = SimpleNamespace(
+                start=self.slider_val_min / self.fps,
+                end=self.slider_val_max / self.fps,
+            )
+        else:
+            trim_range = None
+        return coord, trim_range
 
     def show(self):
         plt.show()
@@ -621,15 +629,20 @@ def preprocessing_crop_video(video_path: str, crop_sign):
     if crop_sign is None:
         return video_path
     print(f"开始预处理环节：裁剪")
-    coord = VideoCoordPicker(video_path).pick_coord()
+    coord, trim_range = VideoCoordPicker(video_path).pick_coord_and_optionally_trim()
     if coord is None:
         raise UserWarning("没有框选裁剪坐标，取消处理...")
     x, y, w, h = coord.x, coord.y, coord.w, coord.h
-    crop_video_path = os.path.splitext(video_path)[0] + "_cropped.mp4"
-    command = f'ffmpeg -i "{video_path}" -vf "crop={w}:{h}:{x}:{y}" -y "{crop_video_path}"'
+    output_video_path = os.path.splitext(video_path)[0] + "_cropped.mp4"
+    if trim_range:
+        trim_command_segment = f"-ss {trim_range.start} -to {trim_range.end}" 
+        output_video_path = "_trimmed".join(os.path.splitext(output_video_path))
+    else:
+        trim_command_segment =  ""
+    command = f'ffmpeg -i "{video_path}" -vf "crop={w}:{h}:{x}:{y}" {trim_command_segment} -y "{output_video_path}"'
     print(f"开始裁剪视频，指令：\n{command}")
     subprocess.run(command, shell=True)
-    return crop_video_path
+    return output_video_path
 
 
 def preprocessing(video_path: str, kwargs):
