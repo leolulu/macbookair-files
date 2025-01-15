@@ -625,11 +625,27 @@ def preprocessing_rotate_video(video_path: str, rotate_sign):
     return rotated_video_path
 
 
+def pick_coord_and_optionally_trim_for_proc(video_path, queue):
+    vcp = VideoCoordPicker(video_path)
+    result = vcp.pick_coord_and_optionally_trim()
+    queue.put(result)
+
+
 def preprocessing_crop_video(video_path: str, crop_sign):
     if crop_sign is None:
         return video_path
     print(f"开始预处理环节：裁剪")
-    coord, trim_range = VideoCoordPicker(video_path).pick_coord_and_optionally_trim()
+    with threading.Lock():
+        queue = multiprocessing.Queue()
+        proc = multiprocessing.Process(
+            target=pick_coord_and_optionally_trim_for_proc,
+            args=(video_path, queue),
+        )
+        proc.start()
+        proc.join()
+        if proc.exitcode != 0:
+            raise UserWarning(f"pick_coord_and_optionally_trim通过子进程没有运行成功，裁剪失败！")
+        coord, trim_range = queue.get()
     if coord is None:
         raise UserWarning("没有框选裁剪坐标，取消处理...")
     x, y, w, h = coord.x, coord.y, coord.w, coord.h
@@ -647,7 +663,7 @@ def preprocessing_crop_video(video_path: str, crop_sign):
 
 def preprocessing(video_path: str, kwargs):
     video_path = preprocessing_crop_video(video_path, kwargs["crop_sign"])
-    with multiprocessing.Lock():
+    with threading.Lock():
         video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
     return video_path
 
@@ -841,7 +857,7 @@ if __name__ == "__main__":
                 except:
                     print(f"行列数解析失败，输入为：{rows_input}")
                     continue
-            multiprocessing.Process(
+            threading.Thread(
                 target=process_video,
                 args=(
                     SimpleNamespace(
