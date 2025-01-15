@@ -107,7 +107,7 @@ class VideoCoordPicker:
             initcolor="none",
             handle_style={"size": 0},
         )
-        self.slider.valtext.set_visible(False)  # 隐藏滑动条上的数值
+        self.slider.valtext.set_visible(False)
         self.slider.on_changed(self._on_slider_change)
 
     def _add_rangeslider(self):
@@ -635,10 +635,10 @@ def preprocessing_crop_video(video_path: str, crop_sign):
     x, y, w, h = coord.x, coord.y, coord.w, coord.h
     output_video_path = os.path.splitext(video_path)[0] + "_cropped.mp4"
     if trim_range:
-        trim_command_segment = f"-ss {trim_range.start} -to {trim_range.end}" 
+        trim_command_segment = f"-ss {trim_range.start} -to {trim_range.end}"
         output_video_path = "_trimmed".join(os.path.splitext(output_video_path))
     else:
-        trim_command_segment =  ""
+        trim_command_segment = ""
     command = f'ffmpeg -i "{video_path}" -vf "crop={w}:{h}:{x}:{y}" {trim_command_segment} -y "{output_video_path}"'
     print(f"开始裁剪视频，指令：\n{command}")
     subprocess.run(command, shell=True)
