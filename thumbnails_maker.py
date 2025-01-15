@@ -274,7 +274,7 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     if not cap.isOpened():
         raise UserWarning("无法打开视频文件!")
     thumbnails = []
-    for i in tqdm(range(rows * cols)):
+    for i in tqdm(range(rows * cols), desc="生成缩略图"):
         # 定位到指定帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_interval)
         ret, frame = cap.read()
@@ -350,6 +350,15 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     ).start()
 
 
+def log_ffmpeg_convert_error(cp: subprocess.CompletedProcess, video_path: str):
+    try:
+        cp.check_returncode()
+    except subprocess.CalledProcessError as e:
+        error_log_path = os.path.splitext(video_path)[0] + ".err.log"
+        with open(error_log_path, "a", encoding="utf-8") as f:
+            f.write(f"{e.stderr}\n")
+
+
 def gen_video_thumbnail(
     video_path,
     preset,
@@ -400,15 +409,21 @@ def gen_video_thumbnail(
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
 
+    pbar = tqdm(total=len(gen_footage_commands), desc="生成中间文件")
+
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
-        subprocess.run(command, shell=True)
+        cp = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        pbar.update()
+        log_ffmpeg_convert_error(cp, video_path)
 
     if global_encode_task_executor_pool:
         list(global_encode_task_executor_pool.map(run_with_blocking, gen_footage_commands))
     else:
         with ThreadPoolExecutor(low_load_mode if low_load_mode else os.cpu_count()) as exe:
             exe.map(run_with_blocking, gen_footage_commands)
+
+    pbar.close()
 
     # 检查中间文件是否损坏
     print("开始检查中间文件是否损坏...")
@@ -458,7 +473,8 @@ def gen_video_thumbnail(
     command += f' "{temp_output_path_video}"'
     print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
-        subprocess.call(command, shell=True)
+        cp = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        log_ffmpeg_convert_error(cp, video_path)
 
     threading.Thread(
         target=move_with_optional_security,
