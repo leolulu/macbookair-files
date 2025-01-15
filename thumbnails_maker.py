@@ -1,6 +1,5 @@
 import argparse
 import math
-import multiprocessing
 import os
 import re
 import shutil
@@ -21,9 +20,22 @@ import requests
 from matplotlib.widgets import Button, CheckButtons, RangeSlider, RectangleSelector, Slider
 from retrying import retry
 from tqdm import tqdm
+import asyncio
 
 download_folder_alias = "dl"
+thread_executor_for_generate_thumbnail = None
 
+
+class ThreadExecutorForGenerateThumbnail:
+    def __init__(self):
+        self.name_pool_mapping = {}
+
+    def obtain_new_pool(self, task_name, max_workers):
+        pool = ThreadPoolExecutor(max_workers=max_workers)
+        self.name_pool_mapping[task_name] = pool
+        return pool
+
+thread_pools = ThreadExecutorForGenerateThumbnail()
 
 class VideoCoordPicker:
     def __init__(self, video_path):
@@ -597,7 +609,7 @@ def generate_thumbnail(
         process_video(video_path, rows_calced, cols_calced)
 
 
-def preprocessing_rotate_video(video_path: str, rotate_sign):
+async def preprocessing_rotate_video(video_path: str, rotate_sign):
     if rotate_sign is None:
         return video_path
     print(f"开始预处理环节：旋转")
@@ -621,11 +633,12 @@ def preprocessing_rotate_video(video_path: str, rotate_sign):
     #     transpose_angle = {"l": "2", "r": "1"}[rotate_sign]
     #     command = f'ffmpeg -i "{video_path}" -vf "transpose={transpose_angle}" -y "{rotated_video_path}"'
     print(f"开始旋转视频，指令：\n{command}")
-    subprocess.run(command, shell=True)
+    proc = await asyncio.create_subprocess_shell(command)
+    await proc.wait()
     return rotated_video_path
 
 
-def preprocessing_crop_video(video_path: str, crop_sign):
+async def preprocessing_crop_video(video_path: str, crop_sign):
     if crop_sign is None:
         return video_path
     print(f"开始预处理环节：裁剪")
@@ -641,18 +654,19 @@ def preprocessing_crop_video(video_path: str, crop_sign):
         trim_command_segment = ""
     command = f'ffmpeg -i "{video_path}" -vf "crop={w}:{h}:{x}:{y}" {trim_command_segment} -y "{output_video_path}"'
     print(f"开始裁剪视频，指令：\n{command}")
-    subprocess.run(command, shell=True)
+    proc = await asyncio.create_subprocess_shell(command)
+    await proc.wait()
     return output_video_path
 
 
-def preprocessing(video_path: str, kwargs):
-    video_path = preprocessing_crop_video(video_path, kwargs["crop_sign"])
-    with multiprocessing.Lock():
-        video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
+async def preprocessing(video_path: str, kwargs):
+    video_path = await preprocessing_crop_video(video_path, kwargs["crop_sign"])
+    with threading.Lock():
+        video_path = await preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
     return video_path
 
 
-def process_video(args, **kwargs):
+async def process_video(args, **kwargs):
     video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
     video_path = args.video_path
     if video_path.lower() == download_folder_alias:
@@ -682,9 +696,10 @@ def process_video(args, **kwargs):
         if args.parallel_processing_directory > 1:
             with ThreadPoolExecutor(args.parallel_processing_directory) as exe:
                 for video_path in video_paths:
+                    video_path = await preprocessing(video_path, kwargs)
                     exe.submit(
                         generate_thumbnail,
-                        preprocessing(video_path, kwargs),
+                        video_path,
                         rows,
                         cols,
                         args.preset,
@@ -700,9 +715,10 @@ def process_video(args, **kwargs):
                     )
         else:
             for video_path in video_paths:
+                video_path = await preprocessing(video_path, kwargs)
                 try:
                     generate_thumbnail(
-                        preprocessing(video_path, kwargs),
+                        video_path,
                         rows,
                         cols,
                         args.preset,
@@ -730,8 +746,9 @@ def process_video(args, **kwargs):
 
             with open(file_path, "wb") as f:
                 f.write(download_video(video_path))
+        video_path = await preprocessing(file_path, kwargs)
         generate_thumbnail(
-            preprocessing(file_path, kwargs),
+            video_path,
             rows,
             cols,
             args.preset,
@@ -747,8 +764,9 @@ def process_video(args, **kwargs):
         )
     else:  # 处理单个视频
         args.skip = False
+        video_path = await preprocessing(video_path, kwargs)
         generate_thumbnail(
-            preprocessing(video_path, kwargs),
+            video_path,
             rows,
             cols,
             args.preset,
@@ -762,6 +780,71 @@ def process_video(args, **kwargs):
             args.video_only,
             args.full_delete_mode,
         )
+
+
+async def interactive_mode_in_loop():
+    prompt = "请输入视频地址和行数，以空格隔开，若有列数则'row-col'的形式，若要旋转则在最后输入'l|r'，若要裁剪则在最后输入'c'："
+    tasks= set()
+    while True:
+        try:
+            input_string = await asyncio.to_thread(input, prompt)
+            if not input_string:
+                continue
+            video_path, rows_input = input_string.rsplit(" ", 1)
+
+            crop_sign = None
+            rotate_sign = None
+            if preprocessing_signs_match := re.findall(r"[lrc]+$", rows_input):
+                preprocessing_signs = preprocessing_signs_match[0]
+                if "l" in preprocessing_signs and "r" in preprocessing_signs:
+                    print(f"'l'和r'不能同时指定!")
+                    continue
+                if "l" in preprocessing_signs:
+                    rotate_sign = "l"
+                if "r" in preprocessing_signs:
+                    rotate_sign = "r"
+                if "c" in preprocessing_signs:
+                    crop_sign = "c"
+                rows_input = rows_input.replace(preprocessing_signs, "")
+
+            try:
+                rows = int(rows_input)
+                cols = None
+            except ValueError:
+                try:
+                    rows, cols = [int(i) for i in rows_input.split("-")]
+                except:
+                    print(f"行列数解析失败，输入为：{rows_input}")
+                    continue
+            task = asyncio.create_task(
+                process_video(
+                    SimpleNamespace(
+                        video_path=video_path.strip('"'),
+                        rows=rows,
+                        cols=cols,
+                        preset=args.preset,
+                        full=args.full,
+                        low=args.low,
+                        max=args.max,
+                        alternative_output_folder_path=args.alternative_output_folder_path,
+                        parallel_processing_directory=args.parallel_processing_directory,
+                        screen_ratio=args.screen_ratio,
+                        skip=args.skip,
+                        pic_only=args.pic_only,
+                        video_only=args.video_only,
+                        recursion=args.recursion,
+                        full_delete_mode=args.full_delete_mode,
+                    ),
+                    **{
+                        "rotate_sign": rotate_sign,
+                        "crop_sign": crop_sign,
+                    },
+                )
+            )
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+        except Exception as e:
+            print(f"解析输入失败：{e}")
 
 
 if __name__ == "__main__":
@@ -809,63 +892,7 @@ if __name__ == "__main__":
         global_encode_task_executor_pool = ThreadPoolExecutor(args.global_low)
 
     if args.video_path is None:
-        while True:
-            input_string = input(
-                "请输入视频地址和行数，以空格隔开，若有列数则'row-col'的形式，若要旋转则在最后输入'l|r'，若要裁剪则在最后输入'c'："
-            )
-            if not input_string:
-                continue
-            video_path, rows_input = input_string.rsplit(" ", 1)
-
-            crop_sign = None
-            rotate_sign = None
-            if preprocessing_signs_match := re.findall(r"[lrc]+$", rows_input):
-                preprocessing_signs = preprocessing_signs_match[0]
-                if "l" in preprocessing_signs and "r" in preprocessing_signs:
-                    print(f"'l'和r'不能同时指定!")
-                    continue
-                if "l" in preprocessing_signs:
-                    rotate_sign = "l"
-                if "r" in preprocessing_signs:
-                    rotate_sign = "r"
-                if "c" in preprocessing_signs:
-                    crop_sign = "c"
-                rows_input = rows_input.replace(preprocessing_signs, "")
-
-            try:
-                rows = int(rows_input)
-                cols = None
-            except ValueError:
-                try:
-                    rows, cols = [int(i) for i in rows_input.split("-")]
-                except:
-                    print(f"行列数解析失败，输入为：{rows_input}")
-                    continue
-            multiprocessing.Process(
-                target=process_video,
-                args=(
-                    SimpleNamespace(
-                        video_path=video_path.strip('"'),
-                        rows=rows,
-                        cols=cols,
-                        preset=args.preset,
-                        full=args.full,
-                        low=args.low,
-                        max=args.max,
-                        alternative_output_folder_path=args.alternative_output_folder_path,
-                        parallel_processing_directory=args.parallel_processing_directory,
-                        screen_ratio=args.screen_ratio,
-                        skip=args.skip,
-                        pic_only=args.pic_only,
-                        video_only=args.video_only,
-                        recursion=args.recursion,
-                        full_delete_mode=args.full_delete_mode,
-                    ),
-                ),
-                kwargs={
-                    "rotate_sign": rotate_sign,
-                    "crop_sign": crop_sign,
-                },
-            ).start()
+        asyncio.run(interactive_mode_in_loop())
     else:
-        process_video(args)
+        # process_video(args)
+        print(f"直接从命令行启动的方式现在暂不可用...")
