@@ -913,31 +913,38 @@ if __name__ == "__main__":
                 except:
                     print(f"行列数解析失败，输入为：{rows_input}")
                     continue
-            threading.Thread(
-                target=process_video,
-                args=(
-                    SimpleNamespace(
-                        video_path=video_path.strip('"'),
-                        rows=rows,
-                        cols=cols,
-                        preset=args.preset,
-                        full=args.full,
-                        low=args.low,
-                        max=args.max,
-                        alternative_output_folder_path=args.alternative_output_folder_path,
-                        parallel_processing_directory=args.parallel_processing_directory,
-                        screen_ratio=args.screen_ratio,
-                        skip=args.skip,
-                        pic_only=args.pic_only,
-                        video_only=args.video_only,
-                        recursion=args.recursion,
-                        full_delete_mode=args.full_delete_mode,
+
+            video_path_tasks = []
+            for _path in video_path.split('" "'):
+                _path = _path.strip('"')
+                video_path_tasks.append(_path)
+
+            for video_path in video_path_tasks:
+                threading.Thread(
+                    target=process_video,
+                    args=(
+                        SimpleNamespace(
+                            video_path=video_path.strip('"'),
+                            rows=rows,
+                            cols=cols,
+                            preset=args.preset,
+                            full=args.full,
+                            low=args.low,
+                            max=args.max,
+                            alternative_output_folder_path=args.alternative_output_folder_path,
+                            parallel_processing_directory=args.parallel_processing_directory,
+                            screen_ratio=args.screen_ratio,
+                            skip=args.skip,
+                            pic_only=args.pic_only,
+                            video_only=args.video_only,
+                            recursion=args.recursion,
+                            full_delete_mode=args.full_delete_mode,
+                        ),
                     ),
-                ),
-                kwargs={
-                    "rotate_sign": rotate_sign,
-                    "crop_sign": crop_sign,
-                },
-            ).start()
+                    kwargs={
+                        "rotate_sign": rotate_sign,
+                        "crop_sign": crop_sign,
+                    },
+                ).start()
     else:
         process_video(args)
