@@ -274,7 +274,7 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     if not cap.isOpened():
         raise UserWarning("无法打开视频文件!")
     thumbnails = []
-    for i in tqdm(range(rows * cols), desc="生成缩略图"):
+    for i in tqdm(range(rows * cols), desc="缩略图"):
         # 定位到指定帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_interval)
         ret, frame = cap.read()
@@ -423,7 +423,7 @@ def gen_video_thumbnail(
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
 
-    pbar = tqdm(total=len(gen_footage_commands), desc="生成中间文件")
+    pbar = tqdm(total=len(gen_footage_commands), desc="中间文件")
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
