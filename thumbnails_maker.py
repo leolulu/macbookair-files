@@ -501,10 +501,10 @@ def gen_video_thumbnail(
             for line in proc.stderr:
                 if "Duration" in line:
                     if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
-                        pbar.total = duration_result_to_second(result[0])
+                        pbar.total = duration_result_to_second(result[0], 1)
                 if "speed" in line:
                     if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
-                        pbar.n = duration_result_to_second(result[0])
+                        pbar.n = duration_result_to_second(result[0], 1)
                         pbar.refresh()
             pbar.close()
         proc.wait()
@@ -527,10 +527,13 @@ def gen_video_thumbnail(
         os.remove(f)
 
 
-def duration_result_to_second(findall_result):
+def duration_result_to_second(findall_result, decimal_places: Optional[int] = None):
     hours, minutes, seconds, milliseconds = findall_result
     milliseconds = milliseconds.ljust(3, "0")
-    return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(milliseconds) / 1000
+    result = int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(milliseconds) / 1000
+    if decimal_places:
+        result = round(result, decimal_places)
+    return result
 
 
 def get_max_screen_to_body_ratio_col(
