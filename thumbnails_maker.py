@@ -554,7 +554,7 @@ def get_max_screen_to_body_ratio_col(
     result = list(zip(candidate_cols, candidate_cols_screen_to_body_ratio))
     print(f"计算结果: {[(i[0],str(round(i[1]*100,1))+'%') for i in result]}")
     max_result = max(result, key=lambda x: x[1])
-    print(f"最大屏占比列数结果: {max_result}")
+    print("最大屏占比列数结果：" + f"列数【{max_result[0]}】，屏占比【{int(max_result[1] * 100)}%】")
     return max_result[0]
 
 
