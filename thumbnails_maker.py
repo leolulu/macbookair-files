@@ -502,7 +502,8 @@ def gen_video_thumbnail(
             for line in proc.stderr:
                 if "Duration" in line:
                     if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
-                        pbar.total = duration_result_to_second(result[0], 1)
+                        if (d := duration_result_to_second(result[0], 1)) > (0 if pbar.total is None else pbar.total):
+                            pbar.total = d
                 if "speed" in line:
                     if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
                         n = duration_result_to_second(result[0], 1)
