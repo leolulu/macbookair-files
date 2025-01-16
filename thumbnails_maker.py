@@ -12,7 +12,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional, Tuple, Union, cast
+from typing import Dict, Optional, Tuple, Union, cast
 
 import cv2
 import matplotlib.pyplot as plt
@@ -350,13 +350,27 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     ).start()
 
 
-def log_ffmpeg_convert_error(cp: subprocess.CompletedProcess, video_path: str):
-    try:
-        cp.check_returncode()
-    except subprocess.CalledProcessError as e:
+def log_ffmpeg_convert_error(
+    proc: Union[subprocess.CompletedProcess, subprocess.Popen],
+    video_path: str,
+    additional_info: Optional[Dict[str, str]] = None,
+):
+    def _write_error_log(error_content: str):
         error_log_path = os.path.splitext(video_path)[0] + ".err.log"
         with open(error_log_path, "a", encoding="utf-8") as f:
-            f.write(f"{e.stderr}\n")
+            f.write(f"{error_content}\n\n")
+            if additional_info:
+                for key, value in additional_info.items():
+                    f.write(f"{key}:\n{value}\n\n")
+
+    if isinstance(proc, subprocess.CompletedProcess):
+        try:
+            proc.check_returncode()
+        except subprocess.CalledProcessError as e:
+            _write_error_log(e.stderr)
+    elif isinstance(proc, subprocess.Popen):
+        if (proc.returncode != 0) and proc.stderr:
+            _write_error_log(proc.stderr.read())
 
 
 def gen_video_thumbnail(
@@ -415,7 +429,7 @@ def gen_video_thumbnail(
         concat_prioritizer.block_if_concatting()
         cp = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
         pbar.update()
-        log_ffmpeg_convert_error(cp, video_path)
+        log_ffmpeg_convert_error(cp, video_path, {"command": command})
 
     if global_encode_task_executor_pool:
         list(global_encode_task_executor_pool.map(run_with_blocking, gen_footage_commands))
@@ -471,10 +485,30 @@ def gen_video_thumbnail(
     # 其他指令部分
     command += f' -map "[out_final]" -preset {preset} -c:a copy -movflags +faststart -y '
     command += f' "{temp_output_path_video}"'
-    print(f"生成动态缩略图指令：{command}")
+    # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
-        cp = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        log_ffmpeg_convert_error(cp, video_path)
+        proc = subprocess.Popen(
+            command,
+            shell=True,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.stderr:
+            pbar = tqdm(desc="合并", unit=" second")
+            for line in proc.stderr:
+                if "Duration" in line:
+                    if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
+                        pbar.total = duration_result_to_second(result[0])
+                if "speed" in line:
+                    if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
+                        pbar.n = duration_result_to_second(result[0])
+                        pbar.refresh()
+            pbar.close()
+        proc.wait()
+        log_ffmpeg_convert_error(proc, video_path, {"command": command})
 
     threading.Thread(
         target=move_with_optional_security,
@@ -491,6 +525,12 @@ def gen_video_thumbnail(
     ).start()
     for f in footage_paths:
         os.remove(f)
+
+
+def duration_result_to_second(findall_result):
+    hours, minutes, seconds, milliseconds = findall_result
+    milliseconds = milliseconds.ljust(3, "0")
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(milliseconds) / 1000
 
 
 def get_max_screen_to_body_ratio_col(
