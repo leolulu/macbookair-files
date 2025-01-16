@@ -177,8 +177,11 @@ class VideoCoordPicker:
         if self.selected_rect:
             print(f"最终选中的矩形坐标: {self.selected_rect}")  # (x, y, width, height)
             plt.close(self.fig)
+        elif self.checkbox.get_status()[0]:
+            print(f"没有框选矩形，但是启用了RangeSlider，走trim流程...")
+            plt.close(self.fig)
         else:
-            print("尚未选择矩形。请先框选一个区域。")
+            print("既未选择矩形，也未选择时长范围。请设置至少一个！")
 
     def pick_coord_and_optionally_trim(self):
         self.show()
@@ -687,38 +690,52 @@ def pick_coord_and_optionally_trim_for_proc(video_path, queue):
     queue.put(result)
 
 
-def preprocessing_crop_video(video_path: str, crop_sign):
+def preprocessing_crop_trim_video(input_video_path: str, crop_sign):
     if crop_sign is None:
-        return video_path
+        return input_video_path
+    output_video_path = input_video_path
     print(f"开始预处理环节：裁剪")
     with threading.Lock():
         queue = multiprocessing.Queue()
         proc = multiprocessing.Process(
             target=pick_coord_and_optionally_trim_for_proc,
-            args=(video_path, queue),
+            args=(input_video_path, queue),
         )
         proc.start()
         proc.join()
         if proc.exitcode != 0:
             raise UserWarning(f"pick_coord_and_optionally_trim通过子进程没有运行成功，裁剪失败！")
         coord, trim_range = queue.get()
-    if coord is None:
-        raise UserWarning("没有框选裁剪坐标，取消处理...")
-    x, y, w, h = coord.x, coord.y, coord.w, coord.h
-    output_video_path = os.path.splitext(video_path)[0] + "_cropped.mp4"
+    if (coord is None) and (trim_range is None):
+        raise UserWarning("没有框选裁剪坐标或截取时间范围，取消处理...")
+    crop_filter_segment = trim_command_segment = early_trim_command_segment = copy_command_segment = ""
+    vf_command_segment = '-vf "{vf_content}"'
+    if coord:
+        x, y, w, h = coord.x, coord.y, coord.w, coord.h
+        crop_filter_segment = f"crop={w}:{h}:{x}:{y}"
+        output_video_path = os.path.splitext(output_video_path)[0] + "_cropped.mp4"
     if trim_range:
         trim_command_segment = f"-ss {trim_range.start} -to {trim_range.end}"
-        output_video_path = "_trimmed".join(os.path.splitext(output_video_path))
+        output_video_path = os.path.splitext(output_video_path)[0] + "_trimmed.mp4"
+    vf_content = [i for i in [crop_filter_segment] if i]
+    if vf_content:
+        vf_command_segment = vf_command_segment.format(vf_content=",".join(vf_content))
     else:
-        trim_command_segment = ""
-    command = f'ffmpeg -i "{video_path}" -vf "crop={w}:{h}:{x}:{y}" {trim_command_segment} -y "{output_video_path}"'
-    print(f"开始裁剪视频，指令：\n{command}")
+        vf_command_segment = ""
+        copy_command_segment = "-c copy"
+        if input_video_path.startswith(r"\\"):
+            early_trim_command_segment = trim_command_segment
+            trim_command_segment = ""
+        output_video_path = os.path.splitext(output_video_path)[0] + "_copy" + os.path.splitext(input_video_path)[-1]
+
+    command = f'ffmpeg {early_trim_command_segment} -i "{input_video_path}" {vf_command_segment} {trim_command_segment} {copy_command_segment} -y "{output_video_path}"'
+    print(f"开始裁剪和/或截取视频，指令：\n{command}")
     subprocess.run(command, shell=True)
     return output_video_path
 
 
 def preprocessing(video_path: str, kwargs):
-    video_path = preprocessing_crop_video(video_path, kwargs["crop_sign"])
+    video_path = preprocessing_crop_trim_video(video_path, kwargs["crop_sign"])
     with threading.Lock():
         video_path = preprocessing_rotate_video(video_path, kwargs["rotate_sign"])
     return video_path
