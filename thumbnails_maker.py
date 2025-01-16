@@ -345,7 +345,7 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
                 else output_path_img
             ),
             os.path.join(os.path.dirname(temp_output_path_img), os.path.basename(output_path_img)),
-            "图片缩略图移动到目标目录完毕...",
+            "",  # "图片缩略图移动到目标目录完毕...",
         ),
     ).start()
 
@@ -520,7 +520,7 @@ def gen_video_thumbnail(
                 else output_path_video
             ),
             os.path.join(os.path.dirname(temp_output_path_video), os.path.basename(output_path_video)),
-            "视频缩略图移动到目标目录完毕...",
+            "",  # 视频缩略图移动到目标目录完毕...",
         ),
     ).start()
     for f in footage_paths:
