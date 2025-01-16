@@ -259,7 +259,8 @@ def move_with_optional_security(source, target, backup_target=None, msg=""):
     except:
         if backup_target:
             shutil.move(source, target)
-    print(msg)
+    if msg:
+        print(msg)
 
 
 def get_font_location(frame, content: str, fontFace: int, font_scale: float, thickness: int) -> Tuple[int, int]:
@@ -330,7 +331,7 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     # 保存缩略图
     output_path_img = os.path.splitext(video_path)[0] + ".jpg"
     temp_output_path_img = os.path.join(str(Path.home() / "Downloads"), f"WIP_{uuid.uuid4().hex}.jpg")
-    print(f"缩略图保存路径为：{output_path_img}")
+    # print(f"缩略图保存路径为：{output_path_img}")
     if os.path.exists(output_path_img):
         os.remove(output_path_img)
     cv2.imwrite(temp_output_path_img, thumbnail)
@@ -440,7 +441,7 @@ def gen_video_thumbnail(
     pbar.close()
 
     # 检查中间文件是否损坏
-    print("开始检查中间文件是否损坏...")
+    # print("开始检查中间文件是否损坏...")
     corrupted_file_paths = []
     intermediate_file_dimension: Tuple[int, int] = None  # type: ignore
     for intermediate_file_path in intermediate_file_paths:
@@ -638,7 +639,7 @@ def generate_thumbnail(
             traceback.print_exc()
 
     _, _, _, _, duration_in_seconds, rows_calced, cols_calced = gen_info(video_path, rows, cols, screen_ratio)
-    print(f"开始生成缩略图，视频路径：{video_path}，行列数：{rows_calced}x{cols_calced}")
+    # print(f"开始生成缩略图，视频路径：{video_path}，行列数：{rows_calced}x{cols_calced}")
     if process_full_video and rows_calced * cols_calced * max_thumb_duration < duration_in_seconds:
         n = 1
         seg_start_time = 0
