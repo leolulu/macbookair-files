@@ -505,7 +505,10 @@ def gen_video_thumbnail(
                         pbar.total = duration_result_to_second(result[0], 1)
                 if "speed" in line:
                     if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
-                        pbar.n = duration_result_to_second(result[0], 1)
+                        n = duration_result_to_second(result[0], 1)
+                        if n > pbar.total:
+                            pbar.total = n
+                        pbar.n = n
                         pbar.refresh()
             pbar.close()
         proc.wait()
