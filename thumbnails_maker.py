@@ -10,6 +10,7 @@ import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, Optional, Tuple, Union, cast
@@ -25,6 +26,16 @@ from tqdm import tqdm
 download_folder_alias = "dl"
 
 global_tqdm_update_lock = threading.Lock()
+
+subprocess_popen_for_ffmpeg = partial(
+    subprocess.Popen,
+    shell=True,
+    stderr=subprocess.PIPE,
+    text=True,
+    bufsize=1,
+    encoding="utf-8",
+    errors="replace",
+)
 
 
 class VideoCoordPicker:
@@ -380,15 +391,7 @@ def log_ffmpeg_convert_error(
 
 
 def run_ffmpeg_command_with_shell_and_tqdm(command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second"):
-    proc = subprocess.Popen(
-        command,
-        shell=True,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        encoding="utf-8",
-        errors="replace",
-    )
+    proc = subprocess_popen_for_ffmpeg(command)
     if proc.stderr:
         pbar = tqdm(desc=tqdm_desc, unit=unit, total=total)
         for line in proc.stderr:
@@ -462,15 +465,7 @@ def gen_video_thumbnail(
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
-        proc = subprocess.Popen(
-            command,
-            shell=True,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            encoding="utf-8",
-            errors="replace",
-        )
+        proc = subprocess_popen_for_ffmpeg(command)
         individual_current_processed_second = 0
         if proc.stderr:
             for line in proc.stderr:
