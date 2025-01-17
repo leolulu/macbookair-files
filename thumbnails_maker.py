@@ -10,6 +10,7 @@ import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, Optional, Tuple, Union, cast
@@ -23,6 +24,18 @@ from retrying import retry
 from tqdm import tqdm
 
 download_folder_alias = "dl"
+
+global_tqdm_update_lock = threading.Lock()
+
+subprocess_popen_for_ffmpeg = partial(
+    subprocess.Popen,
+    shell=True,
+    stderr=subprocess.PIPE,
+    text=True,
+    bufsize=1,
+    encoding="utf-8",
+    errors="replace",
+)
 
 
 class VideoCoordPicker:
@@ -278,7 +291,7 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     if not cap.isOpened():
         raise UserWarning("无法打开视频文件!")
     thumbnails = []
-    for i in tqdm(range(rows * cols), desc="缩略图"):
+    for i in tqdm(range(rows * cols), desc="缩略图", unit=" pic"):
         # 定位到指定帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_interval)
         ret, frame = cap.read()
@@ -377,6 +390,27 @@ def log_ffmpeg_convert_error(
             _write_error_log(proc.stderr.read())
 
 
+def run_ffmpeg_command_with_shell_and_tqdm(command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second"):
+    proc = subprocess_popen_for_ffmpeg(command)
+    if proc.stderr:
+        pbar = tqdm(desc=tqdm_desc, unit=unit, total=total)
+        for line in proc.stderr:
+            if (not total) and ("Duration" in line):
+                if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
+                    if (d := duration_result_to_second(result[0], 1)) > (0 if pbar.total is None else pbar.total):
+                        pbar.total = d
+            if "speed" in line:
+                if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
+                    n = duration_result_to_second(result[0], 1)
+                    if n > pbar.total:
+                        pbar.total = n
+                    pbar.n = n
+                    pbar.refresh()
+        pbar.close()
+    proc.wait()
+    log_ffmpeg_convert_error(proc, video_path, {"指令": command, "环节": str(tqdm_desc)})
+
+
 def gen_video_thumbnail(
     video_path,
     preset,
@@ -427,13 +461,25 @@ def gen_video_thumbnail(
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
 
-    pbar = tqdm(total=len(gen_footage_commands), desc="中间文件")
+    pbar = tqdm(total=round(thumbnail_duration * len(gen_footage_commands)), desc="中间文件", unit=" second")
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
-        cp = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        pbar.update()
-        log_ffmpeg_convert_error(cp, video_path, {"command": command})
+        proc = subprocess_popen_for_ffmpeg(command)
+        individual_current_processed_second = 0
+        if proc.stderr:
+            for line in proc.stderr:
+                if "speed" in line:
+                    if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
+                        new_processed_seconds = duration_result_to_second(result[0])
+                        increment = new_processed_seconds - individual_current_processed_second
+                        with global_tqdm_update_lock:
+                            if increment + pbar.n > pbar.total:
+                                pbar.total = increment + pbar.n
+                            pbar.update(round(increment, 0))
+                        individual_current_processed_second = new_processed_seconds
+        proc.wait()
+        log_ffmpeg_convert_error(proc, video_path, {"command": command, "环节": str("中间文件")})
 
     if global_encode_task_executor_pool:
         list(global_encode_task_executor_pool.map(run_with_blocking, gen_footage_commands))
@@ -447,7 +493,7 @@ def gen_video_thumbnail(
     # print("开始检查中间文件是否损坏...")
     corrupted_file_paths = []
     intermediate_file_dimension: Tuple[int, int] = None  # type: ignore
-    for intermediate_file_path in intermediate_file_paths:
+    for intermediate_file_path in tqdm(intermediate_file_paths, desc="校验"):
         is_corrupted, intermediate_file_width, intermediate_file_height = check_video_corrupted(intermediate_file_path)
         if is_corrupted:
             corrupted_file_paths.append(intermediate_file_path)
@@ -491,32 +537,7 @@ def gen_video_thumbnail(
     command += f' "{temp_output_path_video}"'
     # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
-        proc = subprocess.Popen(
-            command,
-            shell=True,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if proc.stderr:
-            pbar = tqdm(desc="合并", unit=" second")
-            for line in proc.stderr:
-                if "Duration" in line:
-                    if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
-                        if (d := duration_result_to_second(result[0], 1)) > (0 if pbar.total is None else pbar.total):
-                            pbar.total = d
-                if "speed" in line:
-                    if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
-                        n = duration_result_to_second(result[0], 1)
-                        if n > pbar.total:
-                            pbar.total = n
-                        pbar.n = n
-                        pbar.refresh()
-            pbar.close()
-        proc.wait()
-        log_ffmpeg_convert_error(proc, video_path, {"command": command})
+        run_ffmpeg_command_with_shell_and_tqdm(command, "合并")
 
     threading.Thread(
         target=move_with_optional_security,
@@ -654,7 +675,7 @@ def generate_thumbnail(
             seg_end_time = min(seg_start_time + rows_calced * cols_calced * max_thumb_duration, duration_in_seconds)
             seg_file_path = f"-seg{str(n).zfill(2)}".join(os.path.splitext(video_path))
             command = f'ffmpeg -ss {seg_start_time} -to {seg_end_time} -accurate_seek -i "{video_path}" -c copy -map_chapters -1 -y -avoid_negative_ts 1 "{seg_file_path}"'
-            subprocess.run(command, shell=True)
+            run_ffmpeg_command_with_shell_and_tqdm(command, f"分段【{n}】", total=round(seg_end_time - seg_start_time))
             process_video(seg_file_path, rows_calced, cols_calced, start_offset=round(seg_start_time))
             if delete_seg_file_in_full_mode:
                 os.remove(seg_file_path)
@@ -687,8 +708,8 @@ def preprocessing_rotate_video(video_path: str, rotate_sign):
     # 存档：原本非mp4格式视频，直接使用transpose滤镜进行重编码。这次改成先转成mp4格式，然后统一应用metadata进行旋转
     #     transpose_angle = {"l": "2", "r": "1"}[rotate_sign]
     #     command = f'ffmpeg -i "{video_path}" -vf "transpose={transpose_angle}" -y "{rotated_video_path}"'
-    print(f"开始旋转视频，指令：\n{command}")
-    subprocess.run(command, shell=True)
+    # print(f"开始旋转视频，指令：\n{command}")
+    run_ffmpeg_command_with_shell_and_tqdm(command, "旋转")
     return rotated_video_path
 
 
@@ -737,8 +758,8 @@ def preprocessing_crop_trim_video(input_video_path: str, crop_sign):
         output_video_path = os.path.splitext(output_video_path)[0] + "_copy" + os.path.splitext(input_video_path)[-1]
 
     command = f'ffmpeg {early_trim_command_segment} -i "{input_video_path}" {vf_command_segment} {trim_command_segment} {copy_command_segment} -y "{output_video_path}"'
-    print(f"开始裁剪和/或截取视频，指令：\n{command}")
-    subprocess.run(command, shell=True)
+    # print(f"开始裁剪和/或截取视频，指令：\n{command}")
+    run_ffmpeg_command_with_shell_and_tqdm(command, "裁剪/截取")
     return output_video_path
 
 
