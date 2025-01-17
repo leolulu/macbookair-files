@@ -391,7 +391,9 @@ def log_ffmpeg_convert_error(
             _write_error_log(proc.stderr.read())
 
 
-def run_ffmpeg_command_with_shell_and_tqdm(command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second"):
+def run_ffmpeg_command_with_shell_and_tqdm(
+    command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second", end_desc=None
+):
     proc = subprocess_popen_for_ffmpeg(command)
     if proc.stderr:
         pbar = tqdm(desc=tqdm_desc, unit=unit, total=total)
@@ -407,6 +409,8 @@ def run_ffmpeg_command_with_shell_and_tqdm(command, tqdm_desc=None, total: Optio
                         pbar.total = n
                     pbar.n = n
                     pbar.refresh()
+        if end_desc:
+            pbar.set_description_str(end_desc)
         pbar.close()
     proc.wait()
     log_ffmpeg_convert_error(proc, video_path, {"指令": command, "环节": str(tqdm_desc)})
@@ -540,7 +544,7 @@ def gen_video_thumbnail(
     command += f' "{temp_output_path_video}"'
     # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
-        run_ffmpeg_command_with_shell_and_tqdm(command, "合并")
+        run_ffmpeg_command_with_shell_and_tqdm(command, "合并", end_desc="视频缩略图生成完毕...")
 
     threading.Thread(
         target=move_with_optional_security,
