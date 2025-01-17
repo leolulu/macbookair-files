@@ -9,6 +9,7 @@ import threading
 import time
 import traceback
 import uuid
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -21,7 +22,7 @@ import numpy as np
 import requests
 from matplotlib.widgets import Button, CheckButtons, RangeSlider, RectangleSelector, Slider
 from retrying import retry
-from tqdm import tqdm
+from tqdm import TqdmWarning, tqdm
 
 download_folder_alias = "dl"
 
@@ -461,6 +462,7 @@ def gen_video_thumbnail(
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
 
+    warnings.filterwarnings("ignore", category=TqdmWarning, module="tqdm")
     pbar = tqdm(total=round(thumbnail_duration * len(gen_footage_commands)), desc="中间文件", unit=" second")
 
     def run_with_blocking(command):
@@ -488,6 +490,7 @@ def gen_video_thumbnail(
             exe.map(run_with_blocking, gen_footage_commands)
 
     pbar.close()
+    warnings.filterwarnings("default", category=TqdmWarning, module="tqdm")
 
     # 检查中间文件是否损坏
     # print("开始检查中间文件是否损坏...")
