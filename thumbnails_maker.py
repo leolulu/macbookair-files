@@ -377,6 +377,35 @@ def log_ffmpeg_convert_error(
             _write_error_log(proc.stderr.read())
 
 
+def run_ffmpeg_command_with_shell_and_tqdm(command, tqdm_desc=None):
+    proc = subprocess.Popen(
+        command,
+        shell=True,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.stderr:
+        pbar = tqdm(desc=tqdm_desc, unit=" second")
+        for line in proc.stderr:
+            if "Duration" in line:
+                if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
+                    if (d := duration_result_to_second(result[0], 1)) > (0 if pbar.total is None else pbar.total):
+                        pbar.total = d
+            if "speed" in line:
+                if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
+                    n = duration_result_to_second(result[0], 1)
+                    if n > pbar.total:
+                        pbar.total = n
+                    pbar.n = n
+                    pbar.refresh()
+        pbar.close()
+    proc.wait()
+    log_ffmpeg_convert_error(proc, video_path, {"指令": command, "环节": str(tqdm_desc)})
+
+
 def gen_video_thumbnail(
     video_path,
     preset,
@@ -447,7 +476,7 @@ def gen_video_thumbnail(
     # print("开始检查中间文件是否损坏...")
     corrupted_file_paths = []
     intermediate_file_dimension: Tuple[int, int] = None  # type: ignore
-    for intermediate_file_path in intermediate_file_paths:
+    for intermediate_file_path in tqdm(intermediate_file_paths, desc="检查中间文件是否损坏"):
         is_corrupted, intermediate_file_width, intermediate_file_height = check_video_corrupted(intermediate_file_path)
         if is_corrupted:
             corrupted_file_paths.append(intermediate_file_path)
@@ -491,32 +520,7 @@ def gen_video_thumbnail(
     command += f' "{temp_output_path_video}"'
     # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
-        proc = subprocess.Popen(
-            command,
-            shell=True,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if proc.stderr:
-            pbar = tqdm(desc="合并", unit=" second")
-            for line in proc.stderr:
-                if "Duration" in line:
-                    if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
-                        if (d := duration_result_to_second(result[0], 1)) > (0 if pbar.total is None else pbar.total):
-                            pbar.total = d
-                if "speed" in line:
-                    if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
-                        n = duration_result_to_second(result[0], 1)
-                        if n > pbar.total:
-                            pbar.total = n
-                        pbar.n = n
-                        pbar.refresh()
-            pbar.close()
-        proc.wait()
-        log_ffmpeg_convert_error(proc, video_path, {"command": command})
+        run_ffmpeg_command_with_shell_and_tqdm(command, "合并")
 
     threading.Thread(
         target=move_with_optional_security,
@@ -654,7 +658,7 @@ def generate_thumbnail(
             seg_end_time = min(seg_start_time + rows_calced * cols_calced * max_thumb_duration, duration_in_seconds)
             seg_file_path = f"-seg{str(n).zfill(2)}".join(os.path.splitext(video_path))
             command = f'ffmpeg -ss {seg_start_time} -to {seg_end_time} -accurate_seek -i "{video_path}" -c copy -map_chapters -1 -y -avoid_negative_ts 1 "{seg_file_path}"'
-            subprocess.run(command, shell=True)
+            run_ffmpeg_command_with_shell_and_tqdm(command, f"分段{n}")
             process_video(seg_file_path, rows_calced, cols_calced, start_offset=round(seg_start_time))
             if delete_seg_file_in_full_mode:
                 os.remove(seg_file_path)
@@ -687,8 +691,8 @@ def preprocessing_rotate_video(video_path: str, rotate_sign):
     # 存档：原本非mp4格式视频，直接使用transpose滤镜进行重编码。这次改成先转成mp4格式，然后统一应用metadata进行旋转
     #     transpose_angle = {"l": "2", "r": "1"}[rotate_sign]
     #     command = f'ffmpeg -i "{video_path}" -vf "transpose={transpose_angle}" -y "{rotated_video_path}"'
-    print(f"开始旋转视频，指令：\n{command}")
-    subprocess.run(command, shell=True)
+    # print(f"开始旋转视频，指令：\n{command}")
+    run_ffmpeg_command_with_shell_and_tqdm(command, "旋转")
     return rotated_video_path
 
 
@@ -737,8 +741,8 @@ def preprocessing_crop_trim_video(input_video_path: str, crop_sign):
         output_video_path = os.path.splitext(output_video_path)[0] + "_copy" + os.path.splitext(input_video_path)[-1]
 
     command = f'ffmpeg {early_trim_command_segment} -i "{input_video_path}" {vf_command_segment} {trim_command_segment} {copy_command_segment} -y "{output_video_path}"'
-    print(f"开始裁剪和/或截取视频，指令：\n{command}")
-    subprocess.run(command, shell=True)
+    # print(f"开始裁剪和/或截取视频，指令：\n{command}")
+    run_ffmpeg_command_with_shell_and_tqdm(command, "裁剪/截取")
     return output_video_path
 
 
