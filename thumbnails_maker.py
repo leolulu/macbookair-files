@@ -675,7 +675,7 @@ def generate_thumbnail(
             seg_end_time = min(seg_start_time + rows_calced * cols_calced * max_thumb_duration, duration_in_seconds)
             seg_file_path = f"-seg{str(n).zfill(2)}".join(os.path.splitext(video_path))
             command = f'ffmpeg -ss {seg_start_time} -to {seg_end_time} -accurate_seek -i "{video_path}" -c copy -map_chapters -1 -y -avoid_negative_ts 1 "{seg_file_path}"'
-            run_ffmpeg_command_with_shell_and_tqdm(command, f"分段{n}", total=round(seg_end_time - seg_start_time))
+            run_ffmpeg_command_with_shell_and_tqdm(command, f"分段【{n}】", total=round(seg_end_time - seg_start_time))
             process_video(seg_file_path, rows_calced, cols_calced, start_offset=round(seg_start_time))
             if delete_seg_file_in_full_mode:
                 os.remove(seg_file_path)
