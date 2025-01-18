@@ -626,7 +626,7 @@ def get_max_screen_to_body_ratio_col(
 def gen_info(video_path, rows, cols, screen_ratio):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        raise UserWarning("无法打开视频文件!")
+        raise UserWarning(f"无法打开视频文件：{video_path}")
 
     height, width, _ = cap.read()[1].shape
     if cols is None:
