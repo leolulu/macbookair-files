@@ -39,6 +39,25 @@ subprocess_popen_for_ffmpeg = partial(
 )
 
 
+class TqdmWarningManager:
+    Lock = threading.Lock()
+    Counter = 0
+
+    @classmethod
+    def impose_ignore(cls):
+        with cls.Lock:
+            if cls.Counter == 0:
+                warnings.filterwarnings("ignore", category=TqdmWarning, module="tqdm")
+            cls.Counter += 1
+
+    @classmethod
+    def lift_ignore(cls):
+        with cls.Lock:
+            cls.Counter -= 1
+            if cls.Counter == 0:
+                warnings.filterwarnings("default", category=TqdmWarning, module="tqdm")
+
+
 class VideoCoordPicker:
     def __init__(self, video_path):
         plt.rcParams["font.sans-serif"] = ["SimHei"]  # 指定中文字体
@@ -466,7 +485,7 @@ def gen_video_thumbnail(
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
 
-    warnings.filterwarnings("ignore", category=TqdmWarning, module="tqdm")
+    TqdmWarningManager.impose_ignore()
     pbar = tqdm(total=round(thumbnail_duration * len(gen_footage_commands)), desc="中间文件", unit=" second")
 
     def run_with_blocking(command):
@@ -494,7 +513,7 @@ def gen_video_thumbnail(
             exe.map(run_with_blocking, gen_footage_commands)
 
     pbar.close()
-    warnings.filterwarnings("default", category=TqdmWarning, module="tqdm")
+    TqdmWarningManager.lift_ignore()
 
     # 检查中间文件是否损坏
     # print("开始检查中间文件是否损坏...")
