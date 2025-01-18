@@ -915,6 +915,17 @@ def process_video(args, **kwargs):
         )
 
 
+def correct_drag_produced_path(input_path: str):
+    if driver_letter_match := re.findall(r"^/[a-z]/", input_path):
+        driver_letter_part = driver_letter_match[0]
+        driver_letter = driver_letter_part.replace("/", "").upper()
+        corrected_path =  input_path.replace(driver_letter_part, driver_letter + ":/")
+        print(f"检测到拖拽产生的路径格式【{input_path}】，已修正为【{corrected_path}】")
+        return corrected_path
+    else:
+        return input_path
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
@@ -996,6 +1007,7 @@ if __name__ == "__main__":
             video_path_tasks = []
             for _path in video_path.split('" "'):
                 _path = _path.strip('"')
+                _path = correct_drag_produced_path(_path)
                 video_path_tasks.append(_path)
 
             for video_path in video_path_tasks:
