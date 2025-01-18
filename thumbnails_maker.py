@@ -38,6 +38,8 @@ subprocess_popen_for_ffmpeg = partial(
     errors="replace",
 )
 
+bar_format_prevent_precision_error = "{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+
 
 class TqdmWarningManager:
     Lock = threading.Lock()
@@ -486,7 +488,13 @@ def gen_video_thumbnail(
         gen_footage_commands.append(gen_footage_command)
 
     TqdmWarningManager.impose_ignore()
-    pbar = tqdm(total=round(thumbnail_duration * len(gen_footage_commands)), desc="中间文件", unit=" second", dynamic_ncols=True)
+    pbar = tqdm(
+        total=round(thumbnail_duration * len(gen_footage_commands)),
+        desc="中间文件",
+        unit=" second",
+        dynamic_ncols=True,
+        bar_format=bar_format_prevent_precision_error,
+    )
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
@@ -501,7 +509,7 @@ def gen_video_thumbnail(
                         with global_tqdm_update_lock:
                             if increment + pbar.n > pbar.total:
                                 pbar.total = increment + pbar.n
-                            pbar.update(round(increment, 0))
+                            pbar.update(increment)
                         individual_current_processed_second = new_processed_seconds
         proc.wait()
         log_ffmpeg_convert_error(proc, video_path, {"command": command, "环节": str("中间文件")})
