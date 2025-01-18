@@ -24,21 +24,20 @@ from matplotlib.widgets import Button, CheckButtons, RangeSlider, RectangleSelec
 from retrying import retry
 from tqdm import TqdmWarning, tqdm
 
-download_folder_alias = "dl"
 
-global_tqdm_update_lock = threading.Lock()
-
-subprocess_popen_for_ffmpeg = partial(
-    subprocess.Popen,
-    shell=True,
-    stderr=subprocess.PIPE,
-    text=True,
-    bufsize=1,
-    encoding="utf-8",
-    errors="replace",
-)
-
-bar_format_prevent_precision_error = "{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+class GlobalScopeObjects:
+    download_folder_alias = "dl"
+    global_tqdm_update_lock = threading.Lock()
+    subprocess_popen_for_ffmpeg = partial(
+        subprocess.Popen,
+        shell=True,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        encoding="utf-8",
+        errors="replace",
+    )
+    bar_format_prevent_precision_error = "{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
 
 
 class TqdmWarningManager:
@@ -415,7 +414,7 @@ def log_ffmpeg_convert_error(
 def run_ffmpeg_command_with_shell_and_tqdm(
     command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second", end_desc=None
 ):
-    proc = subprocess_popen_for_ffmpeg(command)
+    proc = GlobalScopeObjects.subprocess_popen_for_ffmpeg(command)
     if proc.stderr:
         pbar = tqdm(desc=tqdm_desc, unit=unit, total=total, dynamic_ncols=True)
         for line in proc.stderr:
@@ -493,12 +492,12 @@ def gen_video_thumbnail(
         desc="中间文件",
         unit=" second",
         dynamic_ncols=True,
-        bar_format=bar_format_prevent_precision_error,
+        bar_format=GlobalScopeObjects.bar_format_prevent_precision_error,
     )
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
-        proc = subprocess_popen_for_ffmpeg(command)
+        proc = GlobalScopeObjects.subprocess_popen_for_ffmpeg(command)
         individual_current_processed_second = 0
         if proc.stderr:
             for line in proc.stderr:
@@ -506,7 +505,7 @@ def gen_video_thumbnail(
                     if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
                         new_processed_seconds = duration_result_to_second(result[0])
                         increment = new_processed_seconds - individual_current_processed_second
-                        with global_tqdm_update_lock:
+                        with GlobalScopeObjects.global_tqdm_update_lock:
                             if increment + pbar.n > pbar.total:
                                 pbar.total = increment + pbar.n
                             pbar.update(increment)
@@ -807,7 +806,7 @@ def preprocessing(video_path: str, kwargs):
 def process_video(args, **kwargs):
     video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
     video_path = args.video_path
-    if video_path.lower() == download_folder_alias:
+    if video_path.lower() == GlobalScopeObjects.download_folder_alias:
         video_path = str(Path.home() / "Downloads")
     if (args.rows is None) and (args.cols is None):
         rows = 7
@@ -920,7 +919,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "video_path",
-        help=f'视频路径或视频目录路径(使用"{download_folder_alias}"指代系统下载目录)；如果不提供的话，则进入交互式输入模式',
+        help=f'视频路径或视频目录路径(使用"{GlobalScopeObjects.download_folder_alias}"指代系统下载目录)；如果不提供的话，则进入交互式输入模式',
         type=str,
         nargs="?",
     )
