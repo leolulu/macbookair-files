@@ -37,7 +37,7 @@ class GlobalScopeObjects:
         encoding="utf-8",
         errors="replace",
     )
-    bar_format_prevent_precision_error = "{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+    bar_format_prevent_precision_error = "{l_bar}{bar}| {n:.1f}/{total_fmt} [{elapsed}<{remaining},  {rate_fmt}{postfix}]"
 
 
 class TqdmWarningManager:
