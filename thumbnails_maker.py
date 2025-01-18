@@ -311,7 +311,7 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
     if not cap.isOpened():
         raise UserWarning("无法打开视频文件!")
     thumbnails = []
-    for i in tqdm(range(rows * cols), desc="缩略图", unit=" pic"):
+    for i in tqdm(range(rows * cols), desc="缩略图", unit=" pic", dynamic_ncols=True):
         # 定位到指定帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_interval)
         ret, frame = cap.read()
@@ -415,7 +415,7 @@ def run_ffmpeg_command_with_shell_and_tqdm(
 ):
     proc = subprocess_popen_for_ffmpeg(command)
     if proc.stderr:
-        pbar = tqdm(desc=tqdm_desc, unit=unit, total=total)
+        pbar = tqdm(desc=tqdm_desc, unit=unit, total=total, dynamic_ncols=True)
         for line in proc.stderr:
             if (not total) and ("Duration" in line):
                 if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
@@ -486,7 +486,7 @@ def gen_video_thumbnail(
         gen_footage_commands.append(gen_footage_command)
 
     TqdmWarningManager.impose_ignore()
-    pbar = tqdm(total=round(thumbnail_duration * len(gen_footage_commands)), desc="中间文件", unit=" second")
+    pbar = tqdm(total=round(thumbnail_duration * len(gen_footage_commands)), desc="中间文件", unit=" second", dynamic_ncols=True)
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
@@ -519,7 +519,7 @@ def gen_video_thumbnail(
     # print("开始检查中间文件是否损坏...")
     corrupted_file_paths = []
     intermediate_file_dimension: Tuple[int, int] = None  # type: ignore
-    for intermediate_file_path in tqdm(intermediate_file_paths, desc="校验"):
+    for intermediate_file_path in tqdm(intermediate_file_paths, desc="校验", dynamic_ncols=True):
         is_corrupted, intermediate_file_width, intermediate_file_height = check_video_corrupted(intermediate_file_path)
         if is_corrupted:
             corrupted_file_paths.append(intermediate_file_path)
