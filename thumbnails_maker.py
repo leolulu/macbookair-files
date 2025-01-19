@@ -919,7 +919,7 @@ def correct_drag_produced_path(input_path: str):
     if driver_letter_match := re.findall(r"^/[a-z]/", input_path):
         driver_letter_part = driver_letter_match[0]
         driver_letter = driver_letter_part.replace("/", "").upper()
-        corrected_path =  input_path.replace(driver_letter_part, driver_letter + ":/")
+        corrected_path = input_path.replace(driver_letter_part, driver_letter + ":/")
         print(f"检测到拖拽产生的路径格式【{input_path}】，已修正为【{corrected_path}】")
         return corrected_path
     else:
@@ -977,7 +977,12 @@ if __name__ == "__main__":
             )
             if not input_string:
                 continue
-            video_path, rows_input = input_string.rsplit(" ", 1)
+
+            try:
+                video_path, rows_input = input_string.rsplit(" ", 1)
+            except:
+                print("输入格式错误，应该是'视频地址 行数[-列数][l|r][c]'的形式!")
+                continue
 
             crop_sign = None
             rotate_sign = None
