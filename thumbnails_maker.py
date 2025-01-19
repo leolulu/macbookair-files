@@ -136,11 +136,12 @@ class VideoCoordPicker:
             label="进度条",
             valmin=0,
             valmax=self.total_frames - 1,
-            valinit=0,
+            valinit=self.slider_val if hasattr(self, "slider_val") else 0,
             valfmt="%d",
             initcolor="none",
             handle_style={"size": 0},
         )
+        self.slider_val = self.slider.val
         self.slider.valtext.set_visible(False)
         self.slider.on_changed(self._on_slider_change)
 
@@ -150,7 +151,7 @@ class VideoCoordPicker:
             label="进度条",
             valmin=0,
             valmax=self.total_frames - 1,
-            valinit=(0, self.total_frames - 1),
+            valinit=(self.slider_val - (half_range := min(int(self.total_frames / 4), 60 * self.fps)), self.slider_val + half_range),
             valfmt="%d",
             handle_style={"size": 0},
         )
@@ -172,6 +173,7 @@ class VideoCoordPicker:
 
     def _on_slider_change(self, val):
         """当滑动条被拖动时，跳转到相应的帧"""
+        self.slider_val = val
         self.current_frame = int(val)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame)
         ret, frame = self.cap.read()
