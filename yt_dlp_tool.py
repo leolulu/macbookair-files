@@ -15,7 +15,7 @@ def process_url(url):
     else:
         download_command_template = "yt-dlp"
 
-    download_command_template += ' --ignore-errors --windows-filenames --proxy socks5://127.0.0.1:10808 --mark-watched --retries 99 --file-access-retries 99 --fragment-retries 99 -o "{temp_folder}/{prefix}%(title)s.%(ext)s" #encode-video-placeholder# #remux-video-placeholder# {simulate} --cookies-from-browser chrome --no-playlist "{url}"'
+    download_command_template += ' --ignore-errors --windows-filenames --proxy socks5://127.0.0.1:10808 --mark-watched --retries 99 --file-access-retries 99 --fragment-retries 99 -o "{temp_folder}/{prefix}%(title)s.%(ext)s" #encode-video-placeholder# #remux-video-placeholder# {simulate} --cookies ytb.cookie --no-playlist "{url}"'
     download_command_template = download_command_template.format(
         url=url,
         temp_folder=args.dl_dir.replace("\\", "/").replace("\\\\", "/"),
