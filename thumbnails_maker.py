@@ -31,6 +31,7 @@ class GlobalScopeObjects:
     subprocess_popen_for_ffmpeg = partial(
         subprocess.Popen,
         shell=True,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
@@ -395,22 +396,24 @@ def log_ffmpeg_convert_error(
     video_path: str,
     additional_info: Optional[Dict[str, str]] = None,
 ):
-    def _write_error_log(error_content: str):
+    def _write_error_log(error_content: str, stdout_content: Optional[str] = None):
         error_log_path = os.path.splitext(video_path)[0] + ".err.log"
         with open(error_log_path, "a", encoding="utf-8") as f:
-            f.write(f"{error_content}\n\n")
+            f.write(f"{error_content}\n")
+            if stdout_content:
+                f.write(f"{stdout_content}\n")
             if additional_info:
                 for key, value in additional_info.items():
-                    f.write(f"{key}:\n{value}\n\n")
+                    f.write(f"{key}:\n{value}\n")
 
     if isinstance(proc, subprocess.CompletedProcess):
         try:
             proc.check_returncode()
         except subprocess.CalledProcessError as e:
-            _write_error_log(e.stderr)
+            _write_error_log(e.stderr, e.stdout)
     elif isinstance(proc, subprocess.Popen):
         if (proc.returncode != 0) and proc.stderr:
-            _write_error_log(proc.stderr.read())
+            _write_error_log(proc.stderr.read(), proc.stdout.read() if proc.stdout else None)
 
 
 def run_ffmpeg_command_with_shell_and_tqdm(
