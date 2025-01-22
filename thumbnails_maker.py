@@ -797,7 +797,7 @@ def preprocessing_crop_trim_video(input_video_path: str, crop_sign):
 
     command = f'ffmpeg {early_trim_command_segment} -i "{input_video_path}" {vf_command_segment} {trim_command_segment} {copy_command_segment} -y "{output_video_path}"'
     # print(f"开始裁剪和/或截取视频，指令：\n{command}")
-    run_ffmpeg_command_with_shell_and_tqdm(command, "裁剪/截取")
+    run_ffmpeg_command_with_shell_and_tqdm(command, "裁剪/截取", total=trim_range.end - trim_range.start if trim_range else None)
     return output_video_path
 
 
