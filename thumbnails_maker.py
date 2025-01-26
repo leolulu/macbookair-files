@@ -881,8 +881,9 @@ def process_video(args, **kwargs):
             def download_video(video_path):
                 return requests.get(video_path, proxies={"http": "http://127.0.0.1:10809", "https": "http://127.0.0.1:10809"}).content
 
+            video_data = download_video(video_path)
             with open(file_path, "wb") as f:
-                f.write(download_video(video_path))
+                f.write(video_data)
         generate_thumbnail(
             preprocessing(file_path, kwargs),
             rows,
