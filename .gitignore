@@ -2,6 +2,8 @@
 *.pkl
 *.log
 
+ytb.cookie
+
 Pipfile
 
 bll_get_proxy_url/v2ray_config.json
