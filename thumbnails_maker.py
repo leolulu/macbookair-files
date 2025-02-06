@@ -922,6 +922,7 @@ def correct_drag_produced_path(input_path: str):
         driver_letter_part = driver_letter_match[0]
         driver_letter = driver_letter_part.replace("/", "").upper()
         corrected_path = input_path.replace(driver_letter_part, driver_letter + ":/")
+        corrected_path = re.sub(r"\\(.)", r"\1", corrected_path)
         print(f"检测到拖拽产生的路径格式【{input_path}】，已修正为【{corrected_path}】")
         return corrected_path
     else:
@@ -1012,16 +1013,15 @@ if __name__ == "__main__":
                     continue
 
             video_path_tasks = []
-            if possible_files_from_user_folders := re.findall(r"[Cc]:\\Users.*?\.[a-zA-Z0-9]{3,4}", video_path):
-                # 应对多文件标准格式没有引号
-                print("[DEBUG] 走多文件标准格式没有引号路径")
-                for _path in possible_files_from_user_folders:
+            if possible_files_from_all_drivers := re.findall(r"[a-zA-Z]:\\.*?\.[a-zA-Z0-9]{3,4}", video_path):
+                # 应对多文件标准格式（所有磁盘位置）
+                print("[DEBUG] 走多文件标准格式路径（所有磁盘位置）")
+                for _path in possible_files_from_all_drivers:
                     video_path_tasks.append(_path)
             elif possible_files_from_user_folders_alternative_format := re.findall(r"c/Users.*?\.[a-zA-Z0-9]{3,4}", video_path):
                 # 应对多文件非标准格式
                 print("[DEBUG] 走多文件非标准格式路径")
                 for _path in possible_files_from_user_folders_alternative_format:
-                    _path = re.sub(r"\\(.)", r"\1", _path)
                     _path = correct_drag_produced_path(_path)
                     video_path_tasks.append(_path)
             else:
