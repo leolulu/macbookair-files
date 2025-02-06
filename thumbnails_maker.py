@@ -1018,9 +1018,9 @@ if __name__ == "__main__":
                 print("[DEBUG] 走多文件标准格式路径（所有磁盘位置）")
                 for _path in possible_files_from_all_drivers:
                     video_path_tasks.append(_path)
-            elif possible_files_from_user_folders_alternative_format := re.findall(r"c/Users.*?\.[a-zA-Z0-9]{3,4}", video_path):
-                # 应对多文件非标准格式
-                print("[DEBUG] 走多文件非标准格式路径")
+            elif possible_files_from_user_folders_alternative_format := re.findall(r"[a-zA-Z]/.*?(?:Users|tmp).*?\.[a-zA-Z0-9]{3,4}", video_path):
+                # 应对多文件非标准格式（所有磁盘位置）
+                print("[DEBUG] 走多文件非标准格式路径（所有磁盘位置）")
                 for _path in possible_files_from_user_folders_alternative_format:
                     _path = correct_drag_produced_path(_path)
                     video_path_tasks.append(_path)
