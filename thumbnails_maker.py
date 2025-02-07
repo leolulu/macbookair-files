@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Dict, Optional, Tuple, Union, cast
+from typing import Dict, List, Optional, Tuple, Union, cast
 
 import cv2
 import matplotlib.pyplot as plt
@@ -393,8 +393,12 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
 def log_ffmpeg_convert_error(
     proc: Union[subprocess.CompletedProcess, subprocess.Popen],
     video_path: str,
+    stderr_info: List[str],
     additional_info: Optional[Dict[str, str]] = None,
 ):
+    if not os.path.isfile(video_path):
+        video_path = os.path.join(str(Path.home() / "Downloads"), os.path.basename(video_path))
+
     def _write_error_log(error_content: str):
         error_log_path = os.path.splitext(video_path)[0] + ".err.log"
         with open(error_log_path, "a", encoding="utf-8") as f:
@@ -407,19 +411,21 @@ def log_ffmpeg_convert_error(
         try:
             proc.check_returncode()
         except subprocess.CalledProcessError as e:
-            _write_error_log(e.stderr)
+            _write_error_log("\n".join(stderr_info))
     elif isinstance(proc, subprocess.Popen):
         if (proc.returncode != 0) and proc.stderr:
-            _write_error_log(proc.stderr.read())
+            _write_error_log("\n".join(stderr_info))
 
 
 def run_ffmpeg_command_with_shell_and_tqdm(
     command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second", end_desc=None
 ):
     proc = GlobalScopeObjects.subprocess_popen_for_ffmpeg(command)
+    stderr_info = []
     if proc.stderr:
         pbar = tqdm(desc=tqdm_desc, unit=unit, total=total, dynamic_ncols=True)
         for line in proc.stderr:
+            stderr_info.append(line.strip())
             if (not total) and ("Duration" in line):
                 if result := re.findall(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line):
                     if (d := duration_result_to_second(result[0], 1)) > (0 if pbar.total is None else pbar.total):
@@ -435,7 +441,7 @@ def run_ffmpeg_command_with_shell_and_tqdm(
             pbar.set_description_str(end_desc)
         pbar.close()
     proc.wait()
-    log_ffmpeg_convert_error(proc, video_path, {"指令": command, "环节": str(tqdm_desc)})
+    log_ffmpeg_convert_error(proc, video_path, stderr_info, {"指令": command, "环节": str(tqdm_desc)})
 
 
 def gen_video_thumbnail(
@@ -501,8 +507,10 @@ def gen_video_thumbnail(
         concat_prioritizer.block_if_concatting()
         proc = GlobalScopeObjects.subprocess_popen_for_ffmpeg(command)
         individual_current_processed_second = 0
+        stderr_info = []
         if proc.stderr:
             for line in proc.stderr:
+                stderr_info.append(line.strip())
                 if "speed" in line:
                     if result := re.findall(r"time=(\d+):(\d+):(\d+)\.(\d+)", line):
                         new_processed_seconds = duration_result_to_second(result[0])
@@ -513,7 +521,7 @@ def gen_video_thumbnail(
                             pbar.update(increment)
                         individual_current_processed_second = new_processed_seconds
         proc.wait()
-        log_ffmpeg_convert_error(proc, video_path, {"command": command, "环节": str("中间文件")})
+        log_ffmpeg_convert_error(proc, video_path, stderr_info, {"command": command, "环节": str("中间文件")})
 
     if global_encode_task_executor_pool:
         list(global_encode_task_executor_pool.map(run_with_blocking, gen_footage_commands))
