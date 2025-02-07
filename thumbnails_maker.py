@@ -647,25 +647,38 @@ def get_max_screen_to_body_ratio_col(
     return max_result[0]
 
 
-def gen_info(video_path, rows, cols, screen_ratio):
-    cap = cv2.VideoCapture(video_path)
+def get_first_frame_info(queue: multiprocessing.Queue, _video_path):
+    cap = cv2.VideoCapture(_video_path)
     if not cap.isOpened():
-        raise UserWarning(f"无法打开视频文件：{video_path}")
-
+        queue.put(UserWarning("无法打开视频文件")) 
+        return 
     height, width, _ = cap.read()[1].shape
+    # 获取视频的总帧数和帧率
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+    queue.put((height, width, total_frames, fps))
+
+
+def gen_info(video_path, rows, cols, screen_ratio):
+    queue = multiprocessing.Queue()
+    proc = multiprocessing.Process(target=get_first_frame_info, args=(queue, video_path))
+    proc.start()
+    return_value = queue.get()
+    if isinstance(return_value, UserWarning):
+        raise UserWarning(f"无法打开视频文件：{video_path}")
+    else:
+        height, width, total_frames, fps = return_value
+
     if cols is None:
         cols_precise = screen_ratio * height * rows / width
         print(f"原始列数计算结果：{cols_precise}")
         cols = get_max_screen_to_body_ratio_col(height, width, rows, cols_precise, screen_ratio)
 
-    # 获取视频的总帧数和帧率
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     # 计算每个缩略图之间的帧间隔
     frame_interval = total_frames // (rows * cols)
     # 计算其他数据
-    fps = cap.get(cv2.CAP_PROP_FPS)
     duration_in_seconds = total_frames / fps
-    cap.release()
     return frame_interval, fps, height, width, duration_in_seconds, rows, cols
 
 
