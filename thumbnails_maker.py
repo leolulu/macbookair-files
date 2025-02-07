@@ -278,6 +278,8 @@ concat_prioritizer = ConcatPrioritizer()
 
 global_encode_task_executor_pool = None
 
+os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "8"  # ‘quiet, -8’ ‘panic, 0’ ‘fatal, 8’ ‘info, 32(default)’
+
 
 def check_video_corrupted(video_file_path):
     command = f'ffprobe "{video_file_path}"'
@@ -309,16 +311,29 @@ def get_font_location(frame, content: str, fontFace: int, font_scale: float, thi
     return (start_x, start_y)
 
 
-def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, start_offset=0, alternative_output_folder_path=None):
+def get_info_from_cap(queue: multiprocessing.Queue, rows, cols, frame_interval, video_path):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise UserWarning("无法打开视频文件!")
-    thumbnails = []
+    info = []
     for i in tqdm(range(rows * cols), desc="缩略图", unit=" pic", dynamic_ncols=True):
         # 定位到指定帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, i * frame_interval)
         ret, frame = cap.read()
         milliseconds = cap.get(cv2.CAP_PROP_POS_MSEC)
+        info.append((ret, milliseconds, frame))
+    cap.release()
+    queue.put(info)
+
+
+def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, start_offset=0, alternative_output_folder_path=None):
+    queue = multiprocessing.Queue()
+    proc = multiprocessing.Process(target=get_info_from_cap, args=(queue, rows, cols, frame_interval, video_path))
+    proc.start()
+    info = queue.get()
+
+    thumbnails = []
+    for ret, milliseconds, frame in info:
         if ret:
             # 计算时间戳
             seconds_total = milliseconds / 1000 + start_offset
@@ -353,7 +368,6 @@ def gen_pic_thumbnail(video_path, frame_interval, rows, cols, height, width, sta
             thumbnails.append(frame)
         else:
             thumbnails.append(np.zeros((height, width, 3), dtype=np.uint8))
-    cap.release()
 
     # 计算缩略图的大小
     thumbnail_width = width * cols
