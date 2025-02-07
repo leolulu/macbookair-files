@@ -566,7 +566,7 @@ def gen_video_thumbnail(
                 intermediate_file_dimension[0], intermediate_file_dimension[1], fps, corrupted_file_path
             )
             print(f"修复指令：{fix_command}")
-            run_ffmpeg_command_with_shell_and_tqdm(fix_command, "修复")
+            run_ffmpeg_command_with_shell_and_tqdm(fix_command, "修复", total=0)
 
     # 合并中间文件
     command = "ffmpeg "
