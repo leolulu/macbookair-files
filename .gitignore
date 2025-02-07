@@ -11,6 +11,8 @@ bll_get_proxy_url/config.db
 
 subtitle_video_player/sup/
 
+dashapp/static/
+
 chatpdf/*.txt
 chatpdf/*.pdf
 # Byte-compiled / optimized / DLL files
