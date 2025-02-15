@@ -30,7 +30,9 @@ def download_video():
     download_command = python_exe + f' yt_dlp_tool.py --dl_dir "{download_dir}" --prefix "㊟" "{video_url}"'
 
     def run_command():
-        s = subprocess.run(download_command, shell=True, capture_output=True)
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        s = subprocess.run(download_command, shell=True, capture_output=True, text=True, env=env, encoding="utf-8", errors="replace")
         print(video_url, s.stdout, s.stderr)
 
     Thread(target=run_command).start()
