@@ -32,8 +32,11 @@ def download_video():
     def run_command():
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
-        s = subprocess.run(download_command, shell=True, capture_output=True, text=True, env=env, encoding="utf-8", errors="replace")
-        print(video_url, s.stdout, s.stderr)
+        s = subprocess.run(download_command, shell=True, capture_output=True, text=True, env=env, encoding="utf-8", errors="ignore")
+        print(f"Video URL: {video_url}")
+        print(f"Return code: {s.returncode}")
+        print(f"Standard output: {s.stdout}")
+        print(f"Standard error: {s.stderr}")
 
     Thread(target=run_command).start()
     return "Download process started", 200
