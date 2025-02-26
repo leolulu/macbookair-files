@@ -650,8 +650,8 @@ def get_max_screen_to_body_ratio_col(
 def get_first_frame_info(queue: multiprocessing.Queue, _video_path):
     cap = cv2.VideoCapture(_video_path)
     if not cap.isOpened():
-        queue.put(UserWarning("无法打开视频文件")) 
-        return 
+        queue.put(UserWarning("无法打开视频文件"))
+        return
     height, width, _ = cap.read()[1].shape
     # 获取视频的总帧数和帧率
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -1049,13 +1049,19 @@ if __name__ == "__main__":
                     continue
 
             video_path_tasks = []
-            if possible_files_from_all_drivers := re.findall(r"[a-zA-Z]:\\.*?\.[a-zA-Z0-9]{3,4}", video_path):
+            if files_extract_from_double_quotation_pair := re.findall(r'(")(.*?)\1', video_path):
+                # 尝试直接从成对的双引号中提取文件路径
+                print("[DEBUG] 走成对双引号提取文件路径")
+                files_extract_from_double_quotation_pair = [i[1] for i in files_extract_from_double_quotation_pair]
+                for _path in files_extract_from_double_quotation_pair:
+                    video_path_tasks.append(_path)
+            elif possible_files_from_all_drivers := re.findall(r"[a-zA-Z]:\\.*?\.[a-zA-Z0-9]{3,4}(?![\.])", video_path):
                 # 应对多文件标准格式（所有磁盘位置）
                 print("[DEBUG] 走多文件标准格式路径（所有磁盘位置）")
                 for _path in possible_files_from_all_drivers:
                     video_path_tasks.append(_path)
             elif possible_files_from_user_folders_alternative_format := re.findall(
-                r"[a-zA-Z]/.*?(?:Users|tmp).*?\.[a-zA-Z0-9]{3,4}", video_path
+                r"[a-zA-Z]/.*?(?:Users|tmp).*?\.[a-zA-Z0-9]{3,4}(?![\.\\])", video_path
             ):
                 # 应对多文件非标准格式（所有磁盘位置）
                 print("[DEBUG] 走多文件非标准格式路径（所有磁盘位置）")
