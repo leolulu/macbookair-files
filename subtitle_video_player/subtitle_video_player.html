@@ -1080,6 +1080,10 @@
             function highlightSubtitle() {
                 previousSpeed = $('#video')[0].playbackRate;
                 var currentTime = accTime($('#video')[0].currentTime);
+                // 更新标题显示播放进度
+                var originalTitle = document.title.replace(/^\[\d+%\]\s*/, '');
+                var progress = Math.round(($('#video')[0].currentTime / ($('#video')[0].duration || 1)) * 100);
+                document.title = `[${progress}%]${originalTitle}`;
                 var found = false;
                 var first_match_sub_index = null;
                 var captions = [];
