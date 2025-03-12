@@ -25,6 +25,17 @@ from retrying import retry
 from tqdm import TqdmWarning, tqdm
 
 
+# 检查opencv的版本，只能为'4.10.0.84'
+# 因为发现当前最新版本'4.11.0.86'存在bug，会忽略rotate元数据，导致视频旋转无法生效
+import importlib.metadata
+
+opencv_package_version = importlib.metadata.version("opencv-python")
+if opencv_package_version != "4.10.0.84":
+    raise UserWarning(
+        f"opencv-python 版本必须为 4.10.0.84，当前版本为 {opencv_package_version}。请运行 `pip install opencv-python==4.10.0.84` 安装指定版本"
+    )
+
+
 class GlobalScopeObjects:
     download_folder_alias = "dl"
     global_tqdm_update_lock = threading.Lock()
