@@ -15,12 +15,13 @@ def process_url(url):
     else:
         download_command_template = "yt-dlp"
 
-    download_command_template += ' --ignore-errors --windows-filenames --proxy socks5://127.0.0.1:10808 --mark-watched --retries 99 --file-access-retries 99 --fragment-retries 99 -o "{temp_folder}/{prefix}%(title)s.%(ext)s" #encode-video-placeholder# #remux-video-placeholder# {simulate} --cookies ytb.cookie --no-playlist "{url}"'
+    download_command_template += ' --ignore-errors --windows-filenames --proxy socks5://127.0.0.1:10808 --mark-watched --retries 99 --file-access-retries 99 --fragment-retries 99 -o "{temp_folder}/{prefix}%(title)s.%(ext)s" #encode-video-placeholder# #remux-video-placeholder# {simulate} --cookies "{cookie_path}" --no-playlist "{url}"'
     download_command_template = download_command_template.format(
         url=url,
         temp_folder=args.dl_dir.replace("\\", "/").replace("\\\\", "/"),
         simulate="-s" if args.dry_run else "",
         prefix=prefix,
+        cookie_path=args.cookie_path
     )
 
     if args.unremux:
@@ -45,6 +46,7 @@ parser.add_argument("--mp4", help="是否需要【启用】后处理【转码】
 parser.add_argument("--unremux", help="是否需要【禁用】后处理【封装】为mp4，默认开启封装", action="store_true")
 parser.add_argument("-d", "--dry_run", help="是否启动dry run模式", action="store_true")
 parser.add_argument("--prefix", help='可选输出文件名前缀，前缀与文件名之间用"~~~"分隔', type=str, default="")
+parser.add_argument("-c", "--cookie_path", help="指定cookie文件的路径，默认为ytb.cookie", type=str, default="ytb.cookie")
 parser.add_argument("url", help="youtube视频url", type=str, nargs="?")
 args = parser.parse_args()
 
