@@ -482,6 +482,7 @@ def gen_video_thumbnail(
     start_offset=0,
     low_load_mode: Optional[int] = None,
     alternative_output_folder_path=None,
+    gpu_mode=False,
 ):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_path_video = os.path.splitext(video_path)[0] + ".tbnl"
@@ -514,7 +515,10 @@ def gen_video_thumbnail(
             f"{video_name[:2]}-{video_name[-2:]}-{round(i,3)}-{str(time.time())[-3:]}.mp4",
         )
         footage_paths.append(output_file_path)
-        gen_footage_command += f" -preset {preset} -y "
+        if gpu_mode:
+            gen_footage_command += f" -vcodec hevc_nvenc "
+        else:
+            gen_footage_command += f" -preset {preset} -y "
         gen_footage_command += f'"{output_file_path}"'
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
@@ -601,7 +605,11 @@ def gen_video_thumbnail(
     filter_complex_command = filter_complex_template.format(filter_complex_section=";".join([h_commands, v_commands]))
     command += filter_complex_command
     # 其他指令部分
-    command += f' -map "[out_final]" -preset {preset} -c:a copy -movflags +faststart -y '
+    command += f' -map "[out_final]" -c:a copy -movflags +faststart -y '
+    if gpu_mode:
+        command += f" -vcodec hevc_nvenc "
+    else:
+        command += f" -preset {preset} "
     command += f' "{temp_output_path_video}"'
     # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
@@ -707,6 +715,7 @@ def generate_thumbnail(
     pic_thumbnail_only=False,
     video_thumbnail_only=False,
     delete_seg_file_in_full_mode=False,
+    gpu_mode=False,
 ):
     if skip_completed_file:
         self_result_file_exists = any(map(os.path.exists, [os.path.splitext(video_path)[0] + i for i in [".tbnl", ".jpg"]]))
@@ -743,6 +752,7 @@ def generate_thumbnail(
                     start_offset,
                     low_load_mode,
                     alternative_output_folder_path,
+                    gpu_mode,
                 )
         except:
             traceback.print_exc()
@@ -896,6 +906,7 @@ def process_video(args, **kwargs):
                         args.pic_only,
                         args.video_only,
                         args.full_delete_mode,
+                        args.gpu,
                     )
         else:
             for video_path in video_paths:
@@ -914,6 +925,7 @@ def process_video(args, **kwargs):
                         args.pic_only,
                         args.video_only,
                         args.full_delete_mode,
+                        args.gpu,
                     )
                 except:
                     traceback.print_exc()
@@ -944,6 +956,7 @@ def process_video(args, **kwargs):
             args.pic_only,
             args.video_only,
             args.full_delete_mode,
+            args.gpu,
         )
     else:  # 处理单个视频
         args.skip = False
@@ -961,6 +974,7 @@ def process_video(args, **kwargs):
             args.pic_only,
             args.video_only,
             args.full_delete_mode,
+            args.gpu,
         )
 
 
@@ -1011,6 +1025,7 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--video_only", help="只生成视频缩略图，不生成图像缩略图", action="store_true")
     parser.add_argument("-r", "--recursion", help="如果输入路径为目录，则递归处理子目录", action="store_true")
     parser.add_argument("-d", "--full_delete_mode", help="删除full模式产生的seg视频文件", action="store_true")
+    parser.add_argument("--gpu", help="使用hevc_nvenc编码器（输出质量不好，慎用）", action="store_true")
     args = parser.parse_args()
 
     if args.pic_only and args.video_only:
@@ -1106,6 +1121,7 @@ if __name__ == "__main__":
                             video_only=args.video_only,
                             recursion=args.recursion,
                             full_delete_mode=args.full_delete_mode,
+                            gpu=args.gpu,
                         ),
                     ),
                     kwargs={
