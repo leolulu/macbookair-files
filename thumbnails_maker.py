@@ -1035,6 +1035,9 @@ if __name__ == "__main__":
     if args.global_low:
         global_encode_task_executor_pool = ThreadPoolExecutor(args.global_low)
 
+    if args.gpu:
+        args.global_low = 3
+
     if args.video_path is None:
         while True:
             input_string = input(
