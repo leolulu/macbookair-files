@@ -516,7 +516,7 @@ def gen_video_thumbnail(
         )
         footage_paths.append(output_file_path)
         if gpu_mode:
-            gen_footage_command += f" -vcodec hevc_nvenc "
+            gen_footage_command += f" -vcodec hevc_nvenc -b:v 10M "
         else:
             gen_footage_command += f" -preset {preset} -y "
         gen_footage_command += f'"{output_file_path}"'
@@ -552,7 +552,10 @@ def gen_video_thumbnail(
         proc.wait()
         log_ffmpeg_convert_error(proc, video_path, stderr_info, {"command": command, "环节": str("中间文件")})
 
-    if global_encode_task_executor_pool:
+    if gpu_mode:
+        for command in gen_footage_commands:
+            run_with_blocking(command)
+    elif global_encode_task_executor_pool:
         list(global_encode_task_executor_pool.map(run_with_blocking, gen_footage_commands))
     else:
         with ThreadPoolExecutor(low_load_mode if low_load_mode else os.cpu_count()) as exe:
@@ -607,7 +610,7 @@ def gen_video_thumbnail(
     # 其他指令部分
     command += f' -map "[out_final]" -c:a copy -movflags +faststart -y '
     if gpu_mode:
-        command += f" -vcodec hevc_nvenc "
+        command += f" -vcodec hevc_nvenc -b:v 10M "
     else:
         command += f" -preset {preset} "
     command += f' "{temp_output_path_video}"'
