@@ -21,7 +21,7 @@ def process_url(url):
         temp_folder=args.dl_dir.replace("\\", "/").replace("\\\\", "/"),
         simulate="-s" if args.dry_run else "",
         prefix=prefix,
-        cookie_path=args.cookie_path
+        cookie_path=args.cookie_path,
     )
 
     if args.unremux:
@@ -46,12 +46,15 @@ parser.add_argument("--mp4", help="是否需要【启用】后处理【转码】
 parser.add_argument("--unremux", help="是否需要【禁用】后处理【封装】为mp4，默认开启封装", action="store_true")
 parser.add_argument("-d", "--dry_run", help="是否启动dry run模式", action="store_true")
 parser.add_argument("--prefix", help='可选输出文件名前缀，前缀与文件名之间用"~~~"分隔', type=str, default="")
-parser.add_argument("-c", "--cookie_path", help="指定cookie文件的路径", type=str, default=r"\\192.168.123.221\共享文件夹\BaiduNetdiskDownload\a\ytb.cookie")
+parser.add_argument(
+    "-c", "--cookie_path", help="指定cookie文件的路径", type=str, default=r"\\192.168.123.221\共享文件夹\BaiduNetdiskDownload\a\ytb.cookie"
+)
 parser.add_argument("url", help="youtube视频url", type=str, nargs="?")
 args = parser.parse_args()
 
 if args.url:
-    process_url(args.url)
+    for url in [i for i in args.url.split(",") if i]:
+        process_url(url)
 else:
     while True:
         url = input("请输入url: ").strip()
