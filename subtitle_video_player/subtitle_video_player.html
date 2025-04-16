@@ -12,31 +12,31 @@
         }
 
         #container {
-            display: flex;
+            display: grid;
+            grid-template-columns: 6fr auto 4fr;
+            grid-template-rows: 3fr auto 2fr;
             height: 100vh;
         }
 
         .container-layout-normal {
+            /* TODO: 需要修改 */
             flex-direction: row;
         }
 
         .container-layout-reversed {
+            /* TODO: 需要修改 */
             flex-direction: row-reverse;
         }
 
-        #video-player {
-            width: 66%;
-            overflow: auto;
-            align-self: flex-start;
-        }
 
-        .video-layout-normal {
+
+        /* .video-layout-normal {
             margin-left: 0px;
-        }
+        } */
 
-        .video-layout-reversed {
+        /* .video-layout-reversed {
             margin-left: -4px;
-        }
+        } */
 
         #video {
             width: 100%;
@@ -48,12 +48,16 @@
             border-left: 1px solid #aaa;
             width: 4px;
             z-index: 2;
+            grid-column: 2;
+            grid-row: 1/4;
         }
 
         #subtitles {
-            width: 33%;
+            grid-column: 3;
+            grid-row: 1/4;
+            /* width: 33%; */
             overflow: auto;
-            height: 99.9vh;
+            height: 100%;
             border-bottom: 1px solid #e0e0e0;
             font-weight: 600;
         }
@@ -132,6 +136,8 @@
             cursor: ns-resize;
             border-top: 1px solid #aaa;
             height: 5px;
+            grid-column: 2;
+            grid-row: 2;
         }
 
         #textLength,
@@ -205,8 +211,17 @@
         }
 
         .video_container {
-            position: relative;
+            /* position: relative; */
+            grid-column: 1;
+            grid-row: 1;
         }
+
+        #config-and-info-container {
+            grid-column: 1;
+            grid-row: 3;
+        }
+
+
 
         .modal-overlay {
             display: none;
@@ -332,21 +347,49 @@
         .inline-block-element {
             display: inline-block;
         }
+
+        @media (max-aspect-ratio: 1/1) {
+            #container {
+                display: grid;
+                grid-template-columns: 100vw;
+                grid-template-rows: auto auto auto;
+            }
+
+            .video_container {
+                grid-column: 1;
+                grid-row: 1;
+            }
+
+            #config-and-info-container {
+                grid-column: 1;
+                grid-row: 3;
+            }
+
+            #subtitles {
+                grid-column: 1;
+                grid-row: 2;
+            }
+
+            #horizontal-divider,
+            #divider {
+                display: none;
+            }
+        }
     </style>
 </head>
 
 <body>
     <div id="container">
-        <div id="video-player">
-            <div class="video_container">
-                <video id="video" controls preload="auto" crossorigin="anonymous">
-                    Your browser does not support HTML5 video.
-                </video>
-                <span id="caption">字幕（默认不显示），播放时更新</span>
-                <div id="ff-sign" class="hide-element">⏩</div>
-                <div id="resizable-shade"></div>
-            </div>
-            <div id="horizontal-divider"></div>
+        <div class="video_container">
+            <video id="video" controls preload="auto" crossorigin="anonymous">
+                Your browser does not support HTML5 video.
+            </video>
+            <span id="caption">字幕（默认不显示），播放时更新</span>
+            <div id="ff-sign" class="hide-element">⏩</div>
+            <div id="resizable-shade"></div>
+        </div>
+        <div id="horizontal-divider"></div>
+        <div id="config-and-info-container">
             <div class="options-container">
                 <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html" multiple />
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
@@ -436,16 +479,13 @@
                 <div class="progress-bar-temp" id="progress-bar-temp"></div>
                 <div class="progress-bar-shade" id="progress-bar-shade"></div>
             </div>
-            <!-- 添加一个元素用来显示视频文件名 -->
             <div id="videoFileNameContainer">
                 <span id="videoFileName" title="点击拖动可以调整视频垂直位置"></span>
                 <span id="videoDurationInfo"></span>
             </div>
         </div>
         <div id="divider"></div>
-        <div id="subtitles">
-            <!-- Subtitles will be loaded here -->
-        </div>
+        <div id="subtitles"> </div>
     </div>
 
     <div id="modalOverlay" class="modal-overlay">
