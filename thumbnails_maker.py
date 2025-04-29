@@ -483,6 +483,7 @@ def gen_video_thumbnail(
     low_load_mode: Optional[int] = None,
     alternative_output_folder_path=None,
     gpu_mode=False,
+    copy_stream_mode=False,
 ):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_path_video = os.path.splitext(video_path)[0] + ".tbnl"
@@ -509,16 +510,20 @@ def gen_video_thumbnail(
         filter_drawtext_command = r"drawtext=text='%{pts\:gmtime\:drawtext_pts_offset\:%H\\\:%M\\\:%S}':x=10:y=10:fontsize=h/10:fontcolor=white:bordercolor=black:borderw=2"
         filter_drawtext_command = filter_drawtext_command.replace("drawtext_pts_offset", str(int(i) + start_offset))
         filter_commands.append(filter_drawtext_command)
-        gen_footage_command += f" -vf {','.join(filter_commands)} "
+        if copy_stream_mode:
+            gen_footage_command += f" -c:v copy "
+        else:
+            gen_footage_command += f" -vf {','.join(filter_commands)} "
         output_file_path = os.path.join(
             str(Path.home() / "Videos"),
-            f"{video_name[:2]}-{video_name[-2:]}-{round(i,3)}-{str(time.time())[-3:]}.mp4",
+            f"{video_name[:2]}-{video_name[-2:]}-{round(i,3)}-{str(time.time())[-3:]}{os.path.splitext(video_path)[-1] if copy_stream_mode else '.mp4'}",
         )
         footage_paths.append(output_file_path)
         if gpu_mode:
             gen_footage_command += f" -vcodec hevc_nvenc -b:v 10M "
         else:
-            gen_footage_command += f" -preset {preset} -y "
+            gen_footage_command += f" -preset {preset} "
+        gen_footage_command += " -y "
         gen_footage_command += f'"{output_file_path}"'
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
@@ -605,10 +610,14 @@ def gen_video_thumbnail(
         v_commands += f"vstack=inputs={rows}[out_final]"
     else:
         v_commands += f"null[out_final]"
-    filter_complex_command = filter_complex_template.format(filter_complex_section=";".join([h_commands, v_commands]))
+    filter_complex_command_segment = [h_commands, v_commands]
+    if copy_stream_mode:
+        filter_complex_command_segment.append(rf"[out_final]scale=w=-2:h=min(in_h\,1080)[out_final_scaled]")
+    filter_complex_command = filter_complex_template.format(filter_complex_section=";".join(filter_complex_command_segment))
     command += filter_complex_command
     # 其他指令部分
-    command += f' -map "[out_final]" -c:a copy -movflags +faststart -y '
+    final_stream_name = "out_final_scaled" if copy_stream_mode else "out_final"
+    command += f' -map "[{final_stream_name}]" -c:a copy -movflags +faststart -y '
     if gpu_mode:
         command += f" -vcodec hevc_nvenc -b:v 10M "
     else:
@@ -719,6 +728,7 @@ def generate_thumbnail(
     video_thumbnail_only=False,
     delete_seg_file_in_full_mode=False,
     gpu_mode=False,
+    copy_stream_mode=False,
 ):
     if skip_completed_file:
         self_result_file_exists = any(map(os.path.exists, [os.path.splitext(video_path)[0] + i for i in [".tbnl", ".jpg"]]))
@@ -756,6 +766,7 @@ def generate_thumbnail(
                     low_load_mode,
                     alternative_output_folder_path,
                     gpu_mode,
+                    copy_stream_mode,
                 )
         except:
             traceback.print_exc()
@@ -910,6 +921,7 @@ def process_video(args, **kwargs):
                         args.video_only,
                         args.full_delete_mode,
                         args.gpu,
+                        args.copy,
                     )
         else:
             for video_path in video_paths:
@@ -929,6 +941,7 @@ def process_video(args, **kwargs):
                         args.video_only,
                         args.full_delete_mode,
                         args.gpu,
+                        args.copy,
                     )
                 except:
                     traceback.print_exc()
@@ -960,6 +973,7 @@ def process_video(args, **kwargs):
             args.video_only,
             args.full_delete_mode,
             args.gpu,
+            args.copy,
         )
     else:  # 处理单个视频
         args.skip = False
@@ -978,6 +992,7 @@ def process_video(args, **kwargs):
             args.video_only,
             args.full_delete_mode,
             args.gpu,
+            args.copy,
         )
 
 
@@ -1029,6 +1044,7 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--recursion", help="如果输入路径为目录，则递归处理子目录", action="store_true")
     parser.add_argument("-d", "--full_delete_mode", help="删除full模式产生的seg视频文件", action="store_true")
     parser.add_argument("--gpu", help="使用hevc_nvenc编码器（输出质量不好，慎用）", action="store_true")
+    parser.add_argument("--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳，输出最高分辨率为1080p）", action="store_true")
     args = parser.parse_args()
 
     if args.pic_only and args.video_only:
@@ -1125,6 +1141,7 @@ if __name__ == "__main__":
                             recursion=args.recursion,
                             full_delete_mode=args.full_delete_mode,
                             gpu=args.gpu,
+                            copy=args.copy,
                         ),
                     ),
                     kwargs={
