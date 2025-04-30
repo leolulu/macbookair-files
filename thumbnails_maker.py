@@ -3,6 +3,7 @@ import math
 import multiprocessing
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import threading
@@ -443,9 +444,14 @@ def log_ffmpeg_convert_error(
 
 
 def run_ffmpeg_command_with_shell_and_tqdm(
-    command, tqdm_desc=None, total: Optional[Union[int, float]] = None, unit=" second", end_desc=None
+    command,
+    tqdm_desc=None,
+    total: Optional[Union[int, float]] = None,
+    unit=" second",
+    end_desc=None,
+    shell=True,
 ):
-    proc = GlobalScopeObjects.subprocess_popen_for_ffmpeg(command)
+    proc = GlobalScopeObjects.subprocess_popen_for_ffmpeg(command, shell=shell)
     stderr_info = []
     if proc.stderr:
         pbar = tqdm(desc=tqdm_desc, unit=unit, total=total, dynamic_ncols=True)
@@ -497,8 +503,12 @@ def gen_video_thumbnail(
     footage_paths = []
     gen_footage_commands = []
     intermediate_file_paths = []
+    medium_file_ffmpeg_input_indicators = []
     for i in key_timestamp:
-        gen_footage_command = "ffmpeg " + input_template.format(start_time=i, duration=thumbnail_duration, input_file_path=video_path)
+        gen_footage_command = "ffmpeg " + (
+            indicator := input_template.format(start_time=i, duration=thumbnail_duration, input_file_path=video_path)
+        )
+        medium_file_ffmpeg_input_indicators.append(indicator)
         filter_commands = []
         if height > max_output_height / rows:
             target_height = int(max_output_height / rows)
@@ -557,7 +567,9 @@ def gen_video_thumbnail(
         proc.wait()
         log_ffmpeg_convert_error(proc, video_path, stderr_info, {"command": command, "环节": str("中间文件")})
 
-    if gpu_mode:
+    if copy_stream_mode:
+        print(f"当前为copy_stream_mode模式，跳过中间文件的生成环节...")
+    elif gpu_mode:
         for command in gen_footage_commands:
             run_with_blocking(command)
     elif global_encode_task_executor_pool:
@@ -570,31 +582,37 @@ def gen_video_thumbnail(
     TqdmWarningManager.lift_ignore()
 
     # 检查中间文件是否损坏
+    # 如果copy_stream_mode为True，则跳过此环节
     # print("开始检查中间文件是否损坏...")
-    corrupted_file_paths = []
-    intermediate_file_dimension: Tuple[int, int] = None  # type: ignore
-    for intermediate_file_path in tqdm(intermediate_file_paths, desc="校验", dynamic_ncols=True):
-        is_corrupted, intermediate_file_width, intermediate_file_height = check_video_corrupted(intermediate_file_path)
-        if is_corrupted:
-            corrupted_file_paths.append(intermediate_file_path)
-        else:
-            if intermediate_file_dimension is None:
-                intermediate_file_dimension = (intermediate_file_width, intermediate_file_height)  # type: ignore
-    # 修复受损的中间文件
-    if corrupted_file_paths:
-        print(f"开始修复以下受损文件:")
-        print("\n".join(corrupted_file_paths))
-        for corrupted_file_path in corrupted_file_paths:
-            fix_command = 'ffmpeg -f lavfi -i color=c=gray:s={}x{}:d=1 -r {} -c:v libx264 -y "{}"'.format(
-                intermediate_file_dimension[0], intermediate_file_dimension[1], fps, corrupted_file_path
-            )
-            print(f"修复指令：{fix_command}")
-            run_ffmpeg_command_with_shell_and_tqdm(fix_command, "修复", total=0)
+    if not copy_stream_mode:
+        corrupted_file_paths = []
+        intermediate_file_dimension: Tuple[int, int] = None  # type: ignore
+        for intermediate_file_path in tqdm(intermediate_file_paths, desc="校验", dynamic_ncols=True):
+            is_corrupted, intermediate_file_width, intermediate_file_height = check_video_corrupted(intermediate_file_path)
+            if is_corrupted:
+                corrupted_file_paths.append(intermediate_file_path)
+            else:
+                if intermediate_file_dimension is None:
+                    intermediate_file_dimension = (intermediate_file_width, intermediate_file_height)  # type: ignore
+        # 修复受损的中间文件
+        if corrupted_file_paths:
+            print(f"开始修复以下受损文件:")
+            print("\n".join(corrupted_file_paths))
+            for corrupted_file_path in corrupted_file_paths:
+                fix_command = 'ffmpeg -f lavfi -i color=c=gray:s={}x{}:d=1 -r {} -c:v libx264 -y "{}"'.format(
+                    intermediate_file_dimension[0], intermediate_file_dimension[1], fps, corrupted_file_path
+                )
+                print(f"修复指令：{fix_command}")
+                run_ffmpeg_command_with_shell_and_tqdm(fix_command, "修复", total=0)
 
     # 合并中间文件
     command = "ffmpeg "
-    for footage_path in footage_paths:
-        command += f' -i "{footage_path}" '
+    if copy_stream_mode:
+        for indicator in medium_file_ffmpeg_input_indicators:
+            command += indicator
+    else:
+        for footage_path in footage_paths:
+            command += f' -i "{footage_path}" '
     # 生成filter_complex指令
     filter_complex_template = ' -filter_complex "{filter_complex_section}" '
     h_commands = []
@@ -625,7 +643,13 @@ def gen_video_thumbnail(
     command += f' "{temp_output_path_video}"'
     # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer:
-        run_ffmpeg_command_with_shell_and_tqdm(command, "合并", end_desc="视频缩略图生成完毕...")
+        run_ffmpeg_command_with_shell_and_tqdm(
+            shlex.split(command) if copy_stream_mode else command,
+            "合并",
+            end_desc="视频缩略图生成完毕...",
+            total=thumbnail_duration if copy_stream_mode else None,
+            shell=False if copy_stream_mode else True,
+        )
 
     threading.Thread(
         target=move_with_optional_security,
@@ -641,7 +665,11 @@ def gen_video_thumbnail(
         ),
     ).start()
     for f in footage_paths:
-        os.remove(f)
+        try:
+            os.remove(f)
+        except:
+            if not copy_stream_mode:
+                traceback.print_exc()
 
 
 def duration_result_to_second(findall_result, decimal_places: Optional[int] = None):
@@ -1044,7 +1072,9 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--recursion", help="如果输入路径为目录，则递归处理子目录", action="store_true")
     parser.add_argument("-d", "--full_delete_mode", help="删除full模式产生的seg视频文件", action="store_true")
     parser.add_argument("--gpu", help="使用hevc_nvenc编码器（输出质量不好，慎用）", action="store_true")
-    parser.add_argument("--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳，输出最高分辨率为1080p）", action="store_true")
+    parser.add_argument(
+        "--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳，输出最高分辨率为1080p）", action="store_true"
+    )
     args = parser.parse_args()
 
     if args.pic_only and args.video_only:
