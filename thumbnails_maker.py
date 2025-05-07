@@ -538,14 +538,15 @@ def gen_video_thumbnail(
         intermediate_file_paths.append(output_file_path)
         gen_footage_commands.append(gen_footage_command)
 
-    TqdmWarningManager.impose_ignore()
-    pbar = tqdm(
-        total=round(thumbnail_duration * len(gen_footage_commands)),
-        desc="中间文件",
-        unit=" second",
-        dynamic_ncols=True,
-        bar_format=GlobalScopeObjects.bar_format_prevent_precision_error,
-    )
+    if not copy_stream_mode:
+        TqdmWarningManager.impose_ignore()
+        pbar = tqdm(
+            total=round(thumbnail_duration * len(gen_footage_commands)),
+            desc="中间文件",
+            unit=" second",
+            dynamic_ncols=True,
+            bar_format=GlobalScopeObjects.bar_format_prevent_precision_error,
+        )
 
     def run_with_blocking(command):
         concat_prioritizer.block_if_concatting()
@@ -568,7 +569,7 @@ def gen_video_thumbnail(
         log_ffmpeg_convert_error(proc, video_path, stderr_info, {"command": command, "环节": str("中间文件")})
 
     if copy_stream_mode:
-        print(f"当前为copy_stream_mode模式，跳过中间文件的生成环节...")
+        pass
     elif gpu_mode:
         for command in gen_footage_commands:
             run_with_blocking(command)
@@ -578,8 +579,9 @@ def gen_video_thumbnail(
         with ThreadPoolExecutor(low_load_mode if low_load_mode else os.cpu_count()) as exe:
             exe.map(run_with_blocking, gen_footage_commands)
 
-    pbar.close()
-    TqdmWarningManager.lift_ignore()
+    if not copy_stream_mode:
+        pbar.close()
+        TqdmWarningManager.lift_ignore()
 
     # 检查中间文件是否损坏
     # 如果copy_stream_mode为True，则跳过此环节
@@ -645,7 +647,7 @@ def gen_video_thumbnail(
     with concat_prioritizer:
         run_ffmpeg_command_with_shell_and_tqdm(
             shlex.split(command) if copy_stream_mode else command,
-            "合并",
+            "copy直出模式" if copy_stream_mode else "合并",
             end_desc="视频缩略图生成完毕...",
             total=thumbnail_duration if copy_stream_mode else None,
             shell=False if copy_stream_mode else True,
