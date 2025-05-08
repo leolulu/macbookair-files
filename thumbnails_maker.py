@@ -632,7 +632,7 @@ def gen_video_thumbnail(
         v_commands += f"null[out_final]"
     filter_complex_command_segment = [h_commands, v_commands]
     if copy_stream_mode:
-        filter_complex_command_segment.append(rf"[out_final]scale=w=-2:h=min(in_h\,1080)[out_final_scaled]")
+        filter_complex_command_segment.append(rf"[out_final]scale=w=-2:h=min(in_h\,{max_output_height})[out_final_scaled]")
     filter_complex_command = filter_complex_template.format(filter_complex_section=";".join(filter_complex_command_segment))
     command += filter_complex_command
     # 其他指令部分
@@ -1075,7 +1075,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--full_delete_mode", help="删除full模式产生的seg视频文件", action="store_true")
     parser.add_argument("--gpu", help="使用hevc_nvenc编码器（输出质量不好，慎用）", action="store_true")
     parser.add_argument(
-        "--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳，输出最高分辨率为1080p）", action="store_true"
+        "--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳）", action="store_true"
     )
     args = parser.parse_args()
 
