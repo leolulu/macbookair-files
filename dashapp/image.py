@@ -64,7 +64,7 @@ try:
 except:
     page_capacity = 10
 # Caution:
-page_capacity = 5
+page_capacity = 6
 
 app.layout = html.Div(
     [
