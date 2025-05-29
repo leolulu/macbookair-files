@@ -17,6 +17,7 @@ browsed_img_list = []
 
 show_folder_title = False
 show_moving_promote = False
+tbnl_display_mode = False
 
 
 def get_img_path_list(img_path_list: List):
@@ -95,29 +96,32 @@ app.layout = html.Div(
     dash.dependencies.Input("get_pics", "n_clicks"),
 )
 def popup_100_pics(n_clicks):
-    global img_path_list
+    global img_path_list, tbnl_display_mode
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
     for idx in range(page_capacity):
         try:
             img_path = img_path_list.pop(0)
+            file_ext = os.path.splitext(img_path)[-1].lower()
             current_img_catalog = "〄 " + img_path.split("/")[-2].capitalize()
         except IndexError:
             break
         if current_img_catalog != previous_img_catalog and show_folder_title:
             return_list.append(html.H1(current_img_catalog, id="img_catalog_" + current_img_catalog, style={"width": "100%"}))
             previous_img_catalog = current_img_catalog
+        if file_ext == ".tbnl":
+            tbnl_display_mode = True
         return_list.append(
             html.Video(
                 src=img_path,
                 muted=True,
-                autoPlay=True,
+                autoPlay=False if (tbnl_display_mode and file_ext != ".tbnl") else True,
                 controls=True,
                 loop=True,
                 style={"max-height": "380px", "vertical-align": "middle"},
                 id={"type": "pics", "index": idx},
             )
-            if os.path.splitext(img_path)[-1].lower() in [".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v", ".tbnl"]
+            if file_ext in [".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v", ".tbnl"]
             else html.A(
                 html.Img(
                     className=img_path,
