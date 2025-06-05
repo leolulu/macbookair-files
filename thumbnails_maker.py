@@ -1204,6 +1204,7 @@ if __name__ == "__main__":
                             full_delete_mode=args.full_delete_mode,
                             gpu=args.gpu,
                             copy=args.copy,
+                            svg=args.svg,
                         ),
                     ),
                     kwargs={
