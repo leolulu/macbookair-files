@@ -905,8 +905,33 @@ def preprocessing(video_path: str, kwargs):
     return video_path
 
 
+def _convert_svg_to_mp4(svg_file_path: str):
+    """
+    因为有些数据源的mp4视频文件后缀名被错误地命名为svg，但是其实内容为合法的mp4视频文件
+    以需要一个函数来将svg文件后缀名改回mp4
+    """
+    mp4_file_path = os.path.splitext(svg_file_path)[0] + ".mp4"
+    os.rename(svg_file_path, mp4_file_path)
+    return mp4_file_path
+
+
 def process_video(args, **kwargs):
-    video_file_extensions = [".mp4", ".flv", ".avi", ".mpg", ".wmv", ".mpeg", ".mov", ".mkv", ".ts", ".rmvb", ".rm", ".webm", ".gif"]
+    video_file_extensions = [
+        ".mp4",
+        ".flv",
+        ".avi",
+        ".mpg",
+        ".wmv",
+        ".mpeg",
+        ".mov",
+        ".mkv",
+        ".ts",
+        ".rmvb",
+        ".rm",
+        ".webm",
+        ".gif",
+        ".svg",
+    ]
     video_path = args.video_path
     if video_path.lower() == GlobalScopeObjects.download_folder_alias:
         video_path = str(Path.home() / "Downloads")
@@ -932,6 +957,10 @@ def process_video(args, **kwargs):
             video_paths = [
                 os.path.join(video_path, f) for f in os.listdir(video_path) if os.path.splitext(f)[-1].lower() in video_file_extensions
             ]
+        if args.svg:
+            for svg_file_path in [i for i in video_paths if os.path.splitext(i)[-1].lower() == ".svg"]:
+                video_paths.remove(svg_file_path)
+                video_paths.append(_convert_svg_to_mp4(svg_file_path))
         if args.parallel_processing_directory > 1:
             with ThreadPoolExecutor(args.parallel_processing_directory) as exe:
                 for video_path in video_paths:
@@ -1006,6 +1035,8 @@ def process_video(args, **kwargs):
             args.copy,
         )
     else:  # 处理单个视频
+        if args.svg and os.path.splitext(video_path)[-1].lower() == ".svg":
+            video_path = _convert_svg_to_mp4(video_path)
         args.skip = False
         generate_thumbnail(
             preprocessing(video_path, kwargs),
@@ -1074,9 +1105,8 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--recursion", help="如果输入路径为目录，则递归处理子目录", action="store_true")
     parser.add_argument("-d", "--full_delete_mode", help="删除full模式产生的seg视频文件", action="store_true")
     parser.add_argument("--gpu", help="使用hevc_nvenc编码器（输出质量不好，慎用）", action="store_true")
-    parser.add_argument(
-        "--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳）", action="store_true"
-    )
+    parser.add_argument("--svg", help="在输入svg文件的时候，先将其后缀名直接改成mp4，然后再进行后续处理", action="store_true")
+    parser.add_argument("--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳）", action="store_true")
     args = parser.parse_args()
 
     if args.pic_only and args.video_only:
