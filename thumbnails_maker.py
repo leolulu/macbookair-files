@@ -1,4 +1,5 @@
 import argparse
+import importlib.metadata
 import math
 import multiprocessing
 import os
@@ -12,6 +13,7 @@ import traceback
 import uuid
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,11 +27,8 @@ from matplotlib.widgets import Button, CheckButtons, RangeSlider, RectangleSelec
 from retrying import retry
 from tqdm import TqdmWarning, tqdm
 
-
 # 检查opencv的版本，只能为'4.10.0.84'
 # 因为发现当前最新版本'4.11.0.86'存在bug，会忽略rotate元数据，导致视频旋转无法生效
-import importlib.metadata
-
 opencv_package_version = importlib.metadata.version("opencv-python")
 if opencv_package_version != "4.10.0.84":
     raise UserWarning(
@@ -490,6 +489,7 @@ def gen_video_thumbnail(
     alternative_output_folder_path=None,
     gpu_mode=False,
     copy_stream_mode=False,
+    disable_merge_lock=False,
 ):
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_path_video = os.path.splitext(video_path)[0] + ".tbnl"
@@ -644,7 +644,7 @@ def gen_video_thumbnail(
         command += f" -preset {preset} "
     command += f' "{temp_output_path_video}"'
     # print(f"生成动态缩略图指令：{command}")
-    with concat_prioritizer:
+    with concat_prioritizer if not disable_merge_lock else nullcontext():
         run_ffmpeg_command_with_shell_and_tqdm(
             shlex.split(command) if copy_stream_mode else command,
             "copy直出模式" if copy_stream_mode else "合并",
@@ -759,6 +759,7 @@ def generate_thumbnail(
     delete_seg_file_in_full_mode=False,
     gpu_mode=False,
     copy_stream_mode=False,
+    disable_merge_lock=False,
 ):
     if skip_completed_file:
         self_result_file_exists = any(map(os.path.exists, [os.path.splitext(video_path)[0] + i for i in [".tbnl", ".jpg"]]))
@@ -797,6 +798,7 @@ def generate_thumbnail(
                     alternative_output_folder_path,
                     gpu_mode,
                     copy_stream_mode,
+                    disable_merge_lock,
                 )
         except:
             traceback.print_exc()
@@ -981,6 +983,7 @@ def process_video(args, **kwargs):
                         args.full_delete_mode,
                         args.gpu,
                         args.copy,
+                        args.disable_merge_lock,
                     )
         else:
             for video_path in video_paths:
@@ -1001,6 +1004,7 @@ def process_video(args, **kwargs):
                         args.full_delete_mode,
                         args.gpu,
                         args.copy,
+                        args.disable_merge_lock,
                     )
                 except:
                     traceback.print_exc()
@@ -1033,6 +1037,7 @@ def process_video(args, **kwargs):
             args.full_delete_mode,
             args.gpu,
             args.copy,
+            args.disable_merge_lock,
         )
     else:  # 处理单个视频
         if args.svg and os.path.splitext(video_path)[-1].lower() == ".svg":
@@ -1054,6 +1059,7 @@ def process_video(args, **kwargs):
             args.full_delete_mode,
             args.gpu,
             args.copy,
+            args.disable_merge_lock,
         )
 
 
@@ -1107,6 +1113,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu", help="使用hevc_nvenc编码器（输出质量不好，慎用）", action="store_true")
     parser.add_argument("--svg", help="在输入svg文件的时候，先将其后缀名直接改成mp4，然后再进行后续处理", action="store_true")
     parser.add_argument("--copy", help="在切分中间视频时直接复制视频流，不进行转码（无法在视频上打印时间戳）", action="store_true")
+    parser.add_argument("--disable-merge-lock", help="禁用合并视频步骤(以及copy模式的整个步骤)的单一锁", action="store_true")
     args = parser.parse_args()
 
     if args.pic_only and args.video_only:
@@ -1205,6 +1212,7 @@ if __name__ == "__main__":
                             gpu=args.gpu,
                             copy=args.copy,
                             svg=args.svg,
+                            disable_merge_lock=args.disable_merge_lock,
                         ),
                     ),
                     kwargs={
