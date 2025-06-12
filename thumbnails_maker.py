@@ -303,6 +303,15 @@ def check_video_corrupted(video_file_path):
     return is_corrupted, width, height
 
 
+def format_shlex_split_result(split_result: List[str]):
+    for idx, cmd_seg in enumerate(split_result):
+        if re.search(r"\\\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", cmd_seg):
+            formatted_cmd_seg = cmd_seg.lstrip("\\")
+            formatted_cmd_seg = r"\\" + formatted_cmd_seg
+            split_result[idx] = formatted_cmd_seg
+    return split_result
+
+
 def move_with_optional_security(source, target, backup_target=None, msg=""):
     if target.startswith(r"\\"):
         time.sleep(2)
@@ -646,7 +655,7 @@ def gen_video_thumbnail(
     # print(f"生成动态缩略图指令：{command}")
     with concat_prioritizer if not disable_merge_lock else nullcontext():
         run_ffmpeg_command_with_shell_and_tqdm(
-            shlex.split(command) if copy_stream_mode else command,
+            format_shlex_split_result(shlex.split(command)) if copy_stream_mode else command,
             "copy直出模式" if copy_stream_mode else "合并",
             end_desc="视频缩略图生成完毕...",
             total=thumbnail_duration if copy_stream_mode else None,
