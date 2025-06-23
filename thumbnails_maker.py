@@ -1049,6 +1049,8 @@ def process_video(args, **kwargs):
             args.disable_merge_lock,
         )
     else:  # 处理单个视频
+        if not os.path.splitext(video_path)[1]: # Check if there is an extension
+            video_path += ".mp4" # Add .mp4 if no extension
         if args.svg and os.path.splitext(video_path)[-1].lower() == ".svg":
             video_path = _convert_svg_to_mp4(video_path)
         args.skip = False
