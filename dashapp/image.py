@@ -4,7 +4,7 @@ import re
 from typing import List
 
 import dash
-from dash import dcc, html
+from dash import dcc, html, Patch
 from PIL import Image
 
 app = dash.Dash(__name__)
@@ -72,20 +72,55 @@ app.layout = html.Div(
         html.Div(style={"display": "flex", "flex-wrap": "wrap", "justify-content": "left"}, id="container"),
         html.Div(
             [
-                html.Div(html.A(html.Button([html.Div(id="button_text"), html.Div(id="remain_count")], id="get_pics"), href="#container")),
                 html.Div(
                     html.Div(
                         [
-                            dcc.Slider(min=2, max=600, step=2, value=page_capacity, updatemode="drag", id="slider1"),
-                            dcc.Slider(min=100, max=1500, step=1, value=pic_max_height, updatemode="drag", id="slider2"),
+                            html.Div(
+                                [
+                                    dcc.Checklist(
+                                        [{"label": "无控", "value": "hide_control"}],
+                                        inline=True,
+                                        className="option_item",
+                                        id="option_hide_control",
+                                    ),
+                                    dcc.Checklist(
+                                        [{"label": "隐mp4", "value": "not_display_mp4"}],
+                                        inline=True,
+                                        className="option_item",
+                                        id="option_not_display_mp4",
+                                    ),
+                                ],
+                                id="option_container",
+                            ),
+                            dcc.Slider(
+                                min=2, max=600, step=2, value=page_capacity, updatemode="drag", id="slider1", marks=None, className="slider"
+                            ),
+                            dcc.Slider(
+                                min=100,
+                                max=1500,
+                                step=1,
+                                value=pic_max_height,
+                                updatemode="drag",
+                                id="slider2",
+                                marks=None,
+                                className="slider",
+                            ),
                         ],
                         style={"display": "flex", "flex-direction": "column"},
                     )
                 ),
+                html.Div(
+                    html.A(
+                        html.Button([html.Div(id="button_text"), html.Div(id="remain_count")], id="get_pics"),
+                        href="#container",
+                    ),
+                    style={"margin-right": "25px"},
+                ),
             ],
             id="button_container",
-            style={"float": "right"},
         ),
+        dcc.Store(id="data_height"),
+        dcc.Store(id="data_not_display_mp4"),
     ]
 )
 
@@ -119,7 +154,7 @@ def popup_100_pics(n_clicks):
                 controls=True,
                 loop=True,
                 style={"max-height": "380px", "vertical-align": "middle"},
-                id={"type": "pics", "index": idx},
+                id={"type": "mp4" if (file_ext == ".mp4") else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
             )
             if file_ext in [".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v", ".tbnl"]
             else html.A(
@@ -127,7 +162,7 @@ def popup_100_pics(n_clicks):
                     className=img_path,
                     src=PRELOAD_IMG_URL,
                     style={"max-height": "380px", "vertical-align": "middle"},
-                    id={"type": "pics", "index": idx},
+                    id={"type": "pic", "index": idx},
                 ),
                 href=img_path,
                 target="_blank",
@@ -151,15 +186,94 @@ def set_page_capacity(s_value):
 
 
 @app.callback(
-    dash.dependencies.Output({"type": "pics", "index": dash.dependencies.ALL}, "style"),
+    dash.dependencies.Output("data_height", "data"),
     dash.dependencies.Input("slider2", "value"),
-    dash.dependencies.State({"type": "pics", "index": dash.dependencies.ALL}, "children"),
 )
-def det_pic_height(s_value, pics):
+def det_pic_height(s_value):
     global pic_max_height
     pic_max_height = s_value
-    return [{"max-height": f"{pic_max_height}px", "vertical-align": "middle"} for i in range(len(pics))]
+    return {"max-height": f"{pic_max_height}px", "vertical-align": "middle"}
+
+
+@app.callback(
+    dash.dependencies.Output({"type": "pic", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Input("data_height", "data"),
+)
+def apply_height_change_to_pics(style_store):
+    return style_store
+
+
+@app.callback(
+    dash.dependencies.Output({"type": "video", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Input("data_height", "data"),
+)
+def apply_height_change_to_videos(style_store):
+    return style_store
+
+
+@app.callback(
+    dash.dependencies.Output({"type": "mp4", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Input("data_height", "data"),
+    dash.dependencies.Input("data_not_display_mp4", "data"),
+)
+def apply_height_change_to_mp4s(data_height, data_not_display_mp4):
+    p = Patch()
+    p.update(data_height)
+    p.update(data_not_display_mp4)
+    return p
+
+
+@app.callback(
+    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Input("data_height", "data"),
+)
+def apply_height_change_to_tbnls(data_height):
+    return data_height
+
+
+@app.callback(
+    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.MATCH}, "controls"),
+    dash.dependencies.Input("option_hide_control", "value"),
+)
+def apply_option_on_hide_control(option_list):
+    if option_list and "hide_control" in option_list:
+        return False
+    else:
+        return True
+
+
+@app.callback(
+    dash.dependencies.Output("option_hide_control", "style"),
+    dash.dependencies.Input("option_hide_control", "value"),
+)
+def hide_control_change_color(option_list):
+    if option_list and "hide_control" in option_list:
+        return {"color": ""}
+    else:
+        return {"color": "#8080804a"}
+
+
+@app.callback(
+    dash.dependencies.Output("data_not_display_mp4", "data"),
+    dash.dependencies.Input("option_not_display_mp4", "value"),
+)
+def apply_option_on_not_display_mp4(option_list):
+    if option_list and "not_display_mp4" in option_list:
+        return {"display": "none"}
+    else:
+        return {"display": ""}
+
+
+@app.callback(
+    dash.dependencies.Output("option_not_display_mp4", "style"),
+    dash.dependencies.Input("option_not_display_mp4", "value"),
+)
+def not_display_mp4_change_color(option_list):
+    if option_list and "not_display_mp4" in option_list:
+        return {"color": ""}
+    else:
+        return {"color": "#8080804a"}
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0")
+    app.run(debug=True, host="0.0.0.0")

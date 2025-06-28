@@ -25,6 +25,9 @@ button:hover {
 
 #button_container {
     height: 700px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
 @media (max-width:1000px) {
@@ -33,25 +36,24 @@ button:hover {
     }
 }
 
-#get_pics {
-    position: absolute;
-    right: 2%;
-    margin-top: 40px;
-}
-
 #remain_count {
     font-size: 25px;
     color: #4CAF50;
 }
 
-#slider1 {
+.slider {
     width: 300px;
-    margin-top: 3px;
+    padding-bottom: 10px !important;
 }
 
-#slider2 {
-    width: 300px;
-    margin-top: -20px;
+#option_container {
+    color: #4CAF50;
+    font-size: 30px;
+    font-weight: bold;
+    justify-content: space-evenly;
+    display: flex;
+    margin-top: 20px;
+    margin-bottom: 10px;
 }
 
 #img_catalog {
@@ -61,7 +63,6 @@ button:hover {
 #promotion {
     animation: blingbling 3s cubic-bezier(0.68, -0.55, 0, 1.96) alternate infinite;
 }
-
 
 @keyframes blingbling {
     from {
