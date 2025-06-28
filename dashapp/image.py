@@ -196,84 +196,69 @@ def det_pic_height(s_value):
 
 
 @app.callback(
-    dash.dependencies.Output({"type": "pic", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Output({"type": "pic", "index": dash.dependencies.ALL}, "style"),
     dash.dependencies.Input("data_height", "data"),
+    dash.dependencies.State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
 )
-def apply_height_change_to_pics(style_store):
-    return style_store
+def apply_height_change_to_pics(data_height, children):
+    return [data_height for i in range(len(children))]
 
 
 @app.callback(
-    dash.dependencies.Output({"type": "video", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Output({"type": "video", "index": dash.dependencies.ALL}, "style"),
     dash.dependencies.Input("data_height", "data"),
+    dash.dependencies.State({"type": "video", "index": dash.dependencies.ALL}, "children"),
 )
-def apply_height_change_to_videos(style_store):
-    return style_store
+def apply_height_change_to_videos(data_height, children):
+    return [data_height for i in range(len(children))]
 
 
 @app.callback(
-    dash.dependencies.Output({"type": "mp4", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Output({"type": "mp4", "index": dash.dependencies.ALL}, "style"),
     dash.dependencies.Input("data_height", "data"),
     dash.dependencies.Input("data_not_display_mp4", "data"),
+    dash.dependencies.State({"type": "mp4", "index": dash.dependencies.ALL}, "children"),
 )
-def apply_height_change_to_mp4s(data_height, data_not_display_mp4):
+def apply_height_change_to_mp4s(data_height, data_not_display_mp4, children):
     p = Patch()
     p.update(data_height)
     p.update(data_not_display_mp4)
-    return p
+    return [p for i in range(len(children))]
 
 
 @app.callback(
-    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.ALL}, "style"),
     dash.dependencies.Input("data_height", "data"),
+    dash.dependencies.State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
 )
-def apply_height_change_to_tbnls(data_height):
-    return data_height
+def apply_height_change_to_tbnls(data_height, children):
+    return [data_height for i in range(len(children))]
 
 
 @app.callback(
-    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.MATCH}, "controls"),
-    dash.dependencies.Input("option_hide_control", "value"),
-)
-def apply_option_on_hide_control(option_list):
-    if option_list and "hide_control" in option_list:
-        return False
-    else:
-        return True
-
-
-@app.callback(
+    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.ALL}, "controls"),
     dash.dependencies.Output("option_hide_control", "style"),
     dash.dependencies.Input("option_hide_control", "value"),
+    dash.dependencies.State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
 )
-def hide_control_change_color(option_list):
+def apply_option_on_hide_control(option_list, children):
     if option_list and "hide_control" in option_list:
-        return {"color": ""}
+        return [False for i in range(len(children))], {"color": ""}
     else:
-        return {"color": "#8080804a"}
+        return [True for i in range(len(children))], {"color": "#8080804a"}
 
 
 @app.callback(
     dash.dependencies.Output("data_not_display_mp4", "data"),
+    dash.dependencies.Output("option_not_display_mp4", "style"),
     dash.dependencies.Input("option_not_display_mp4", "value"),
 )
 def apply_option_on_not_display_mp4(option_list):
     if option_list and "not_display_mp4" in option_list:
-        return {"display": "none"}
+        return {"display": "none"}, {"color": ""}
     else:
-        return {"display": ""}
-
-
-@app.callback(
-    dash.dependencies.Output("option_not_display_mp4", "style"),
-    dash.dependencies.Input("option_not_display_mp4", "value"),
-)
-def not_display_mp4_change_color(option_list):
-    if option_list and "not_display_mp4" in option_list:
-        return {"color": ""}
-    else:
-        return {"color": "#8080804a"}
+        return {"display": ""}, {"color": "#8080804a"}
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0")
+    app.run(debug=True, host="0.0.0.0")
