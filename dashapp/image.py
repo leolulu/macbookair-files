@@ -201,7 +201,7 @@ def det_pic_height(s_value):
     dash.dependencies.State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
 )
 def apply_height_change_to_pics(data_height, children):
-    return [data_height for i in range(len(children))]
+    return [data_height for _ in range(len(children))]
 
 
 @app.callback(
@@ -210,7 +210,7 @@ def apply_height_change_to_pics(data_height, children):
     dash.dependencies.State({"type": "video", "index": dash.dependencies.ALL}, "children"),
 )
 def apply_height_change_to_videos(data_height, children):
-    return [data_height for i in range(len(children))]
+    return [data_height for _ in range(len(children))]
 
 
 @app.callback(
@@ -232,7 +232,7 @@ def apply_height_change_to_mp4s(data_height, data_not_display_mp4, children):
     dash.dependencies.State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
 )
 def apply_height_change_to_tbnls(data_height, children):
-    return [data_height for i in range(len(children))]
+    return [data_height for _ in range(len(children))]
 
 
 @app.callback(
@@ -243,9 +243,9 @@ def apply_height_change_to_tbnls(data_height, children):
 )
 def apply_option_on_hide_control(option_list, children):
     if option_list and "hide_control" in option_list:
-        return [False for i in range(len(children))], {"color": ""}
+        return [False for _ in range(len(children))], {"color": ""}
     else:
-        return [True for i in range(len(children))], {"color": "#8080804a"}
+        return [True for _ in range(len(children))], {"color": "#8080804a"}
 
 
 @app.callback(
@@ -261,4 +261,4 @@ def apply_option_on_not_display_mp4(option_list):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    app.run(debug=False, host="0.0.0.0")
