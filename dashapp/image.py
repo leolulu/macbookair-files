@@ -11,6 +11,7 @@ app = dash.Dash(__name__)
 
 pic_max_height = 475
 PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl.jpg"
+VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
 
 img_path_list = []
 browsed_img_list = []
@@ -65,7 +66,7 @@ try:
 except:
     page_capacity = 10
 # Caution:
-page_capacity = 12  # 目标值是6，写12可以计算成6
+page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候，能取到正确数量。下面的12会除以2，再次得到这里的6
 
 app.layout = html.Div(
     [
@@ -96,7 +97,7 @@ app.layout = html.Div(
                                 min=4,
                                 max=100,
                                 step=1,
-                                value=page_capacity,
+                                value=12,  # 这里写12，是为了在按钮上能够显示正确数量
                                 updatemode="drag",
                                 id="slider1",
                                 marks={
@@ -126,7 +127,7 @@ app.layout = html.Div(
                         html.Button([html.Div(id="button_text"), html.Div(id="remain_count")], id="get_pics"),
                         href="#container",
                     ),
-                    style={"margin-right": "25px"},
+                    style={"margin-right": "20px"},
                 ),
             ],
             id="button_container",
@@ -146,6 +147,9 @@ def popup_100_pics(n_clicks):
     global img_path_list, tbnl_display_mode
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
+    consecutive_pic_count = 0
+    pic_threshold = 20
+
     for idx in range(page_capacity):
         try:
             img_path = img_path_list.pop(0)
@@ -158,6 +162,9 @@ def popup_100_pics(n_clicks):
             previous_img_catalog = current_img_catalog
         if file_ext == ".tbnl":
             tbnl_display_mode = True
+
+        is_video = file_ext in [".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v", ".tbnl"]
+
         return_list.append(
             html.Video(
                 src=img_path,
@@ -168,7 +175,7 @@ def popup_100_pics(n_clicks):
                 style={"max-height": "380px", "vertical-align": "middle"},
                 id={"type": "mp4" if (file_ext == ".mp4") else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
             )
-            if file_ext in [".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v", ".tbnl"]
+            if is_video
             else html.A(
                 html.Img(
                     className=img_path,
@@ -181,6 +188,21 @@ def popup_100_pics(n_clicks):
             )
         )
         browsed_img_list.append(img_path)
+
+        if not is_video:
+            consecutive_pic_count += 1
+        else:
+            if consecutive_pic_count >= pic_threshold:
+                return_list.append(
+                    html.Img(
+                        src=VIDEO_WARNING_IMG_URL,
+                        style={"max-height": pic_max_height, "vertical-align": "middle"},
+                        id={"type": "pic", "index": idx + 1},
+                    )
+                )
+                break
+            consecutive_pic_count = 0
+
     if len(img_path_list) == 0:
         img_path_list = get_img_path_list(img_path_list)
     remain_count = "还剩{}张".format(len(img_path_list))
