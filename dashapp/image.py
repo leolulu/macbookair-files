@@ -173,7 +173,7 @@ def popup_100_pics(n_clicks):
                 controls=True,
                 loop=True,
                 style={"max-height": "380px", "vertical-align": "middle"},
-                id={"type": "mp4" if (file_ext == ".mp4") else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
+                id={"type": "mp4" if (file_ext in [".mp4", "m4v"]) else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
             )
             if is_video
             else html.A(
