@@ -46,6 +46,15 @@ button:hover {
     padding-bottom: 10px !important;
 }
 
+#slider1 {
+    margin-bottom: 15px;
+    margin-top: 5px;
+}
+
+#slider2 {
+    margin-bottom: 5px;
+}
+
 #option_container {
     color: #4CAF50;
     font-size: 30px;

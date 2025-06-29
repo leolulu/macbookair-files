@@ -65,7 +65,7 @@ try:
 except:
     page_capacity = 10
 # Caution:
-page_capacity = 6
+page_capacity = 12  # 目标值是6，写12可以计算成6
 
 app.layout = html.Div(
     [
@@ -93,7 +93,19 @@ app.layout = html.Div(
                                 id="option_container",
                             ),
                             dcc.Slider(
-                                min=2, max=600, step=2, value=page_capacity, updatemode="drag", id="slider1", marks=None, className="slider"
+                                min=4,
+                                max=100,
+                                step=1,
+                                value=page_capacity,
+                                updatemode="drag",
+                                id="slider1",
+                                marks={
+                                    4: "2",
+                                    48: "24",
+                                    90: "100",
+                                    100: "1000",
+                                },
+                                className="slider",
                             ),
                             dcc.Slider(
                                 min=100,
@@ -179,8 +191,18 @@ def popup_100_pics(n_clicks):
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
 def set_page_capacity(s_value):
+    def _value_mapping(in_value):
+        if in_value <= 48:
+            out_value = in_value / 2
+        elif 48 < in_value <= 90:
+            out_value = y = (38 / 21) * in_value - 1316 / 21
+        elif 90 < in_value <= 100:
+            out_value = 10 ** (in_value / 10 - 7)
+
+        return 2 * round(out_value / 2)
+
     global page_capacity
-    page_capacity = s_value
+    page_capacity = _value_mapping(s_value)
     button_text = "再来{}张！".format(page_capacity)
     return button_text
 
