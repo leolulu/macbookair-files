@@ -90,6 +90,12 @@ app.layout = html.Div(
                                         className="option_item",
                                         id="option_not_display_mp4",
                                     ),
+                                    dcc.Checklist(
+                                        [{"label": "隐图", "value": "not_display_pic"}],
+                                        inline=True,
+                                        className="option_item",
+                                        id="option_not_display_pic",
+                                    ),
                                 ],
                                 id="option_container",
                             ),
@@ -134,6 +140,7 @@ app.layout = html.Div(
         ),
         dcc.Store(id="data_height"),
         dcc.Store(id="data_not_display_mp4"),
+        dcc.Store(id="data_not_display_pic"),
     ]
 )
 
@@ -242,10 +249,14 @@ def det_pic_height(s_value):
 @app.callback(
     dash.dependencies.Output({"type": "pic", "index": dash.dependencies.ALL}, "style"),
     dash.dependencies.Input("data_height", "data"),
+    dash.dependencies.Input("data_not_display_pic", "data"),
     dash.dependencies.State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
 )
-def apply_height_change_to_pics(data_height, children):
-    return [data_height for _ in range(len(children))]
+def apply_height_change_to_pics(data_height, data_not_display_pic, children):
+    p = Patch()
+    p.update(data_height)
+    p.update(data_not_display_pic)
+    return [p for _ in range(len(children))]
 
 
 @app.callback(
@@ -299,6 +310,18 @@ def apply_option_on_hide_control(option_list, children):
 )
 def apply_option_on_not_display_mp4(option_list):
     if option_list and "not_display_mp4" in option_list:
+        return {"display": "none"}, {"color": ""}
+    else:
+        return {"display": ""}, {"color": "#8080804a"}
+
+
+@app.callback(
+    dash.dependencies.Output("data_not_display_pic", "data"),
+    dash.dependencies.Output("option_not_display_pic", "style"),
+    dash.dependencies.Input("option_not_display_pic", "value"),
+)
+def apply_option_on_not_display_pic(option_list):
+    if option_list and "not_display_pic" in option_list:
         return {"display": "none"}, {"color": ""}
     else:
         return {"display": ""}, {"color": "#8080804a"}
