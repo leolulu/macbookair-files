@@ -212,6 +212,7 @@ def popup_100_pics(n_clicks):
 
     if len(img_path_list) == 0:
         img_path_list = get_img_path_list(img_path_list)
+        tbnl_display_mode = False
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
