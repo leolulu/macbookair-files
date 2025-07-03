@@ -200,12 +200,13 @@ def popup_100_pics(n_clicks):
             consecutive_pic_count += 1
         else:
             if consecutive_pic_count >= pic_threshold:
-                return_list.append(
+                return_list.insert(
+                    -1,
                     html.Img(
                         src=VIDEO_WARNING_IMG_URL,
                         style={"max-height": pic_max_height, "vertical-align": "middle"},
                         id={"type": "pic", "index": idx + 1},
-                    )
+                    ),
                 )
                 break
             consecutive_pic_count = 0
