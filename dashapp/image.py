@@ -15,6 +15,7 @@ VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
 
 img_path_list = []
 browsed_img_list = []
+consecutive_pic_count = 0
 
 show_folder_title = False
 show_moving_promote = False
@@ -151,10 +152,9 @@ app.layout = html.Div(
     dash.dependencies.Input("get_pics", "n_clicks"),
 )
 def popup_100_pics(n_clicks):
-    global img_path_list, tbnl_display_mode
+    global img_path_list, tbnl_display_mode, consecutive_pic_count
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
-    consecutive_pic_count = 0
     pic_threshold = 20
 
     for idx in range(page_capacity):
