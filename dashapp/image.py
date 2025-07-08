@@ -226,9 +226,9 @@ def set_page_capacity(s_value):
         if in_value <= 48:
             out_value = in_value / 2
         elif 48 < in_value <= 90:
-            out_value = y = (38 / 21) * in_value - 1316 / 21
+            out_value = (38 / 21) * in_value - 1316 / 21
         elif 90 < in_value <= 100:
-            out_value = 10 ** (in_value / 10 - 7)
+            out_value = 90 * in_value - 8000
 
         return 2 * round(out_value / 2)
 
