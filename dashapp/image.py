@@ -208,8 +208,10 @@ def popup_100_pics(n_clicks):
                         id={"type": "pic", "index": idx + 1},
                     ),
                 )
+                consecutive_pic_count = 0
                 break
-            consecutive_pic_count = 0
+            else:
+                consecutive_pic_count = 0
 
     if len(img_path_list) == 0:
         img_path_list = get_img_path_list(img_path_list)
