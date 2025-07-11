@@ -159,8 +159,9 @@ app.layout = html.Div(
     dash.dependencies.Output("remain_count", "children"),
     dash.dependencies.Output("data_filter_trigger", "disabled"),
     dash.dependencies.Input("get_pics", "n_clicks"),
+    dash.dependencies.State("path_filter", "value"),
 )
-def popup_100_pics(n_clicks):
+def popup_100_pics(n_clicks, filter_string):
     global img_path_list, tbnl_display_mode, consecutive_pic_count
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
@@ -229,7 +230,7 @@ def popup_100_pics(n_clicks):
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
-    return return_list, remain_count, False
+    return return_list, remain_count, False if filter_string else True
 
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
