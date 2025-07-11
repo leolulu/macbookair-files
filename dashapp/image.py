@@ -149,7 +149,7 @@ app.layout = html.Div(
         dcc.Store(id="data_height"),
         dcc.Store(id="data_not_display_mp4"),
         dcc.Store(id="data_not_display_pic"),
-        dcc.Interval(id="data_filter_trigger", interval=1 * 3000),
+        dcc.Interval(id="data_filter_trigger", interval=3000, disabled=True),
     ]
 )
 
@@ -355,14 +355,11 @@ def apply_filter_on_all_media(_, filter_value, src_paths, styles, src_paths_back
     output_style_result = []
     for src_path, org_style, true_src in list(zip(src_paths, styles, src_paths_backup)):
         media_path = true_src if true_src else src_path
-        if filter_value:
-            if re.search(filter_value, media_path):
-                org_style.update({"display": "none"})
-            else:
-                org_style.pop("display", None)
-            output_style_result.append(org_style)
+        if filter_value and re.search(filter_value, media_path):
+            org_style.update({"display": "none"})
         else:
-            output_style_result.append(dash.no_update)
+            org_style.pop("display", None)
+        output_style_result.append(org_style)
     return output_style_result
 
 
