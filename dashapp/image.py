@@ -4,7 +4,7 @@ import re
 from typing import List
 
 import dash
-from dash import dcc, html, Patch
+from dash import Patch, dcc, html
 from PIL import Image
 
 app = dash.Dash(__name__)
@@ -100,6 +100,13 @@ app.layout = html.Div(
                                 ],
                                 id="option_container",
                             ),
+                            html.Div(
+                                dcc.Input(id="path_filter", type="text", placeholder='过滤"路径"，可以使用正则', debounce=True),
+                                style={"margin-bottom": "12px", "padding": "0px 25px"},
+                            ),
+                            html.Div(
+                                style={"padding": "0px 25px"},
+                            ),
                             dcc.Slider(
                                 min=4,
                                 max=100,
@@ -142,6 +149,7 @@ app.layout = html.Div(
         dcc.Store(id="data_height"),
         dcc.Store(id="data_not_display_mp4"),
         dcc.Store(id="data_not_display_pic"),
+        dcc.Interval(id="data_filter_trigger", interval=3000, disabled=True),
     ]
 )
 
@@ -149,9 +157,11 @@ app.layout = html.Div(
 @app.callback(
     dash.dependencies.Output("container", "children"),
     dash.dependencies.Output("remain_count", "children"),
+    dash.dependencies.Output("data_filter_trigger", "disabled"),
     dash.dependencies.Input("get_pics", "n_clicks"),
+    dash.dependencies.State("path_filter", "value"),
 )
-def popup_100_pics(n_clicks):
+def popup_100_pics(n_clicks, filter_string):
     global img_path_list, tbnl_display_mode, consecutive_pic_count
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
@@ -189,6 +199,7 @@ def popup_100_pics(n_clicks):
                     src=PRELOAD_IMG_URL,
                     style={"max-height": "380px", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
+                    **{"data-true-src": img_path},
                 ),
                 href=img_path,
                 target="_blank",
@@ -219,7 +230,7 @@ def popup_100_pics(n_clicks):
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
-    return return_list, remain_count
+    return return_list, remain_count, False if filter_string else True
 
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
@@ -329,6 +340,28 @@ def apply_option_on_not_display_pic(option_list):
         return {"display": "none"}, {"color": ""}
     else:
         return {"display": ""}, {"color": "#8080804a"}
+
+
+@app.callback(
+    dash.dependencies.Output({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "style", allow_duplicate=True),
+    dash.dependencies.Input("data_filter_trigger", "n_intervals"),
+    dash.dependencies.Input("path_filter", "value"),
+    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "src"),
+    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "style"),
+    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "data-true-src"),
+    prevent_initial_call=True,
+)
+def apply_filter_on_all_media(_, filter_value, src_paths, styles, src_paths_backup):
+    dash.set_props("data_filter_trigger", {"disabled": True})
+    output_style_result = []
+    for src_path, org_style, true_src in zip(src_paths, styles, src_paths_backup):
+        media_path = true_src if true_src else src_path
+        if filter_value and re.search(filter_value, media_path):
+            org_style.update({"display": "none"})
+        else:
+            org_style.pop("display", None)
+        output_style_result.append(org_style)
+    return output_style_result
 
 
 if __name__ == "__main__":
