@@ -354,7 +354,7 @@ def apply_option_on_not_display_pic(option_list):
 def apply_filter_on_all_media(_, filter_value, src_paths, styles, src_paths_backup):
     dash.set_props("data_filter_trigger", {"disabled": True})
     output_style_result = []
-    for src_path, org_style, true_src in list(zip(src_paths, styles, src_paths_backup)):
+    for src_path, org_style, true_src in zip(src_paths, styles, src_paths_backup):
         media_path = true_src if true_src else src_path
         if filter_value and re.search(filter_value, media_path):
             org_style.update({"display": "none"})
