@@ -340,4 +340,4 @@ def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup)
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    app.run(debug=False, host="0.0.0.0")
