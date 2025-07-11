@@ -100,6 +100,10 @@ app.layout = html.Div(
                                 ],
                                 id="option_container",
                             ),
+                            html.Div(
+                                dcc.Input(id="path_filter", type="text", placeholder='过滤"路径"，可以使用正则', debounce=True),
+                                style={"margin-bottom": "10px", "padding": "0px 25px"},
+                            ),
                             dcc.Slider(
                                 min=4,
                                 max=100,
@@ -332,4 +336,4 @@ def apply_option_on_not_display_pic(option_list):
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0")
+    app.run(debug=True, host="0.0.0.0")
