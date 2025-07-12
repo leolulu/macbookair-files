@@ -94,3 +94,30 @@ button:hover {
     height: 30px;
     font-size: 20px;
 }
+
+#option_show_delete_button {
+    font-size: 30px;
+    font-weight: bold;
+    color: #db979f;
+}
+
+#delete_button {
+    border: 3px dashed #db979f;
+    padding: 10px 10px 15px 10px;
+    border-radius: 10px;
+    margin-top: 10px;
+    font-size: 20px;
+    color: #db979f;
+    font-weight: bold;
+}
+
+#delete_component_container {
+    position: absolute;
+    right: 25px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-top: 1000px;
+    margin-bottom: 1000px;
+    cursor: pointer;
+}

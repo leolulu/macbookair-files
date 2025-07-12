@@ -1,10 +1,11 @@
 import os
 import random
 import re
+import shutil
 from typing import List
 
 import dash
-from dash import Patch, dcc, html, Input, Output, State, MATCH, ALL, callback
+from dash import ALL, MATCH, Input, Output, Patch, State, callback, dcc, html
 from PIL import Image
 
 app = dash.Dash(__name__)
@@ -12,6 +13,7 @@ app = dash.Dash(__name__)
 pic_max_height = 475
 PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl.jpg"
 VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
+TRASH_FOLDER_PATH = "./static/img/.trash"
 
 img_path_list = []
 browsed_img_list = []
@@ -40,6 +42,8 @@ def get_img_path_list(img_path_list: List):
                 ".url",
                 ".mp3",
             ] or re.search(r"ds_store$", file_.lower()):
+                continue
+            if os.path.dirname(os.path.abspath(os.path.join(root, file_))) == os.path.abspath(TRASH_FOLDER_PATH):
                 continue
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort()
@@ -82,19 +86,16 @@ app.layout = html.Div(
                                     dcc.Checklist(
                                         [{"label": "无控", "value": "hide_control"}],
                                         inline=True,
-                                        className="option_item",
                                         id="option_hide_control",
                                     ),
                                     dcc.Checklist(
                                         [{"label": "隐mp4", "value": "not_display_mp4"}],
                                         inline=True,
-                                        className="option_item",
                                         id="option_not_display_mp4",
                                     ),
                                     dcc.Checklist(
                                         [{"label": "隐图", "value": "not_display_pic"}],
                                         inline=True,
-                                        className="option_item",
                                         id="option_not_display_pic",
                                     ),
                                 ],
@@ -145,6 +146,17 @@ app.layout = html.Div(
                 ),
             ],
             id="button_container",
+        ),
+        html.Div(
+            [
+                dcc.Checklist(
+                    [{"label": "删除", "value": "show_delete_button"}],
+                    inline=True,
+                    id="option_show_delete_button",
+                ),
+                html.Div(id="delete_button"),
+            ],
+            id="delete_component_container",
         ),
     ]
 )
@@ -337,6 +349,36 @@ def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup)
             org_style.pop("display", None)
         output_style_result.append(org_style)
     return output_style_result
+
+
+@callback(
+    Output("delete_button", "style"),
+    Output("delete_button", "children"),
+    Input("option_show_delete_button", "value")
+)
+def toggle_delete_button_display(value):
+    if value:
+        return {"display": "block"}, dash.no_update
+    else:
+        return {"display": "none"}, "删除已经浏览过的媒体文件"
+
+
+@callback(
+    Output("delete_button", "children", allow_duplicate=True),
+    Input("delete_button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def delete_button_click(n_clicks):
+    if not os.path.exists(TRASH_FOLDER_PATH):
+        os.makedirs(TRASH_FOLDER_PATH)
+    count = 0
+    for file_ in browsed_img_list:
+        try:
+            shutil.move(file_, TRASH_FOLDER_PATH)
+            count += 1
+        except:
+            pass
+    return "删除成功{}张".format(count)
 
 
 if __name__ == "__main__":
