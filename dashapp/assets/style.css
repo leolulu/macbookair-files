@@ -109,6 +109,7 @@ button:hover {
     font-size: 20px;
     color: #db979f;
     font-weight: bold;
+    cursor: pointer;
 }
 
 #delete_component_container {
@@ -119,5 +120,4 @@ button:hover {
     align-items: flex-end;
     margin-top: 1000px;
     margin-bottom: 1000px;
-    cursor: pointer;
 }
