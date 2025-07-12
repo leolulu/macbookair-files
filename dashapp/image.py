@@ -198,6 +198,7 @@ def popup_100_pics(n_clicks):
                 loop=True,
                 style={"max-height": "380px", "vertical-align": "middle"},
                 id={"type": "mp4" if (file_ext in [".mp4", ".m4v"]) else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
+                **{"data-true-src": img_path},
             )
             if is_video
             else html.A(
@@ -273,76 +274,83 @@ def apply_height_change_to_media(s_value, children):
 
 
 @callback(
-    Output({"type": "tbnl", "index": dash.dependencies.ALL}, "controls", allow_duplicate=True),
-    Output({"type": "mp4", "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
-    Output({"type": "pic", "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
+    Output({"type": "tbnl", "index": ALL}, "controls", allow_duplicate=True),
     Input("option_hide_control", "value"),
-    Input("option_not_display_mp4", "value"),
-    Input("option_not_display_pic", "value"),
-    State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
-    State({"type": "mp4", "index": dash.dependencies.ALL}, "children"),
-    State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
+    State({"type": "tbnl", "index": ALL}, "children"),
     prevent_initial_call="initial_duplicate",
 )
-def apply_options(
-    option_list_hide_control,
-    option_list_not_display_mp4,
-    option_list_not_display_pic,
-    children_tbnl,
-    children_mp4,
-    children_pic,
-):
-    print("[DEBUG] apply_options callback 被触发！")
-    output_results = []
-
+def apply_option_to_tbnl_control(option_list_hide_control, children):
     if option_list_hide_control and "hide_control" in option_list_hide_control:
         dash.set_props("option_hide_control", {"style": {"color": "#4CAF50"}})
         controls_value = False
     else:
         dash.set_props("option_hide_control", {"style": {"color": ""}})
         controls_value = True
-    output_results.append([controls_value for _ in range(len(children_tbnl))])
-
-    p = Patch()
-    if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
-        dash.set_props("option_not_display_mp4", {"style": {"color": "#4CAF50"}})
-        p.update({"display": "none"})
-    else:
-        dash.set_props("option_not_display_mp4", {"style": {"color": ""}})
-        p.update({"display": ""})
-    output_results.append([p for _ in range(len(children_mp4))])
-
-    p = Patch()
-    if option_list_not_display_pic and "not_display_pic" in option_list_not_display_pic:
-        dash.set_props("option_not_display_pic", {"style": {"color": "#4CAF50"}})
-        p.update({"display": "none"})
-    else:
-        dash.set_props("option_not_display_pic", {"style": {"color": ""}})
-        p.update({"display": ""})
-    output_results.append([p for _ in range(len(children_pic))])
-
-    return output_results
+    return [controls_value for _ in range(len(children))]
 
 
-@app.callback(
-    dash.dependencies.Output({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
-    dash.dependencies.Input("path_filter", "value"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "src"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "style"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "data-true-src"),
+@callback(
+    Output({"type": ALL, "index": ALL}, "style", allow_duplicate=True),
+    Input("option_not_display_mp4", "value"),
+    Input("option_not_display_pic", "value"),
+    Input("path_filter", "value"),
+    State({"type": ALL, "index": ALL}, "data-true-src"),
+    State({"type": ALL, "index": ALL}, "id"),
     prevent_initial_call="initial_duplicate",
 )
-def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup):
-    print("[DEBUG] filter callback 被触发！")
-    output_style_result = []
-    for src_path, org_style, true_src in zip(src_paths, styles, src_paths_backup):
-        media_path = true_src if true_src else src_path
-        if filter_value and re.search(filter_value, media_path):
-            org_style.update({"display": "none"})
+def apply_options_to_media_display(
+    option_list_not_display_mp4,
+    option_list_not_display_pic,
+    filter_value,
+    src_paths,
+    ids,
+):
+    output_results = []
+
+    if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
+        dash.set_props("option_not_display_mp4", {"style": {"color": "#4CAF50"}})
+        mp4_need_hide = True
+    else:
+        dash.set_props("option_not_display_mp4", {"style": {"color": ""}})
+        mp4_need_hide = False
+
+    if option_list_not_display_pic and "not_display_pic" in option_list_not_display_pic:
+        dash.set_props("option_not_display_pic", {"style": {"color": "#4CAF50"}})
+        pic_need_hide = True
+    else:
+        dash.set_props("option_not_display_pic", {"style": {"color": ""}})
+        pic_need_hide = False
+
+    for src_path, id_ in zip(src_paths, ids):
+        type_ = id_["type"]
+        p = Patch()
+
+        if filter_value and re.search(filter_value, src_path):
+            hide_by_filter = True
         else:
-            org_style.pop("display", None)
-        output_style_result.append(org_style)
-    return output_style_result
+            hide_by_filter = False
+
+        if type_ in ["video", "tbnl"]:
+            if hide_by_filter:
+                p.update({"display": "none"})
+            else:
+                p.update({"display": ""})
+        elif type_ == "mp4":
+            if mp4_need_hide or hide_by_filter:
+                p.update({"display": "none"})
+            else:
+                p.update({"display": ""})
+        elif type_ == "pic":
+            if pic_need_hide or hide_by_filter:
+                p.update({"display": "none"})
+            else:
+                p.update({"display": ""})
+        else:
+            raise UserWarning(f"未知的媒体元素id type: {type_}")
+
+        output_results.append(p)
+
+    return output_results
 
 
 @callback(
