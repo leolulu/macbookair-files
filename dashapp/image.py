@@ -48,8 +48,9 @@ def get_img_path_list(img_path_list: List):
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort()
     for temp_img in temp_img_list:
-        if temp_img not in img_path_list and temp_img not in browsed_img_list:
+        if (temp_img not in img_path_list) and (temp_img not in browsed_img_list):
             img_path_list.append(temp_img)
+    img_path_list.sort()
     return img_path_list
 
 
@@ -231,8 +232,8 @@ def popup_100_pics(n_clicks):
                 consecutive_pic_count = 0
 
     if len(img_path_list) == 0:
-        img_path_list = get_img_path_list(img_path_list)
         tbnl_display_mode = False
+    img_path_list = get_img_path_list(img_path_list)
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
@@ -281,7 +282,7 @@ def apply_height_change_to_media(s_value, children):
     State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
     State({"type": "mp4", "index": dash.dependencies.ALL}, "children"),
     State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
-    prevent_initial_call=True,
+    prevent_initial_call="initial_duplicate",
 )
 def apply_options(
     option_list_hide_control,
@@ -291,42 +292,34 @@ def apply_options(
     children_mp4,
     children_pic,
 ):
+    print("[DEBUG] apply_options callback 被触发！")
     output_results = []
 
-    if dash.ctx.triggered_id == "option_hide_control":
-        if option_list_hide_control and "hide_control" in option_list_hide_control:
-            dash.set_props("option_hide_control", {"style": {"color": "#4CAF50"}})
-            controls_value = False
-        else:
-            dash.set_props("option_hide_control", {"style": {"color": ""}})
-            controls_value = True
-        output_results.append([controls_value for _ in range(len(children_tbnl))])
+    if option_list_hide_control and "hide_control" in option_list_hide_control:
+        dash.set_props("option_hide_control", {"style": {"color": "#4CAF50"}})
+        controls_value = False
     else:
-        output_results.append([dash.no_update for _ in range(len(children_tbnl))])
+        dash.set_props("option_hide_control", {"style": {"color": ""}})
+        controls_value = True
+    output_results.append([controls_value for _ in range(len(children_tbnl))])
 
-    if dash.ctx.triggered_id == "option_not_display_mp4":
-        p = Patch()
-        if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
-            dash.set_props("option_not_display_mp4", {"style": {"color": "#4CAF50"}})
-            p.update({"display": "none"})
-        else:
-            dash.set_props("option_not_display_mp4", {"style": {"color": ""}})
-            p.update({"display": ""})
-        output_results.append([p for _ in range(len(children_mp4))])
+    p = Patch()
+    if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
+        dash.set_props("option_not_display_mp4", {"style": {"color": "#4CAF50"}})
+        p.update({"display": "none"})
     else:
-        output_results.append([dash.no_update for _ in range(len(children_mp4))])
+        dash.set_props("option_not_display_mp4", {"style": {"color": ""}})
+        p.update({"display": ""})
+    output_results.append([p for _ in range(len(children_mp4))])
 
-    if dash.ctx.triggered_id == "option_not_display_pic":
-        p = Patch()
-        if option_list_not_display_pic and "not_display_pic" in option_list_not_display_pic:
-            dash.set_props("option_not_display_pic", {"style": {"color": "#4CAF50"}})
-            p.update({"display": "none"})
-        else:
-            dash.set_props("option_not_display_pic", {"style": {"color": ""}})
-            p.update({"display": ""})
-        output_results.append([p for _ in range(len(children_pic))])
+    p = Patch()
+    if option_list_not_display_pic and "not_display_pic" in option_list_not_display_pic:
+        dash.set_props("option_not_display_pic", {"style": {"color": "#4CAF50"}})
+        p.update({"display": "none"})
     else:
-        output_results.append([dash.no_update for _ in range(len(children_pic))])
+        dash.set_props("option_not_display_pic", {"style": {"color": ""}})
+        p.update({"display": ""})
+    output_results.append([p for _ in range(len(children_pic))])
 
     return output_results
 
@@ -340,6 +333,7 @@ def apply_options(
     prevent_initial_call="initial_duplicate",
 )
 def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup):
+    print("[DEBUG] filter callback 被触发！")
     output_style_result = []
     for src_path, org_style, true_src in zip(src_paths, styles, src_paths_backup):
         media_path = true_src if true_src else src_path
@@ -354,7 +348,7 @@ def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup)
 @callback(
     Output("delete_button", "style"),
     Output("delete_button", "children"),
-    Input("option_show_delete_button", "value")
+    Input("option_show_delete_button", "value"),
 )
 def toggle_delete_button_display(value):
     if value:
@@ -373,11 +367,17 @@ def delete_button_click(n_clicks):
         os.makedirs(TRASH_FOLDER_PATH)
     count = 0
     for file_ in browsed_img_list:
+        print(f"正在删除文件: {file_}")
         try:
             shutil.move(file_, TRASH_FOLDER_PATH)
             count += 1
-        except:
-            pass
+        except Exception as e:
+            try:
+                if "already exists" in str(e):
+                    os.remove(file_)
+                    count += 1
+            except Exception as e:
+                print(f"删除失败: {e}")
     return "删除成功{}张".format(count)
 
 
