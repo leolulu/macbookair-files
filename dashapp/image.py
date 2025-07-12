@@ -4,7 +4,7 @@ import re
 from typing import List
 
 import dash
-from dash import Patch, dcc, html
+from dash import Patch, dcc, html, Input, Output, State, MATCH, ALL, callback
 from PIL import Image
 
 app = dash.Dash(__name__)
@@ -146,10 +146,6 @@ app.layout = html.Div(
             ],
             id="button_container",
         ),
-        dcc.Store(id="data_height"),
-        dcc.Store(id="data_not_display_mp4"),
-        dcc.Store(id="data_not_display_pic"),
-        dcc.Interval(id="data_filter_trigger", interval=3000, disabled=True),
     ]
 )
 
@@ -157,11 +153,9 @@ app.layout = html.Div(
 @app.callback(
     dash.dependencies.Output("container", "children"),
     dash.dependencies.Output("remain_count", "children"),
-    dash.dependencies.Output("data_filter_trigger", "disabled"),
     dash.dependencies.Input("get_pics", "n_clicks"),
-    dash.dependencies.State("path_filter", "value"),
 )
-def popup_100_pics(n_clicks, filter_string):
+def popup_100_pics(n_clicks):
     global img_path_list, tbnl_display_mode, consecutive_pic_count
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
@@ -230,7 +224,7 @@ def popup_100_pics(n_clicks, filter_string):
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
-    return return_list, remain_count, False if filter_string else True
+    return return_list, remain_count
 
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
@@ -251,108 +245,89 @@ def set_page_capacity(s_value):
     return button_text
 
 
-@app.callback(
-    dash.dependencies.Output("data_height", "data"),
-    dash.dependencies.Input("slider2", "value"),
+@callback(
+    Output({"type": ALL, "index": ALL}, "style", allow_duplicate=True),
+    Input("slider2", "value"),
+    State({"type": ALL, "index": ALL}, "children"),
+    prevent_initial_call="initial_duplicate",
 )
-def det_pic_height(s_value):
+def apply_height_change_to_media(s_value, children):
     global pic_max_height
     pic_max_height = s_value
-    return {"max-height": f"{pic_max_height}px", "vertical-align": "middle"}
-
-
-@app.callback(
-    dash.dependencies.Output({"type": "pic", "index": dash.dependencies.ALL}, "style"),
-    dash.dependencies.Input("data_height", "data"),
-    dash.dependencies.Input("data_not_display_pic", "data"),
-    dash.dependencies.State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
-)
-def apply_height_change_to_pics(data_height, data_not_display_pic, children):
     p = Patch()
-    p.update(data_height)
-    p.update(data_not_display_pic)
+    p.update({"max-height": f"{pic_max_height}px", "vertical-align": "middle"})
     return [p for _ in range(len(children))]
 
 
-@app.callback(
-    dash.dependencies.Output({"type": "video", "index": dash.dependencies.ALL}, "style"),
-    dash.dependencies.Input("data_height", "data"),
-    dash.dependencies.State({"type": "video", "index": dash.dependencies.ALL}, "children"),
-)
-def apply_height_change_to_videos(data_height, children):
-    return [data_height for _ in range(len(children))]
-
-
-@app.callback(
-    dash.dependencies.Output({"type": "mp4", "index": dash.dependencies.ALL}, "style"),
-    dash.dependencies.Input("data_height", "data"),
-    dash.dependencies.Input("data_not_display_mp4", "data"),
-    dash.dependencies.State({"type": "mp4", "index": dash.dependencies.ALL}, "children"),
-)
-def apply_height_change_to_mp4s(data_height, data_not_display_mp4, children):
-    p = Patch()
-    p.update(data_height)
-    p.update(data_not_display_mp4)
-    return [p for i in range(len(children))]
-
-
-@app.callback(
-    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.ALL}, "style"),
-    dash.dependencies.Input("data_height", "data"),
-    dash.dependencies.State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
-)
-def apply_height_change_to_tbnls(data_height, children):
-    return [data_height for _ in range(len(children))]
-
-
-@app.callback(
-    dash.dependencies.Output({"type": "tbnl", "index": dash.dependencies.ALL}, "controls"),
-    dash.dependencies.Output("option_hide_control", "style"),
-    dash.dependencies.Input("option_hide_control", "value"),
-    dash.dependencies.State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
-)
-def apply_option_on_hide_control(option_list, children):
-    if option_list and "hide_control" in option_list:
-        return [False for _ in range(len(children))], {"color": ""}
-    else:
-        return [True for _ in range(len(children))], {"color": "#8080804a"}
-
-
-@app.callback(
-    dash.dependencies.Output("data_not_display_mp4", "data"),
-    dash.dependencies.Output("option_not_display_mp4", "style"),
-    dash.dependencies.Input("option_not_display_mp4", "value"),
-)
-def apply_option_on_not_display_mp4(option_list):
-    if option_list and "not_display_mp4" in option_list:
-        return {"display": "none"}, {"color": ""}
-    else:
-        return {"display": ""}, {"color": "#8080804a"}
-
-
-@app.callback(
-    dash.dependencies.Output("data_not_display_pic", "data"),
-    dash.dependencies.Output("option_not_display_pic", "style"),
-    dash.dependencies.Input("option_not_display_pic", "value"),
-)
-def apply_option_on_not_display_pic(option_list):
-    if option_list and "not_display_pic" in option_list:
-        return {"display": "none"}, {"color": ""}
-    else:
-        return {"display": ""}, {"color": "#8080804a"}
-
-
-@app.callback(
-    dash.dependencies.Output({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "style", allow_duplicate=True),
-    dash.dependencies.Input("data_filter_trigger", "n_intervals"),
-    dash.dependencies.Input("path_filter", "value"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "src"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "style"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.MATCH}, "data-true-src"),
+@callback(
+    Output({"type": "tbnl", "index": dash.dependencies.ALL}, "controls", allow_duplicate=True),
+    Output({"type": "mp4", "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
+    Output({"type": "pic", "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
+    Input("option_hide_control", "value"),
+    Input("option_not_display_mp4", "value"),
+    Input("option_not_display_pic", "value"),
+    State({"type": "tbnl", "index": dash.dependencies.ALL}, "children"),
+    State({"type": "mp4", "index": dash.dependencies.ALL}, "children"),
+    State({"type": "pic", "index": dash.dependencies.ALL}, "children"),
     prevent_initial_call=True,
 )
-def apply_filter_on_all_media(_, filter_value, src_paths, styles, src_paths_backup):
-    dash.set_props("data_filter_trigger", {"disabled": True})
+def apply_options(
+    option_list_hide_control,
+    option_list_not_display_mp4,
+    option_list_not_display_pic,
+    children_tbnl,
+    children_mp4,
+    children_pic,
+):
+    output_results = []
+
+    if dash.ctx.triggered_id == "option_hide_control":
+        if option_list_hide_control and "hide_control" in option_list_hide_control:
+            dash.set_props("option_hide_control", {"style": {"color": "#4CAF50"}})
+            controls_value = False
+        else:
+            dash.set_props("option_hide_control", {"style": {"color": ""}})
+            controls_value = True
+        output_results.append([controls_value for _ in range(len(children_tbnl))])
+    else:
+        output_results.append([dash.no_update for _ in range(len(children_tbnl))])
+
+    if dash.ctx.triggered_id == "option_not_display_mp4":
+        p = Patch()
+        if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
+            dash.set_props("option_not_display_mp4", {"style": {"color": "#4CAF50"}})
+            p.update({"display": "none"})
+        else:
+            dash.set_props("option_not_display_mp4", {"style": {"color": ""}})
+            p.update({"display": ""})
+        output_results.append([p for _ in range(len(children_mp4))])
+    else:
+        output_results.append([dash.no_update for _ in range(len(children_mp4))])
+
+    if dash.ctx.triggered_id == "option_not_display_pic":
+        p = Patch()
+        if option_list_not_display_pic and "not_display_pic" in option_list_not_display_pic:
+            dash.set_props("option_not_display_pic", {"style": {"color": "#4CAF50"}})
+            p.update({"display": "none"})
+        else:
+            dash.set_props("option_not_display_pic", {"style": {"color": ""}})
+            p.update({"display": ""})
+        output_results.append([p for _ in range(len(children_pic))])
+    else:
+        output_results.append([dash.no_update for _ in range(len(children_pic))])
+
+    return output_results
+
+
+@app.callback(
+    dash.dependencies.Output({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
+    dash.dependencies.Input("path_filter", "value"),
+    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "src"),
+    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "style"),
+    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "data-true-src"),
+    prevent_initial_call="initial_duplicate",
+)
+def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup):
     output_style_result = []
     for src_path, org_style, true_src in zip(src_paths, styles, src_paths_backup):
         media_path = true_src if true_src else src_path
