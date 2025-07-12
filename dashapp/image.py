@@ -295,7 +295,6 @@ def apply_option_to_tbnl_control(option_list_hide_control, children):
     Input("option_not_display_pic", "value"),
     Input("path_filter", "value"),
     State({"type": ALL, "index": ALL}, "data-true-src"),
-    State({"type": ALL, "index": ALL}, "children"),
     State({"type": ALL, "index": ALL}, "id"),
     prevent_initial_call="initial_duplicate",
 )
@@ -304,67 +303,54 @@ def apply_options_to_media_display(
     option_list_not_display_pic,
     filter_value,
     src_paths,
-    children,
     ids,
 ):
     output_results = []
 
-
-
     if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
         dash.set_props("option_not_display_mp4", {"style": {"color": "#4CAF50"}})
-        p.update({"display": "none"})
-        output_results.append([p for _ in range(len(children_mp4))])
+        mp4_need_hide = True
     else:
         dash.set_props("option_not_display_mp4", {"style": {"color": ""}})
-        p.update({"display": ""})
+        mp4_need_hide = False
 
-    p = Patch()
     if option_list_not_display_pic and "not_display_pic" in option_list_not_display_pic:
         dash.set_props("option_not_display_pic", {"style": {"color": "#4CAF50"}})
-        p.update({"display": "none"})
+        pic_need_hide = True
     else:
         dash.set_props("option_not_display_pic", {"style": {"color": ""}})
-        p.update({"display": ""})
+        pic_need_hide = False
 
-
-
-
-
-    for src_path,id in zip(src_paths, ids):
-        type_ = id["type"]
+    for src_path, id_ in zip(src_paths, ids):
+        type_ = id_["type"]
         p = Patch()
 
-        if 
-
-
-
-
-
-    # output_results.append([p for _ in range(len(children_pic))])
-
-    return [p for p in range(len(children))]
-
-
-@app.callback(
-    dash.dependencies.Output({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "style", allow_duplicate=True),
-    dash.dependencies.Input("path_filter", "value"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "src"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "style"),
-    dash.dependencies.State({"type": dash.dependencies.ALL, "index": dash.dependencies.ALL}, "data-true-src"),
-    prevent_initial_call="initial_duplicate",
-)
-def apply_filter_on_all_media(filter_value, src_paths, styles, src_paths_backup):
-    print("[DEBUG] filter callback 被触发！")
-    output_style_result = []
-    for src_path, org_style, true_src in zip(src_paths, styles, src_paths_backup):
-        media_path = true_src if true_src else src_path
-        if filter_value and re.search(filter_value, media_path):
-            org_style.update({"display": "none"})
+        if filter_value and re.search(filter_value, src_path):
+            hide_by_filter = True
         else:
-            org_style.pop("display", None)
-        output_style_result.append(org_style)
-    return output_style_result
+            hide_by_filter = False
+
+        if type_ in ["video", "tbnl"]:
+            if hide_by_filter:
+                p.update({"display": "none"})
+            else:
+                p.update({"display": ""})
+        elif type_ == "mp4":
+            if mp4_need_hide or hide_by_filter:
+                p.update({"display": "none"})
+            else:
+                p.update({"display": ""})
+        elif type_ == "pic":
+            if pic_need_hide or hide_by_filter:
+                p.update({"display": "none"})
+            else:
+                p.update({"display": ""})
+        else:
+            raise UserWarning(f"未知的媒体元素id type: {type_}")
+
+        output_results.append(p)
+
+    return output_results
 
 
 @callback(
