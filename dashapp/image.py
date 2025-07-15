@@ -376,7 +376,6 @@ def delete_button_click(n_clicks):
         os.makedirs(TRASH_FOLDER_PATH)
     count = 0
     for file_ in browsed_img_list:
-        print(f"正在删除文件: {file_}")
         try:
             shutil.move(file_, TRASH_FOLDER_PATH)
             count += 1
