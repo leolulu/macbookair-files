@@ -2,7 +2,6 @@ import os
 import random
 import re
 import shutil
-import uuid
 from typing import List
 
 import dash
@@ -168,7 +167,6 @@ app.layout = html.Div(
 @app.callback(
     dash.dependencies.Output("container", "children"),
     dash.dependencies.Output("remain_count", "children"),
-    dash.dependencies.Output("data_update_img_path_list", "data"),
     dash.dependencies.Input("get_pics", "n_clicks"),
 )
 def popup_100_pics(n_clicks):
@@ -237,10 +235,11 @@ def popup_100_pics(n_clicks):
 
     if len(img_path_list) == 0:
         tbnl_display_mode = False
+        img_path_list = get_img_path_list(img_path_list)
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
-    return return_list, remain_count, uuid.uuid4().hex
+    return return_list, remain_count
 
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
@@ -393,11 +392,13 @@ def delete_button_click(n_clicks):
 
 @callback(
     Input("data_update_img_path_list", "data"),
+    Output("remain_count", "children", allow_duplicate=True),
     prevent_initial_call=True,
 )
 def update_img_path_list(data):
     global img_path_list
     img_path_list = get_img_path_list(img_path_list)
+    return "还剩{}张".format(len(img_path_list))
 
 
 if __name__ == "__main__":

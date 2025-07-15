@@ -55,5 +55,8 @@ function preload(images, index) {
         }
         img.src = src;
         img.name = src;
+    } else {
+        console.log('所有图片加载完成');
+        dash_clientside.set_props("data_update_img_path_list", { data: Date.now() })
     }
 }
