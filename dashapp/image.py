@@ -2,6 +2,7 @@ import os
 import random
 import re
 import shutil
+import uuid
 from typing import List
 
 import dash
@@ -159,7 +160,7 @@ app.layout = html.Div(
             ],
             id="delete_component_container",
         ),
-        dcc.Interval(id="interval_update_img_path_list", interval=10 * 1000, disabled=True),
+        dcc.Store(id="data_update_img_path_list"),
     ]
 )
 
@@ -167,7 +168,7 @@ app.layout = html.Div(
 @app.callback(
     dash.dependencies.Output("container", "children"),
     dash.dependencies.Output("remain_count", "children"),
-    dash.dependencies.Output("interval_update_img_path_list", "disabled"),
+    dash.dependencies.Output("data_update_img_path_list", "data"),
     dash.dependencies.Input("get_pics", "n_clicks"),
 )
 def popup_100_pics(n_clicks):
@@ -239,7 +240,7 @@ def popup_100_pics(n_clicks):
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
-    return return_list, remain_count, False
+    return return_list, remain_count, uuid.uuid4().hex
 
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
@@ -391,12 +392,11 @@ def delete_button_click(n_clicks):
 
 
 @callback(
-    Input("interval_update_img_path_list", "n_intervals"),
+    Input("data_update_img_path_list", "data"),
     prevent_initial_call=True,
 )
-def update_img_path_list(n):
+def update_img_path_list(data):
     global img_path_list
-    dash.set_props("interval_update_img_path_list", {"disabled": True})
     img_path_list = get_img_path_list(img_path_list)
 
 
