@@ -394,7 +394,7 @@ def delete_button_click(n_clicks):
     Input("interval_update_img_path_list", "n_intervals"),
     prevent_initial_call=True,
 )
-def update_img_path_list():
+def update_img_path_list(n):
     global img_path_list
     dash.set_props("interval_update_img_path_list", {"disabled": True})
     img_path_list = get_img_path_list(img_path_list)
