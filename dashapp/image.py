@@ -391,9 +391,13 @@ def delete_button_click(n_clicks):
 
 
 @callback(
-    Input("data_update_img_path_list", "data"),
     Output("remain_count", "children", allow_duplicate=True),
+    Input("data_update_img_path_list", "data"),
     prevent_initial_call=True,
+    running=[
+        (Output("get_pics", "style"), {"background-color": "#e9a8a8"}, {}),
+        (Output("get_pics", "disabled"), True, False),
+    ],
 )
 def update_img_path_list(data):
     global img_path_list
