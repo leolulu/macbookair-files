@@ -159,6 +159,7 @@ app.layout = html.Div(
             ],
             id="delete_component_container",
         ),
+        dcc.Interval(id="interval_update_img_path_list", interval=10 * 1000, disabled=True),
     ]
 )
 
@@ -166,6 +167,7 @@ app.layout = html.Div(
 @app.callback(
     dash.dependencies.Output("container", "children"),
     dash.dependencies.Output("remain_count", "children"),
+    dash.dependencies.Output("interval_update_img_path_list", "disabled"),
     dash.dependencies.Input("get_pics", "n_clicks"),
 )
 def popup_100_pics(n_clicks):
@@ -234,11 +236,10 @@ def popup_100_pics(n_clicks):
 
     if len(img_path_list) == 0:
         tbnl_display_mode = False
-    img_path_list = get_img_path_list(img_path_list)
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
-    return return_list, remain_count
+    return return_list, remain_count, False
 
 
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
@@ -387,6 +388,16 @@ def delete_button_click(n_clicks):
             except Exception as e:
                 print(f"删除失败: {e}")
     return "删除成功{}张".format(count)
+
+
+@callback(
+    Input("interval_update_img_path_list", "n_intervals"),
+    prevent_initial_call=True,
+)
+def update_img_path_list():
+    global img_path_list
+    dash.set_props("interval_update_img_path_list", {"disabled": True})
+    img_path_list = get_img_path_list(img_path_list)
 
 
 if __name__ == "__main__":
