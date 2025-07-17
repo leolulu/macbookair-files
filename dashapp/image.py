@@ -5,7 +5,7 @@ import shutil
 from typing import List
 
 import dash
-from dash import ALL, MATCH, Input, Output, Patch, State, callback, dcc, html
+from dash import ALL, Input, Output, Patch, State, callback, dcc, html
 from PIL import Image
 
 app = dash.Dash(__name__)
@@ -25,6 +25,9 @@ tbnl_display_mode = False
 
 
 def get_img_path_list(img_path_list: List):
+    global browsed_img_list
+    browsed_img_list = [path for path in browsed_img_list if os.path.exists(path)]
+
     temp_img_list = []
     for root, dirs_, files_ in os.walk("./static/img"):
         for file_ in files_:
