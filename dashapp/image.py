@@ -2,7 +2,10 @@ import os
 import random
 import re
 import shutil
-from typing import List
+import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional
 
 import dash
 from dash import ALL, Input, Output, Patch, State, callback, dcc, html
@@ -23,11 +26,11 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 
+exe_for_webp = ThreadPoolExecutor(max_workers=1)
+lock = threading.Lock()
 
-def get_img_path_list(img_path_list: List):
-    global browsed_img_list
-    browsed_img_list = [path for path in browsed_img_list if os.path.exists(path)]
-
+def get_unfiltered_media_path_list():
+    global img_path_list
     temp_img_list = []
     for root, dirs_, files_ in os.walk("./static/img"):
         for file_ in files_:
@@ -48,7 +51,33 @@ def get_img_path_list(img_path_list: List):
                 continue
             if os.path.dirname(os.path.abspath(os.path.join(root, file_))) == os.path.abspath(TRASH_FOLDER_PATH):
                 continue
+            if os.path.splitext(file_)[-1].lower() == ".webp":
+                new_path = os.path.join(root, file_.replace(".webp", ".jpg"))
+
+                def _task(file_, new_path, img_path_list):
+                    command = f'ffmpeg -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
+                    print(f"检测到webp，将转换成jpg，指令为: {command}")
+                    subprocess.run(command, shell=True, check=True, stderr=subprocess.DEVNULL)
+                    os.remove(os.path.join(root, file_))
+                    with lock:
+                        img_path_list = get_img_path_list(img_path_list, new_list=[new_path])
+
+                exe_for_webp.submit(_task, file_, new_path, img_path_list)
+                continue
+
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
+
+    return temp_img_list
+
+
+def get_img_path_list(img_path_list: List, new_list: Optional[List] = None) -> List:
+    global browsed_img_list
+    browsed_img_list = [path for path in browsed_img_list if os.path.exists(path)]
+
+    if new_list:
+        temp_img_list = new_list
+    else:
+        temp_img_list = get_unfiltered_media_path_list()
     temp_img_list.sort()
     for temp_img in temp_img_list:
         if (temp_img not in img_path_list) and (temp_img not in browsed_img_list):
@@ -64,7 +93,7 @@ sample_num = int(len(img_path_list) / 10)
 for pic in random.sample(img_path_list, sample_num):
     try:
         pic_resolutions_sum.append(sum(Image.open(pic).size))
-    except:
+    except:  # noqa: E722
         pass
 try:
     if len(pic_resolutions_sum) < sample_num * 0.5:
@@ -72,7 +101,7 @@ try:
     avg_pic_resolution_sum = sum(pic_resolutions_sum) / len(pic_resolutions_sum)
     page_capacity = int(100_000 / avg_pic_resolution_sum)
     print("平均分辨率和为{}，计算得出每页{}张图...".format(avg_pic_resolution_sum, page_capacity))
-except:
+except:  # noqa: E722
     page_capacity = 10
 # Caution:
 page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候，能取到正确数量。下面的12会除以2，再次得到这里的6
