@@ -2,6 +2,9 @@ import os
 import random
 import re
 import shutil
+import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 import dash
@@ -14,6 +17,7 @@ pic_max_height = 475
 PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl.jpg"
 VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
 TRASH_FOLDER_PATH = "./static/img/.trash"
+JPG_FROM_WEBP_FOLDER = "jpg_from_webp"
 
 img_path_list = []
 browsed_img_list = []
@@ -22,6 +26,10 @@ consecutive_pic_count = 0
 show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
+
+exe_for_webp = ThreadPoolExecutor(max_workers=8)
+lock = threading.Lock()
+converting_webp = []
 
 
 def get_img_path_list(img_path_list: List):
@@ -48,6 +56,28 @@ def get_img_path_list(img_path_list: List):
                 continue
             if os.path.dirname(os.path.abspath(os.path.join(root, file_))) == os.path.abspath(TRASH_FOLDER_PATH):
                 continue
+            if os.path.basename(root) == JPG_FROM_WEBP_FOLDER:
+                continue
+            if (
+                (os.path.splitext(file_)[-1].lower() == ".webp")
+                and (not os.path.exists(os.path.join(root, JPG_FROM_WEBP_FOLDER, file_.replace(".webp", ".jpg"))))
+                and (file_ not in converting_webp)
+            ):
+                new_folder = os.path.join(root, JPG_FROM_WEBP_FOLDER)
+                with lock:
+                    if not os.path.exists(new_folder):
+                        os.makedirs(new_folder)
+                new_path = os.path.join(new_folder, file_.replace(".webp", ".jpg"))
+
+                def _task(file_, new_path):
+                    command = f'ffmpeg -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
+                    print(f"检测到webp，将转换成jpg，指令为: {command}")
+                    subprocess.run(command, shell=True, check=True, stderr=subprocess.DEVNULL)
+                    converting_webp.remove(file_)
+
+                exe_for_webp.submit(_task, file_, new_path)
+                converting_webp.append(file_)
+
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort()
     for temp_img in temp_img_list:
@@ -213,7 +243,13 @@ def popup_100_pics(n_clicks):
                     id={"type": "pic", "index": idx},
                     **{"data-true-src": img_path},
                 ),
-                href=img_path,
+                href=os.path.join(
+                    os.path.dirname(img_path),
+                    JPG_FROM_WEBP_FOLDER,
+                    os.path.basename(img_path).replace(".webp", ".jpg"),
+                )
+                if img_path.endswith(".webp")
+                else img_path,
                 target="_blank",
             )
         )
