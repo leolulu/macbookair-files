@@ -27,7 +27,7 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 
-exe_for_webp = ThreadPoolExecutor(max_workers=8)
+exe_for_webp = ThreadPoolExecutor(max_workers=os.cpu_count())
 lock = threading.Lock()
 converting_webp = []
 
@@ -71,9 +71,15 @@ def get_img_path_list(img_path_list: List):
 
                 def _task(file_, new_path):
                     command = f'ffmpeg -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
-                    print(f"检测到webp，将转换成jpg，指令为: {command}")
-                    subprocess.run(command, shell=True, check=True, stderr=subprocess.DEVNULL)
-                    converting_webp.remove(file_)
+                    # print(f"检测到webp，将转换成jpg，指令为: {command}")
+                    try:
+                        subprocess.run(command, shell=True, check=True, stderr=subprocess.DEVNULL)
+                    except Exception as e:
+                        print(f"webp->jpg转换失败: {e}")
+                        if isinstance(e, subprocess.CalledProcessError):
+                            print(f"详细错误信息: {e.stderr}")
+                    finally:
+                        converting_webp.remove(file_)
 
                 exe_for_webp.submit(_task, file_, new_path)
                 converting_webp.append(file_)
