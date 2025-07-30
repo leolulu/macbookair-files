@@ -35,7 +35,7 @@ converting_webp = []
 
 def get_img_path_list(img_path_list: List):
     global browsed_img_list
-    browsed_img_list = [path for path in browsed_img_list if os.path.exists(path)]
+    browsed_img_list = [path for path in browsed_img_list if os.path.exists(path.replace("%23", "#"))]
 
     temp_img_list = []
     for root, dirs_, files_ in os.walk("./static/img"):
@@ -110,7 +110,7 @@ pic_resolutions_sum = []
 sample_num = int(len(img_path_list) / 10)
 for pic in random.sample(img_path_list, sample_num):
     try:
-        pic_resolutions_sum.append(sum(Image.open(pic).size))
+        pic_resolutions_sum.append(sum(Image.open(pic.replace("%23", "#")).size))
     except:  # noqa: E722
         pass
 try:
@@ -433,12 +433,12 @@ def delete_button_click(n_clicks):
     count = 0
     for file_ in browsed_img_list:
         try:
-            shutil.move(file_, TRASH_FOLDER_PATH)
+            shutil.move(file_.replace("%23", "#"), TRASH_FOLDER_PATH)
             count += 1
         except Exception as e:
             try:
                 if "already exists" in str(e):
-                    os.remove(file_)
+                    os.remove(file_.replace("%23", "#"))
                     count += 1
             except Exception as e:
                 print(f"删除失败: {e}")
