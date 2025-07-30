@@ -28,7 +28,7 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 
-executor = ThreadPoolExecutor(max_workers=4)
+executor = ThreadPoolExecutor(max_workers=8)
 lock = threading.Lock()
 converting_webp = []
 
