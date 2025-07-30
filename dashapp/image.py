@@ -69,7 +69,7 @@ def get_img_path_list(img_path_list: List):
                         os.makedirs(new_folder)
                 new_path = os.path.join(new_folder, file_.replace(".webp", ".jpg"))
 
-                def _task(file_, new_path):
+                def _task(file_, new_path, root):
                     command = f'ffmpeg -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
                     # print(f"检测到webp，将转换成jpg，指令为: {command}")
                     try:
@@ -77,11 +77,12 @@ def get_img_path_list(img_path_list: List):
                     except Exception as e:
                         print(f"webp->jpg转换失败: {e}")
                         if isinstance(e, subprocess.CalledProcessError):
-                            print(f"详细错误信息: {e.stderr}")
+                            print(f"详细错误信息(stdout): {e.stdout}")
+                            print(f"详细错误信息(stderr): {e.stderr}")
                     finally:
                         converting_webp.remove(file_)
 
-                exe_for_webp.submit(_task, file_, new_path)
+                exe_for_webp.submit(_task, file_, new_path, root)
                 converting_webp.append(file_)
 
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
@@ -100,7 +101,7 @@ sample_num = int(len(img_path_list) / 10)
 for pic in random.sample(img_path_list, sample_num):
     try:
         pic_resolutions_sum.append(sum(Image.open(pic).size))
-    except:
+    except:  # noqa: E722
         pass
 try:
     if len(pic_resolutions_sum) < sample_num * 0.5:
@@ -108,7 +109,7 @@ try:
     avg_pic_resolution_sum = sum(pic_resolutions_sum) / len(pic_resolutions_sum)
     page_capacity = int(100_000 / avg_pic_resolution_sum)
     print("平均分辨率和为{}，计算得出每页{}张图...".format(avg_pic_resolution_sum, page_capacity))
-except:
+except:  # noqa: E722
     page_capacity = 10
 # Caution:
 page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候，能取到正确数量。下面的12会除以2，再次得到这里的6
