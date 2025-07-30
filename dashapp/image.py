@@ -71,15 +71,15 @@ def get_img_path_list(img_path_list: List):
                 new_path = os.path.join(new_folder, os.path.splitext(file_)[0] + ".jpg")
 
                 def _task_for_webp(file_, new_path, root):
-                    command = f'ffmpeg -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
+                    command = f'ffmpeg -hide_banner -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
                     # print(f"检测到webp，将转换成jpg，指令为: {command}")
                     try:
                         subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     except Exception as e:
                         print(f"webp->jpg转换失败: {e}\n转换命令: {command}")
                         if isinstance(e, subprocess.CalledProcessError):
-                            print(f"详细错误信息(stdout): {e.stdout}")
-                            print(f"详细错误信息(stderr): {e.stderr}")
+                            print(f"详细错误信息(stdout): {e.stdout.decode()}")
+                            print(f"详细错误信息(stderr): {e.stderr.decode()}")
                     finally:
                         converting_webp.remove(file_)
 
