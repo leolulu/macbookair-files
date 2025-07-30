@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import threading
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
@@ -27,7 +28,7 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 
-exe_for_webp = ThreadPoolExecutor(max_workers=os.cpu_count())
+executor = ThreadPoolExecutor(max_workers=4)
 lock = threading.Lock()
 converting_webp = []
 
@@ -67,23 +68,32 @@ def get_img_path_list(img_path_list: List):
                 with lock:
                     if not os.path.exists(new_folder):
                         os.makedirs(new_folder)
-                new_path = os.path.join(new_folder, file_.replace(".webp", ".jpg"))
+                new_path = os.path.join(new_folder, os.path.splitext(file_)[0] + ".jpg")
 
-                def _task(file_, new_path, root):
+                def _task_for_webp(file_, new_path, root):
                     command = f'ffmpeg -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
                     # print(f"检测到webp，将转换成jpg，指令为: {command}")
                     try:
-                        subprocess.run(command, shell=True, check=True, stderr=subprocess.DEVNULL)
+                        subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     except Exception as e:
-                        print(f"webp->jpg转换失败: {e}")
+                        print(f"webp->jpg转换失败: {e}\n转换命令: {command}")
                         if isinstance(e, subprocess.CalledProcessError):
                             print(f"详细错误信息(stdout): {e.stdout}")
                             print(f"详细错误信息(stderr): {e.stderr}")
                     finally:
                         converting_webp.remove(file_)
 
-                exe_for_webp.submit(_task, file_, new_path, root)
+                executor.submit(_task_for_webp, file_, new_path, root)
                 converting_webp.append(file_)
+
+            if os.path.splitext(file_)[-1].lower() == ".zip":
+
+                def _task_for_zip(file_, root):
+                    with zipfile.ZipFile(os.path.join(root, file_), "r") as zip_ref:
+                        zip_ref.extractall(os.path.join(root, os.path.splitext(file_)[0]))
+                    os.remove(os.path.join(root, file_))
+
+                executor.submit(_task_for_zip, file_, root)
 
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort()
