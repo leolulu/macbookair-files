@@ -28,7 +28,8 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 
-executor = ThreadPoolExecutor(max_workers=8)
+exe_for_webp = ThreadPoolExecutor(max_workers=8)
+exe_for_zip = ThreadPoolExecutor(max_workers=1)
 lock = threading.Lock()
 converting_webp = []
 
@@ -83,7 +84,7 @@ def get_img_path_list(img_path_list: List):
                     finally:
                         converting_webp.remove(file_)
 
-                executor.submit(_task_for_webp, file_, new_path, root)
+                exe_for_webp.submit(_task_for_webp, file_, new_path, root)
                 converting_webp.append(file_)
 
             if os.path.splitext(file_)[-1].lower() == ".zip":
@@ -93,7 +94,7 @@ def get_img_path_list(img_path_list: List):
                         zip_ref.extractall(os.path.join(root, os.path.splitext(file_)[0]))
                     os.remove(os.path.join(root, file_))
 
-                executor.submit(_task_for_zip, file_, root)
+                exe_for_zip.submit(_task_for_zip, file_, root)
 
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort()
