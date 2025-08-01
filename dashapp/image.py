@@ -33,6 +33,8 @@ exe_for_zip = ThreadPoolExecutor(max_workers=1)
 lock = threading.Lock()
 converting_webp = []
 
+os.makedirs("./static/img", exist_ok=True)
+
 
 def get_img_path_list(img_path_list: List):
     global browsed_img_list
