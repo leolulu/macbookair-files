@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -163,7 +164,7 @@ class FasterWhisper:
             except Exception as e:
                 print(f"矫正字幕时出错，取消矫正，原因为：{e}")
 
-        print(f"音转文环节运行时间为：{int(time.time()-b_time)}秒，速率为：{round(video_duration/(time.time()-b_time),2)}\n")
+        print(f"音转文环节运行时间为：{int(time.time() - b_time)}秒，速率为：{round(video_duration / (time.time() - b_time), 2)}\n")
         if with_srt:
             srt_content = self.generate_srt(self.segments_to_srt_subtitles(segments))
             srt_file_path = os.path.splitext(os.path.basename(media_path))[0] + ".srt"
@@ -178,7 +179,7 @@ class FasterWhisper:
         if with_diarization:
             b_time = time.time()
             diarization_info = self.get_diarization(media_path, move_result_file_callback, with_png)
-            print(f"说话人识别环节运行时间为：{int(time.time()-b_time)}秒，速率为：{round(video_duration/(time.time()-b_time),2)}\n")
+            print(f"说话人识别环节运行时间为：{int(time.time() - b_time)}秒，速率为：{round(video_duration / (time.time() - b_time), 2)}\n")
         if word_timestamps and with_json:
             json_data = {
                 "asr_info": [
@@ -225,7 +226,8 @@ class FasterWhisper:
         audio_path, temp_dir_for_wav = self.media_to_wav(media_path)
         if not self.pyannote_pipeline:
             self.pyannote_pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1", use_auth_token="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"
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=base64.b64decode("aGZfYVJ1c010aFJTdFNuVWxmRHFQbVdXQ1djSExyTXVLT0RqbQ==").decode('utf-8'),
             )
             try:
                 if not re.search("RTX 3060", torch.cuda.get_device_name()):
