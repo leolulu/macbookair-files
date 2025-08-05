@@ -225,7 +225,7 @@ class FasterWhisper:
         audio_path, temp_dir_for_wav = self.media_to_wav(media_path)
         if not self.pyannote_pipeline:
             self.pyannote_pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1", use_auth_token="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"
+                "pyannote/speaker-diarization-3.1", use_auth_token="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"
             )
             try:
                 if not re.search("RTX 3060", torch.cuda.get_device_name()):
