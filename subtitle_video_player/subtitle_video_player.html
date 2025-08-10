@@ -1035,6 +1035,10 @@
             var fastForwardTaskTimer = null
             var fastForwardTaskInstance = null
             function fastForwardUntilDetach(detach_time, need_calibration = false, fastForwardSpeed = 8) {
+                previousSpeed = $('#video')[0].playbackRate;
+                if (previousSpeed > 1) {
+                    fastForwardSpeed *= previousSpeed;
+                }
                 $('#video').off('timeupdate', highlightSubtitle);
                 $('#video').off('seeking', highlightSubtitle);
                 fastForwardTaskInstance = {
@@ -1078,7 +1082,6 @@
             var hideProgressBarTempTimer = null;
             // Set up event listener for video time updates
             function highlightSubtitle() {
-                previousSpeed = $('#video')[0].playbackRate;
                 var currentTime = accTime($('#video')[0].currentTime);
                 // 更新标题显示播放进度
                 var originalTitle = document.title.replace(/^\[\d+%\]\s*/, '');
@@ -1178,19 +1181,18 @@
                     if (nextSubtitle) {
                         var nextSubtitleStartTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
                         if (enableFFMode) {
-                            let duration = nextSubtitleStartTime - currentTime;
-                            if (duration > 1) {
-                                let fastForwardSpeed = 8;
-                                for (let s = 2; s < 8; s++) {
-                                    if (duration <= s * 2) {
-                                        fastForwardSpeed = s;
-                                        break;
+                            if (!fastForwarding) {
+                                let duration = nextSubtitleStartTime - currentTime;
+                                if (duration > 1) {
+                                    let fastForwardSpeed = 8;
+                                    for (let s = 2; s < 8; s++) {
+                                        if (duration <= s * 2) {
+                                            fastForwardSpeed = s;
+                                            break;
+                                        }
                                     }
+                                    fastForwardUntilDetach(nextSubtitleStartTime, $('#FFWithoutCalibration').prop('checked') ? false : duration > 3, fastForwardSpeed);
                                 }
-                                if (previousSpeed > 1) {
-                                    fastForwardSpeed *= previousSpeed;
-                                }
-                                fastForwardUntilDetach(nextSubtitleStartTime, $('#FFWithoutCalibration').prop('checked') ? false : duration > 3, fastForwardSpeed);
                             }
                         } else {
                             $('#video')[0].currentTime = nextSubtitleStartTime;
