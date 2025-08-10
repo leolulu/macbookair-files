@@ -179,7 +179,7 @@ class VideoCoordPicker:
         self.slider_val_min, self.slider_val_max = cast(Tuple[float, float], self.slider.val)
         try:
             self._on_slider_change(changed_value)
-        except:
+        except :  # noqa: E722
             pass
 
     def _on_slider_change(self, val):
@@ -225,7 +225,7 @@ class VideoCoordPicker:
             print(f"最终选中的矩形坐标: {self.selected_rect}")  # (x, y, width, height)
             plt.close(self.fig)
         elif self.checkbox.get_status()[0]:
-            print(f"没有框选矩形，但是启用了RangeSlider，走trim流程...")
+            print("没有框选矩形，但是启用了RangeSlider，走trim流程...")
             plt.close(self.fig)
         else:
             print("既未选择矩形，也未选择时长范围。请设置至少一个！")
@@ -317,7 +317,7 @@ def move_with_optional_security(source, target, backup_target=None, msg=""):
         time.sleep(2)
     try:
         shutil.move(source, target)
-    except:
+    except:  # noqa: E722
         if backup_target:
             shutil.move(source, target)
     if msg:
@@ -444,7 +444,7 @@ def log_ffmpeg_convert_error(
     if isinstance(proc, subprocess.CompletedProcess):
         try:
             proc.check_returncode()
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError as _:
             _write_error_log("\n".join(stderr_info))
     elif isinstance(proc, subprocess.Popen):
         if (proc.returncode != 0) and proc.stderr:
@@ -530,7 +530,7 @@ def gen_video_thumbnail(
         filter_drawtext_command = filter_drawtext_command.replace("drawtext_pts_offset", str(int(i) + start_offset))
         filter_commands.append(filter_drawtext_command)
         if copy_stream_mode:
-            gen_footage_command += f" -c:v copy "
+            gen_footage_command += " -c:v copy "
         else:
             gen_footage_command += f" -vf {','.join(filter_commands)} "
         output_file_path = os.path.join(
@@ -539,7 +539,7 @@ def gen_video_thumbnail(
         )
         footage_paths.append(output_file_path)
         if gpu_mode:
-            gen_footage_command += f" -vcodec hevc_nvenc -b:v 10M "
+            gen_footage_command += " -vcodec hevc_nvenc -b:v 10M "
         else:
             gen_footage_command += f" -preset {preset} "
         gen_footage_command += " -y "
@@ -607,7 +607,7 @@ def gen_video_thumbnail(
                     intermediate_file_dimension = (intermediate_file_width, intermediate_file_height)  # type: ignore
         # 修复受损的中间文件
         if corrupted_file_paths:
-            print(f"开始修复以下受损文件:")
+            print("开始修复以下受损文件:")
             print("\n".join(corrupted_file_paths))
             for corrupted_file_path in corrupted_file_paths:
                 fix_command = 'ffmpeg -f lavfi -i color=c=gray:s={}x{}:d=1 -r {} -c:v libx264 -y "{}"'.format(
@@ -638,7 +638,7 @@ def gen_video_thumbnail(
     if len(row_ids) > 1:
         v_commands += f"vstack=inputs={rows}[out_final]"
     else:
-        v_commands += f"null[out_final]"
+        v_commands += "null[out_final]"
     filter_complex_command_segment = [h_commands, v_commands]
     if copy_stream_mode:
         filter_complex_command_segment.append(rf"[out_final]scale=w=-2:h=min(in_h\,{max_output_height})[out_final_scaled]")
@@ -648,7 +648,7 @@ def gen_video_thumbnail(
     final_stream_name = "out_final_scaled" if copy_stream_mode else "out_final"
     command += f' -map "[{final_stream_name}]" -c:a copy -movflags +faststart -y '
     if gpu_mode:
-        command += f" -vcodec hevc_nvenc -b:v 10M "
+        command += " -vcodec hevc_nvenc -b:v 10M "
     else:
         command += f" -preset {preset} "
     command += f' "{temp_output_path_video}"'
@@ -678,7 +678,7 @@ def gen_video_thumbnail(
     for f in footage_paths:
         try:
             os.remove(f)
-        except:
+        except:  # noqa: E722
             if not copy_stream_mode:
                 traceback.print_exc()
 
@@ -747,7 +747,7 @@ def gen_info(video_path, rows, cols, screen_ratio):
             cols = get_max_screen_to_body_ratio_col(height, width, rows, cols_precise, screen_ratio)
             if (rows == 1) and (cols == 1):
                 rows = 2
-                print(f"行数输入为1，计算出列数为1，将无法拼接。将行数调整为2，重新计算...")
+                print("行数输入为1，计算出列数为1，将无法拼接。将行数调整为2，重新计算...")
             else:
                 break
 
@@ -815,7 +815,7 @@ def generate_thumbnail(
                     copy_stream_mode,
                     disable_merge_lock,
                 )
-        except:
+        except:  # noqa: E722
             traceback.print_exc()
 
     _, _, _, _, duration_in_seconds, rows_calced, cols_calced = gen_info(video_path, rows, cols, screen_ratio)
@@ -840,7 +840,7 @@ def generate_thumbnail(
 def preprocessing_rotate_video(video_path: str, rotate_sign):
     if rotate_sign is None:
         return video_path
-    print(f"开始预处理环节：旋转")
+    print("开始预处理环节：旋转")
 
     if os.path.splitext(video_path.lower())[-1] != ".mp4":
         nise_mp4_path = os.path.splitext(video_path)[0] + "_nise.mp4"
@@ -875,7 +875,7 @@ def preprocessing_crop_trim_video(input_video_path: str, crop_sign):
     if crop_sign is None:
         return input_video_path
     output_video_path = input_video_path
-    print(f"开始预处理环节：裁剪")
+    print("开始预处理环节：裁剪")
     with threading.Lock():
         queue = multiprocessing.Queue()
         proc = multiprocessing.Process(
@@ -885,7 +885,7 @@ def preprocessing_crop_trim_video(input_video_path: str, crop_sign):
         proc.start()
         proc.join()
         if proc.exitcode != 0:
-            raise UserWarning(f"pick_coord_and_optionally_trim通过子进程没有运行成功，裁剪失败！")
+            raise UserWarning("pick_coord_and_optionally_trim通过子进程没有运行成功，裁剪失败！")
         coord, trim_range = queue.get()
     if (coord is None) and (trim_range is None):
         raise UserWarning("没有框选裁剪坐标或截取时间范围，取消处理...")
@@ -1021,7 +1021,7 @@ def process_video(args, **kwargs):
                         args.copy,
                         args.disable_merge_lock,
                     )
-                except:
+                except:  # noqa: E722
                     traceback.print_exc()
     elif str(video_path).lower().startswith("http"):  # 处理网络视频
         file_name = os.path.basename(video_path)
@@ -1134,7 +1134,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.pic_only and args.video_only:
-        print(f"-p和-v模式只能二选一，不能同时设置!")
+        print("-p和-v模式只能二选一，不能同时设置!")
         exit()
 
     if args.global_low:
@@ -1150,7 +1150,7 @@ if __name__ == "__main__":
 
             try:
                 video_path, rows_input = input_string.rsplit(" ", 1)
-            except:
+            except:  # noqa: E722
                 print("输入格式错误，应该是'视频地址 行数[-列数][l|r][c]'的形式!")
                 continue
 
@@ -1159,7 +1159,7 @@ if __name__ == "__main__":
             if preprocessing_signs_match := re.findall(r"[lrc]+$", rows_input):
                 preprocessing_signs = preprocessing_signs_match[0]
                 if "l" in preprocessing_signs and "r" in preprocessing_signs:
-                    print(f"'l'和r'不能同时指定!")
+                    print("'l'和r'不能同时指定!")
                     continue
                 if "l" in preprocessing_signs:
                     rotate_sign = "l"
@@ -1175,7 +1175,7 @@ if __name__ == "__main__":
             except ValueError:
                 try:
                     rows, cols = [int(i) for i in rows_input.split("-")]
-                except:
+                except:  # noqa: E722
                     print(f"行列数解析失败，输入为：{rows_input}")
                     continue
 
