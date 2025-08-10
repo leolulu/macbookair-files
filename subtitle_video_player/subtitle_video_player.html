@@ -1030,54 +1030,6 @@
                 }, 1000);
             }
 
-            var previousSpeed = 1;
-            var fastForwarding = false
-            var fastForwardTaskTimer = null
-            var fastForwardTaskInstance = null
-            function fastForwardUntilDetach(detach_time, need_calibration = false, fastForwardSpeed = 8) {
-                previousSpeed = $('#video')[0].playbackRate;
-                if (previousSpeed > 1) {
-                    fastForwardSpeed *= previousSpeed;
-                }
-                $('#video').off('timeupdate', highlightSubtitle);
-                $('#video').off('seeking', highlightSubtitle);
-                fastForwardTaskInstance = {
-                    needCalibration: need_calibration,
-                    taskFunction() {
-                        fastForwarding = false;
-                        hideVideoSpeedControllerTemporarily();
-                        $('#video')[0].playbackRate = previousSpeed;
-                        if (fastForwardTaskInstance.needCalibration) {
-                            $('#video')[0].currentTime = detach_time;
-                        }
-                        $('#video').on('timeupdate', highlightSubtitle);
-                        $('#video').on('seeking', highlightSubtitle);
-                        $('#ff-sign').addClass('hide-element');
-                    }
-                }
-                fastForwardTaskTimer = setTimeout(
-                    fastForwardTaskInstance.taskFunction,
-                    (detach_time - $('#video')[0].currentTime) / fastForwardSpeed * 1000
-                );
-                fastForwarding = true;
-                hideVideoSpeedControllerTemporarily();
-                $('#video')[0].playbackRate = fastForwardSpeed;
-                $('#ff-sign').removeClass('hide-element');
-            }
-
-            function fastForwardMonitor() {
-                if (!fastForwarding) return
-                let currentTime = accTime($('#video')[0].currentTime);
-                let subActivating = subtitles.some((sub) => {
-                    return currentTime >= sub.start && currentTime < sub.end;
-                });
-                if (subActivating) {
-                    clearTimeout(fastForwardTaskTimer);
-                    fastForwardTaskInstance.needCalibration = false;
-                    setTimeout(fastForwardTaskInstance.taskFunction, 0);
-                }
-            }
-            $('#video').on('timeupdate', fastForwardMonitor);
 
             var hideProgressBarTempTimer = null;
             // Set up event listener for video time updates
@@ -1159,58 +1111,6 @@
                     $('#caption').text("");
                 }
 
-                var skipBlanks = $('#skipBlanks').prop('checked');
-                var enableFFMode = $('#enableFFMode').prop('checked');
-                var skipIntervalChecked = $('#enableSkipInterval').prop('checked');
-                var skipInterval = parseFloat(document.getElementById('skipInterval').value);
-                var sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
-                var sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
-                var currentSubtitleIndex = subtitles.findIndex(function (subtitle) {
-                    if (skipIntervalChecked) {
-                        return subtitle.start <= currentTime && (subtitle.end < subtitle.start + skipInterval ? subtitle.end : subtitle.start + skipInterval) > currentTime;
-                    } else if (sentenceExtensionChecked) {
-                        return accTime(subtitle.start - sentenceExtension) <= currentTime && accTime(subtitle.end + sentenceExtension) > currentTime;
-                    } else {
-                        return subtitle.start <= currentTime && subtitle.end > currentTime;
-                    }
-                });
-                if (skipBlanks && currentSubtitleIndex == -1) {
-                    var nextSubtitle = subtitles.find(function (subtitle) {
-                        return subtitle.start > currentTime;
-                    });
-                    if (nextSubtitle) {
-                        var nextSubtitleStartTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
-                        if (enableFFMode) {
-                            if (!fastForwarding) {
-                                let duration = nextSubtitleStartTime - currentTime;
-                                if (duration > 1) {
-                                    let fastForwardSpeed = 8;
-                                    for (let s = 2; s < 8; s++) {
-                                        if (duration <= s * 2) {
-                                            fastForwardSpeed = s;
-                                            break;
-                                        }
-                                    }
-                                    fastForwardUntilDetach(nextSubtitleStartTime, $('#FFWithoutCalibration').prop('checked') ? false : duration > 3, fastForwardSpeed);
-                                }
-                            }
-                        } else {
-                            $('#video')[0].currentTime = nextSubtitleStartTime;
-                        }
-                    } else {
-                        if (enableFFMode) {
-                            fastForwardUntilDetach($('#video')[0].duration);
-                        } else {
-                            $('#video')[0].currentTime = $('#video')[0].duration;
-                            $('#video')[0].pause();
-                            $('#skipBlanks').trigger('click');
-                            setTimeout(() => {
-                                $('#skipBlanks').trigger('click');
-                            }, 1000);
-                        }
-                    }
-                }
-
                 // 控制简易进度条
                 let video = document.getElementById('video');
                 let progressBar = document.getElementById('progress-bar');
@@ -1250,9 +1150,85 @@
                 }
             }
 
-            // Listen for timeupdate event to highlight the subtitle
-            $('#video').on('timeupdate', highlightSubtitle);
-            $('#video').on('seeking', highlightSubtitle);
+            // STATE MACHINE REFACTOR
+            const PLAYER_STATE = {
+                IDLE: 'IDLE',
+                FAST_FORWARDING: 'FAST_FORWARDING',
+                RESTORING: 'RESTORING'
+            };
+
+            var playerState = {
+                currentState: PLAYER_STATE.IDLE,
+                originalSpeed: 1,
+                targetTime: 0
+            };
+
+            function updatePlayerState() {
+                const video = $('#video')[0];
+                const currentTime = accTime(video.currentTime);
+
+                // --- STATE LOGIC ---
+
+                // 1. IDLE State: Check if we need to start fast forwarding
+                if (playerState.currentState === PLAYER_STATE.IDLE) {
+                    const skipBlanks = $('#skipBlanks').prop('checked');
+                    if (skipBlanks) {
+                        const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
+                        const sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
+                        const isDuringSubtitle = subtitles.some(sub => (accTime(sub.start - (sentenceExtensionChecked ? sentenceExtension : 0))) <= currentTime && (accTime(sub.end + (sentenceExtensionChecked ? sentenceExtension : 0))) > currentTime);
+
+                        if (!isDuringSubtitle) {
+                            const nextSubtitle = subtitles.find(sub => sub.start > currentTime);
+                            if (nextSubtitle) {
+                                playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
+                                playerState.originalSpeed = video.playbackRate;
+                                playerState.targetTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
+                                
+                                let duration = playerState.targetTime - currentTime;
+                                let fastForwardSpeed = 8;
+                                for (let s = 2; s < 8; s++) {
+                                    if (duration <= s * 2) {
+                                        fastForwardSpeed = s;
+                                        break;
+                                    }
+                                }
+                                video.playbackRate = fastForwardSpeed;
+                                $('#ff-sign').removeClass('hide-element');
+                            }
+                        }
+                    }
+                }
+
+                // 2. FAST_FORWARDING State: Check if we need to stop
+                if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING) {
+                    const isDuringSubtitle = subtitles.some(sub => sub.start <= currentTime && sub.end > currentTime);
+                    if (currentTime >= playerState.targetTime || isDuringSubtitle) {
+                        playerState.currentState = PLAYER_STATE.RESTORING;
+                    }
+                }
+
+                // 3. RESTORING State: Restore speed and return to IDLE
+                if (playerState.currentState === PLAYER_STATE.RESTORING) {
+                    video.playbackRate = playerState.originalSpeed;
+                    $('#ff-sign').addClass('hide-element');
+                    playerState.currentState = PLAYER_STATE.IDLE;
+                    playerState.originalSpeed = 1;
+                    playerState.targetTime = 0;
+                }
+
+                // --- UI UPDATES ---
+                highlightSubtitle();
+
+                // Loop
+                requestAnimationFrame(updatePlayerState);
+            }
+
+            function startPlayerStateLoop() {
+                // Remove old event listeners and start the new state machine loop
+                $('#video').off('timeupdate', highlightSubtitle);
+                $('#video').off('seeking', highlightSubtitle);
+                requestAnimationFrame(updatePlayerState);
+            }
 
 
 
@@ -1529,6 +1505,9 @@
                 });
             })();
 
+            // Bind the state machine to the video's timeupdate and seeking events.
+            $('#video').on('timeupdate', updatePlayerState);
+            $('#video').on('seeking', updatePlayerState);
         });
     </script>
 </body>
