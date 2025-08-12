@@ -1160,7 +1160,8 @@
             var playerState = {
                 currentState: PLAYER_STATE.IDLE,
                 originalSpeed: 1,
-                targetTime: 0
+                targetTime: 0,
+                needCalibration: false
             };
 
             function updatePlayerState() {
@@ -1173,27 +1174,67 @@
                 if (playerState.currentState === PLAYER_STATE.IDLE) {
                     const skipBlanks = $('#skipBlanks').prop('checked');
                     if (skipBlanks) {
+                        const skipIntervalChecked = $('#enableSkipInterval').prop('checked');
+                        const skipInterval = parseFloat(document.getElementById('skipInterval').value);
                         const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
                         const sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
-                        const isDuringSubtitle = subtitles.some(sub => (accTime(sub.start - (sentenceExtensionChecked ? sentenceExtension : 0))) <= currentTime && (accTime(sub.end + (sentenceExtensionChecked ? sentenceExtension : 0))) > currentTime);
+
+                        const isDuringSubtitle = subtitles.some(sub => {
+                            if (skipIntervalChecked) {
+                                return sub.start <= currentTime && (sub.end < sub.start + skipInterval ? sub.end : sub.start + skipInterval) > currentTime;
+                            } else if (sentenceExtensionChecked) {
+                                return accTime(sub.start - sentenceExtension) <= currentTime && accTime(sub.end + sentenceExtension) > currentTime;
+                            } else {
+                                return sub.start <= currentTime && sub.end > currentTime;
+                            }
+                        });
 
                         if (!isDuringSubtitle) {
                             const nextSubtitle = subtitles.find(sub => sub.start > currentTime);
                             if (nextSubtitle) {
-                                playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
-                                playerState.originalSpeed = video.playbackRate;
-                                playerState.targetTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
-                                
-                                let duration = playerState.targetTime - currentTime;
-                                let fastForwardSpeed = 8;
-                                for (let s = 2; s < 8; s++) {
-                                    if (duration <= s * 2) {
-                                        fastForwardSpeed = s;
-                                        break;
+                                const targetTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
+                                const enableFFMode = $('#enableFFMode').prop('checked');
+
+                                if (enableFFMode) {
+                                    hideVideoSpeedControllerTemporarily();
+                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
+                                    playerState.originalSpeed = video.playbackRate;
+                                    playerState.targetTime = targetTime;
+                                    let duration = playerState.targetTime - currentTime;
+                                    playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
+
+                                    let fastForwardSpeed = 8;
+                                    for (let s = 2; s < 8; s++) {
+                                        if (duration <= s * 2) {
+                                            fastForwardSpeed = s;
+                                            break;
+                                        }
                                     }
+                                    if (playerState.originalSpeed > 1) {
+                                        fastForwardSpeed *= playerState.originalSpeed;
+                                    }
+                                    video.playbackRate = fastForwardSpeed;
+                                    $('#ff-sign').removeClass('hide-element');
+                                } else {
+                                    video.currentTime = targetTime;
                                 }
-                                video.playbackRate = fastForwardSpeed;
-                                $('#ff-sign').removeClass('hide-element');
+                            } else {
+                                // Handle blank space at the end of the video
+                                const enableFFMode = $('#enableFFMode').prop('checked');
+                                if (enableFFMode) {
+                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
+                                    playerState.originalSpeed = video.playbackRate;
+                                    playerState.targetTime = video.duration;
+                                    video.playbackRate = 8; // Default fast forward speed
+                                    $('#ff-sign').removeClass('hide-element');
+                                } else {
+                                    video.currentTime = video.duration;
+                                    video.pause();
+                                    $('#skipBlanks').trigger('click');
+                                    setTimeout(() => {
+                                        $('#skipBlanks').trigger('click');
+                                    }, 1000);
+                                }
                             }
                         }
                     }
@@ -1209,24 +1250,22 @@
 
                 // 3. RESTORING State: Restore speed and return to IDLE
                 if (playerState.currentState === PLAYER_STATE.RESTORING) {
+                    hideVideoSpeedControllerTemporarily();
                     video.playbackRate = playerState.originalSpeed;
+                    if (playerState.needCalibration) {
+                        video.currentTime = playerState.targetTime;
+                    }
                     $('#ff-sign').addClass('hide-element');
                     playerState.currentState = PLAYER_STATE.IDLE;
                     playerState.originalSpeed = 1;
                     playerState.targetTime = 0;
+                    playerState.needCalibration = false;
                 }
 
                 // --- UI UPDATES ---
                 highlightSubtitle();
 
                 // Loop
-                requestAnimationFrame(updatePlayerState);
-            }
-
-            function startPlayerStateLoop() {
-                // Remove old event listeners and start the new state machine loop
-                $('#video').off('timeupdate', highlightSubtitle);
-                $('#video').off('seeking', highlightSubtitle);
                 requestAnimationFrame(updatePlayerState);
             }
 
@@ -1505,9 +1544,8 @@
                 });
             })();
 
-            // Bind the state machine to the video's timeupdate and seeking events.
-            $('#video').on('timeupdate', updatePlayerState);
-            $('#video').on('seeking', updatePlayerState);
+            // Start the player state machine loop
+            requestAnimationFrame(updatePlayerState);
         });
     </script>
 </body>
