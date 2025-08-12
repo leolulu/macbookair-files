@@ -1168,7 +1168,13 @@
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
 
-                // --- STATE LOGIC ---
+                // --- WATCHDOG & STATE MACHINE ---
+
+                // Watchdog: Continuously correct playback rate if it mismatches the expected non-fast-forward speed.
+                // This handles cases where the browser might ignore or delay a playbackRate change.
+                if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING && video.playbackRate !== playerState.originalSpeed) {
+                    video.playbackRate = playerState.originalSpeed;
+                }
 
                 // 1. IDLE State: Check if we need to start fast forwarding
                 if (playerState.currentState === PLAYER_STATE.IDLE) {
@@ -1197,21 +1203,24 @@
 
                                 if (enableFFMode) {
                                     hideVideoSpeedControllerTemporarily();
-                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
-                                    playerState.originalSpeed = video.playbackRate;
+                                    playerState.originalSpeed = video.playbackRate; // Record current speed
                                     playerState.targetTime = targetTime;
-                                    let duration = playerState.targetTime - currentTime;
-                                    playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
+                                    playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : (targetTime - currentTime) > 3;
+                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
 
                                     let fastForwardSpeed = 8;
                                     for (let s = 2; s < 8; s++) {
-                                        if (duration <= s * 2) {
+                                        if ((targetTime - currentTime) <= s * 2) {
                                             fastForwardSpeed = s;
                                             break;
                                         }
                                     }
                                     if (playerState.originalSpeed > 1) {
                                         fastForwardSpeed *= playerState.originalSpeed;
+                                    }
+                                    // Add a cap to prevent the browser from throwing an error
+                                    if (fastForwardSpeed > 16) {
+                                        fastForwardSpeed = 16;
                                     }
                                     video.playbackRate = fastForwardSpeed;
                                     $('#ff-sign').removeClass('hide-element');
@@ -1222,9 +1231,9 @@
                                 // Handle blank space at the end of the video
                                 const enableFFMode = $('#enableFFMode').prop('checked');
                                 if (enableFFMode) {
-                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                     playerState.originalSpeed = video.playbackRate;
                                     playerState.targetTime = video.duration;
+                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                     video.playbackRate = 8; // Default fast forward speed
                                     $('#ff-sign').removeClass('hide-element');
                                 } else {
@@ -1238,18 +1247,14 @@
                             }
                         }
                     }
-                }
-
-                // 2. FAST_FORWARDING State: Check if we need to stop
-                if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING) {
+                } else if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING) {
+                    // 2. FAST_FORWARDING State: Check if we need to stop
                     const isDuringSubtitle = subtitles.some(sub => sub.start <= currentTime && sub.end > currentTime);
                     if (currentTime >= playerState.targetTime || isDuringSubtitle) {
                         playerState.currentState = PLAYER_STATE.RESTORING;
                     }
-                }
-
-                // 3. RESTORING State: Restore speed and return to IDLE
-                if (playerState.currentState === PLAYER_STATE.RESTORING) {
+                } else if (playerState.currentState === PLAYER_STATE.RESTORING) {
+                    // 3. RESTORING State: Restore speed and return to IDLE
                     hideVideoSpeedControllerTemporarily();
                     video.playbackRate = playerState.originalSpeed;
                     if (playerState.needCalibration) {
@@ -1257,16 +1262,10 @@
                     }
                     $('#ff-sign').addClass('hide-element');
                     playerState.currentState = PLAYER_STATE.IDLE;
-                    playerState.originalSpeed = 1;
-                    playerState.targetTime = 0;
-                    playerState.needCalibration = false;
                 }
 
                 // --- UI UPDATES ---
                 highlightSubtitle();
-
-                // Loop
-                requestAnimationFrame(updatePlayerState);
             }
 
 
@@ -1544,8 +1543,9 @@
                 });
             })();
 
-            // Start the player state machine loop
-            requestAnimationFrame(updatePlayerState);
+            // Bind the state machine to the video's timeupdate and seeking events.
+            $('#video').on('timeupdate', updatePlayerState);
+            $('#video').on('seeking', updatePlayerState);
         });
     </script>
 </body>
