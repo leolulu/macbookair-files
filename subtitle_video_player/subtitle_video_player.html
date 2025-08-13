@@ -1199,31 +1199,34 @@
                             const nextSubtitle = subtitles.find(sub => sub.start > currentTime);
                             if (nextSubtitle) {
                                 const targetTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
+                                const duration = targetTime - currentTime;
                                 const enableFFMode = $('#enableFFMode').prop('checked');
 
                                 if (enableFFMode) {
-                                    hideVideoSpeedControllerTemporarily();
-                                    playerState.originalSpeed = video.playbackRate; // Record current speed
-                                    playerState.targetTime = targetTime;
-                                    playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : (targetTime - currentTime) > 3;
-                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
+                                    if (duration > 1) {
+                                        hideVideoSpeedControllerTemporarily();
+                                        playerState.originalSpeed = video.playbackRate; // Record current speed
+                                        playerState.targetTime = targetTime;
+                                        playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
+                                        playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
 
-                                    let fastForwardSpeed = 8;
-                                    for (let s = 2; s < 8; s++) {
-                                        if ((targetTime - currentTime) <= s * 2) {
-                                            fastForwardSpeed = s;
-                                            break;
+                                        let fastForwardSpeed = 8;
+                                        for (let s = 2; s < 8; s++) {
+                                            if (duration <= s * 2) {
+                                                fastForwardSpeed = s;
+                                                break;
+                                            }
                                         }
+                                        if (playerState.originalSpeed > 1) {
+                                            fastForwardSpeed *= playerState.originalSpeed;
+                                        }
+                                        // Add a cap to prevent the browser from throwing an error
+                                        if (fastForwardSpeed > 16) {
+                                            fastForwardSpeed = 16;
+                                        }
+                                        video.playbackRate = fastForwardSpeed;
+                                        $('#ff-sign').removeClass('hide-element');
                                     }
-                                    if (playerState.originalSpeed > 1) {
-                                        fastForwardSpeed *= playerState.originalSpeed;
-                                    }
-                                    // Add a cap to prevent the browser from throwing an error
-                                    if (fastForwardSpeed > 16) {
-                                        fastForwardSpeed = 16;
-                                    }
-                                    video.playbackRate = fastForwardSpeed;
-                                    $('#ff-sign').removeClass('hide-element');
                                 } else {
                                     video.currentTime = targetTime;
                                 }
