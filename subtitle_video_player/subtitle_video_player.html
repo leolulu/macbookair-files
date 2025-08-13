@@ -1234,7 +1234,7 @@
                                     playerState.originalSpeed = video.playbackRate;
                                     playerState.targetTime = video.duration;
                                     playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
-                                    video.playbackRate = 8; // Default fast forward speed
+                                    video.playbackRate = 8; //  TODO: 这个地方还是要自动计算
                                     $('#ff-sign').removeClass('hide-element');
                                 } else {
                                     video.currentTime = video.duration;
@@ -1249,7 +1249,7 @@
                     }
                 } else if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING) {
                     // 2. FAST_FORWARDING State: Check if we need to stop
-                    const isDuringSubtitle = subtitles.some(sub => sub.start <= currentTime && sub.end > currentTime);
+                    const isDuringSubtitle = subtitles.some(sub => sub.start <= currentTime && sub.end > currentTime); //TODO: 这个地方还是要像上面的一样，涵盖所有情况，包括延展句长
                     if (currentTime >= playerState.targetTime || isDuringSubtitle) {
                         playerState.currentState = PLAYER_STATE.RESTORING;
                     }
