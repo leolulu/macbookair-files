@@ -1164,6 +1164,23 @@
                 needCalibration: false
             };
 
+            function checkIsDuringSubtitle(currentTime) {
+                const skipIntervalChecked = $('#enableSkipInterval').prop('checked');
+                const skipInterval = parseFloat(document.getElementById('skipInterval').value);
+                const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
+                const sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
+
+                return subtitles.some(sub => {
+                    if (skipIntervalChecked) {
+                        return sub.start <= currentTime && (sub.end < sub.start + skipInterval ? sub.end : sub.start + skipInterval) > currentTime;
+                    } else if (sentenceExtensionChecked) {
+                        return accTime(sub.start - sentenceExtension) <= currentTime && accTime(sub.end + sentenceExtension) > currentTime;
+                    } else {
+                        return sub.start <= currentTime && sub.end > currentTime;
+                    }
+                });
+            }
+
             function updatePlayerState() {
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
@@ -1180,24 +1197,13 @@
                 if (playerState.currentState === PLAYER_STATE.IDLE) {
                     const skipBlanks = $('#skipBlanks').prop('checked');
                     if (skipBlanks) {
-                        const skipIntervalChecked = $('#enableSkipInterval').prop('checked');
-                        const skipInterval = parseFloat(document.getElementById('skipInterval').value);
-                        const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
-                        const sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
-
-                        const isDuringSubtitle = subtitles.some(sub => {
-                            if (skipIntervalChecked) {
-                                return sub.start <= currentTime && (sub.end < sub.start + skipInterval ? sub.end : sub.start + skipInterval) > currentTime;
-                            } else if (sentenceExtensionChecked) {
-                                return accTime(sub.start - sentenceExtension) <= currentTime && accTime(sub.end + sentenceExtension) > currentTime;
-                            } else {
-                                return sub.start <= currentTime && sub.end > currentTime;
-                            }
-                        });
+                        const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
 
                         if (!isDuringSubtitle) {
                             const nextSubtitle = subtitles.find(sub => sub.start > currentTime);
                             if (nextSubtitle) {
+                                const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
+                                const sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
                                 const targetTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
                                 const duration = targetTime - currentTime;
                                 const enableFFMode = $('#enableFFMode').prop('checked');
@@ -1252,7 +1258,7 @@
                     }
                 } else if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING) {
                     // 2. FAST_FORWARDING State: Check if we need to stop
-                    const isDuringSubtitle = subtitles.some(sub => sub.start <= currentTime && sub.end > currentTime); //TODO: 这个地方还是要像上面的一样，涵盖所有情况，包括延展句长
+                    const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
                     if (currentTime >= playerState.targetTime || isDuringSubtitle) {
                         playerState.currentState = PLAYER_STATE.RESTORING;
                     }
