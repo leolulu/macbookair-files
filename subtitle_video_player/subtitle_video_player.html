@@ -1181,6 +1181,24 @@
                 });
             }
 
+            function calculateFastForwardSpeed(duration, originalSpeed) {
+                let fastForwardSpeed = 8;
+                for (let s = 2; s < 8; s++) {
+                    if (duration <= s * 2) {
+                        fastForwardSpeed = s;
+                        break;
+                    }
+                }
+                if (originalSpeed > 1) {
+                    fastForwardSpeed *= originalSpeed;
+                }
+                // Add a cap to prevent the browser from throwing an error
+                if (fastForwardSpeed > 16) {
+                    fastForwardSpeed = 16;
+                }
+                return fastForwardSpeed;
+            }
+
             function updatePlayerState() {
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
@@ -1216,21 +1234,7 @@
                                         playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
 
-                                        let fastForwardSpeed = 8;
-                                        for (let s = 2; s < 8; s++) {
-                                            if (duration <= s * 2) {
-                                                fastForwardSpeed = s;
-                                                break;
-                                            }
-                                        }
-                                        if (playerState.originalSpeed > 1) {
-                                            fastForwardSpeed *= playerState.originalSpeed;
-                                        }
-                                        // Add a cap to prevent the browser from throwing an error
-                                        if (fastForwardSpeed > 16) {
-                                            fastForwardSpeed = 16;
-                                        }
-                                        video.playbackRate = fastForwardSpeed;
+                                        video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
                                         $('#ff-sign').removeClass('hide-element');
                                     }
                                 } else {
@@ -1240,11 +1244,15 @@
                                 // Handle blank space at the end of the video
                                 const enableFFMode = $('#enableFFMode').prop('checked');
                                 if (enableFFMode) {
-                                    playerState.originalSpeed = video.playbackRate;
-                                    playerState.targetTime = video.duration;
-                                    playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
-                                    video.playbackRate = 8; //  TODO: 这个地方还是要自动计算
-                                    $('#ff-sign').removeClass('hide-element');
+                                    const duration = video.duration - currentTime;
+                                    if (duration > 1) {
+                                        hideVideoSpeedControllerTemporarily();
+                                        playerState.originalSpeed = video.playbackRate;
+                                        playerState.targetTime = video.duration;
+                                        playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
+                                        video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
+                                        $('#ff-sign').removeClass('hide-element');
+                                    }
                                 } else {
                                     video.currentTime = video.duration;
                                     video.pause();
