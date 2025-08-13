@@ -1209,6 +1209,7 @@
                 // This handles cases where the browser might ignore or delay a playbackRate change.
                 if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING && video.playbackRate !== playerState.originalSpeed) {
                     video.playbackRate = playerState.originalSpeed;
+                    return; // Immediately exit to prevent further logic from running with a stale state, ensuring correction on the next tick.
                 }
 
                 // 1. IDLE State: Check if we need to start fast forwarding
