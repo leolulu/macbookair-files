@@ -349,7 +349,7 @@
             <div id="horizontal-divider"></div>
             <div class="options-container">
                 <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html" multiple />
-                <span id="videoPlaybackRate" class="inline-block-element" style="color: #3F51B5; font-weight: bold;"></span>
+                <span id="videoPlaybackRate" class="inline-block-element" style="color: #3F51B5; font-weight: bold;">x1.0</span>
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
                 <span id='videoCanPlayStatus'>🔴</span>
                 <div class="inline-block-element">
@@ -1153,13 +1153,13 @@
 
             // STATE MACHINE REFACTOR
             const PLAYER_STATE = {
-                IDLE: 'IDLE',
+                NORMAL: 'NORMAL',
                 FAST_FORWARDING: 'FAST_FORWARDING',
                 RESTORING: 'RESTORING'
             };
 
             var playerState = {
-                currentState: PLAYER_STATE.IDLE,
+                currentState: PLAYER_STATE.NORMAL,
                 originalSpeed: 1,
                 targetTime: 0,
                 needCalibration: false
@@ -1201,6 +1201,7 @@
             }
 
             function fastForwardCheckLoop() {
+                // 2. FAST_FORWARDING State: Monitor playback and transition to RESTORING when target reached or subtitle detected
                 if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING) {
                     return; // Stop the loop if we are no longer in fast-forwarding state
                 }
@@ -1223,8 +1224,9 @@
 
                 // --- STATE MACHINE ---
 
-                // 1. IDLE State: Check if we need to start fast forwarding
-                if (playerState.currentState === PLAYER_STATE.IDLE) {
+                // 1. NORMAL State: Check if we need to start fast forwarding
+                if (playerState.currentState === PLAYER_STATE.NORMAL) {
+                    playerState.originalSpeed = video.playbackRate; // Original speed could only be record in normal state
                     const skipBlanks = $('#skipBlanks').prop('checked');
                     if (skipBlanks) {
                         const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
@@ -1241,7 +1243,6 @@
                                 if (enableFFMode) {
                                     if (duration > 1) {
                                         hideVideoSpeedControllerTemporarily();
-                                        // originalSpeed is now managed by the ratechange event listener
                                         playerState.targetTime = targetTime;
                                         playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
@@ -1262,7 +1263,6 @@
                                     const duration = video.duration - currentTime;
                                     if (duration > 1) {
                                         hideVideoSpeedControllerTemporarily();
-                                        // originalSpeed is now managed by the ratechange event listener
                                         playerState.targetTime = video.duration;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
@@ -1283,14 +1283,16 @@
                         }
                     }
                 } else if (playerState.currentState === PLAYER_STATE.RESTORING) {
-                    // 3. RESTORING State: Restore speed and return to IDLE
+                    // 3. RESTORING State: Restore speed and return to NORMAL
+                    if (video.playbackRate == playerState.originalSpeed) {
+                        playerState.currentState = PLAYER_STATE.NORMAL;
+                    }
                     hideVideoSpeedControllerTemporarily();
                     video.playbackRate = playerState.originalSpeed;
+                    $('#ff-sign').addClass('hide-element');
                     if (playerState.needCalibration) {
                         video.currentTime = playerState.targetTime;
                     }
-                    $('#ff-sign').addClass('hide-element');
-                    playerState.currentState = PLAYER_STATE.IDLE;
                 }
 
                 // --- UI UPDATES ---
@@ -1578,14 +1580,95 @@
 
             // Listen for user-initiated playback rate changes to update the originalSpeed.
             $('#video').on('ratechange', function () {
-                if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING) {
-                    playerState.originalSpeed = this.playbackRate;
-                }
                 $('#videoPlaybackRate').text(`x${this.playbackRate.toFixed(1)}`);
             });
 
-            // Initial playback rate display
-            $('#videoPlaybackRate').text(`x${$('#video')[0].playbackRate.toFixed(1)}`);
+            // 自定义键盘热键控制播放速度
+            (function () {
+                const video = document.getElementById('video');
+
+                // 定义热键映射
+                const hotkeys = {
+                    "'": 0.5,  // 单引号：加速0.5
+                    ";": -0.5,  // 分号：减速0.5
+                    "[": -0.1,  // 左中括号：减速0.1
+                    "]": 0.1,   // 右中括号：加速0.1
+                    "\\": 1     // 反斜杠：恢复速度为1
+                };
+
+                // 键盘事件监听
+                document.addEventListener('keydown', function (event) {
+                    const key = event.key;
+
+                    // 检查是否是我们需要处理的热键
+                    if (hotkeys.hasOwnProperty(key)) {
+                        event.preventDefault();  // 阻止默认行为
+                        event.stopPropagation(); // 阻止事件传播
+
+                        const currentSpeed = video.playbackRate;
+                        let newSpeed;
+
+                        if (key === "\\") {
+                            // 反斜杠直接恢复为1倍速
+                            newSpeed = 1;
+                        } else {
+                            // 其他键在当前速度基础上增减
+                            newSpeed = currentSpeed + hotkeys[key];
+
+                            // 限制速度范围（防止过快或过慢）
+                            newSpeed = Math.max(0.1, Math.min(16, newSpeed));
+                        }
+
+                        // 应用新速度
+                        video.playbackRate = newSpeed;
+
+                        // 更新显示
+                        $('#videoPlaybackRate').text(`x${newSpeed.toFixed(1)}`);
+
+                        // 可选：显示速度变化提示
+                        // showSpeedChangeNotification(newSpeed);
+                    }
+                });
+
+                // 显示速度变化提示
+                function showSpeedChangeNotification(speed) {
+                    // 创建或获取提示元素
+                    let notification = document.getElementById('speed-notification');
+                    if (!notification) {
+                        notification = document.createElement('div');
+                        notification.id = 'speed-notification';
+                        notification.style.cssText = `
+                            position: fixed;
+                            top: 50%;
+                            left: 50%;
+                            transform: translate(-50%, -50%);
+                            background: rgba(0, 0, 0, 0.8);
+                            color: white;
+                            padding: 10px 20px;
+                            border-radius: 5px;
+                            font-size: 24px;
+                            font-weight: bold;
+                            z-index: 10000;
+                            pointer-events: none;
+                            transition: opacity 0.3s ease;
+                        `;
+                        document.body.appendChild(notification);
+                    }
+
+                    // 显示速度
+                    notification.textContent = `速度: x${speed.toFixed(1)}`;
+                    notification.style.opacity = '1';
+
+                    // 2秒后淡出
+                    clearTimeout(notification.hideTimeout);
+                    notification.hideTimeout = setTimeout(() => {
+                        notification.style.opacity = '0';
+                    }, 2000);
+                }
+            })()
+
+
+
         });
     </script>
 </body>
