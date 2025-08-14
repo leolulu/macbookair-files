@@ -1203,14 +1203,7 @@
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
 
-                // --- WATCHDOG & STATE MACHINE ---
-
-                // Watchdog: Continuously correct playback rate if it mismatches the expected non-fast-forward speed.
-                // This handles cases where the browser might ignore or delay a playbackRate change.
-                if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING && video.playbackRate !== playerState.originalSpeed) {
-                    video.playbackRate = playerState.originalSpeed;
-                    return; // Immediately exit to prevent further logic from running with a stale state, ensuring correction on the next tick.
-                }
+                // --- STATE MACHINE ---
 
                 // 1. IDLE State: Check if we need to start fast forwarding
                 if (playerState.currentState === PLAYER_STATE.IDLE) {
@@ -1230,7 +1223,7 @@
                                 if (enableFFMode) {
                                     if (duration > 1) {
                                         hideVideoSpeedControllerTemporarily();
-                                        playerState.originalSpeed = video.playbackRate; // Record current speed
+                                        // originalSpeed is now managed by the ratechange event listener
                                         playerState.targetTime = targetTime;
                                         playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
@@ -1248,7 +1241,7 @@
                                     const duration = video.duration - currentTime;
                                     if (duration > 1) {
                                         hideVideoSpeedControllerTemporarily();
-                                        playerState.originalSpeed = video.playbackRate;
+                                        // originalSpeed is now managed by the ratechange event listener
                                         playerState.targetTime = video.duration;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
@@ -1564,6 +1557,13 @@
             // Bind the state machine to the video's timeupdate and seeking events.
             $('#video').on('timeupdate', updatePlayerState);
             $('#video').on('seeking', updatePlayerState);
+
+            // Listen for user-initiated playback rate changes to update the originalSpeed.
+            $('#video').on('ratechange', function () {
+                if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING) {
+                    playerState.originalSpeed = this.playbackRate;
+                }
+            });
         });
     </script>
 </body>
