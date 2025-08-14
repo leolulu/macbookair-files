@@ -1291,7 +1291,7 @@
                     video.playbackRate = playerState.originalSpeed;
                     $('#ff-sign').addClass('hide-element');
                     if (playerState.needCalibration) {
-                        video.currentTime = playerState.targetTime;
+                        video.currentTime = playerState.targetTime; //TODO 这个地方要做个判断，不然点击任何字幕，都只会跳转到下一句
                     }
                 }
 
