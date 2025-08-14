@@ -349,6 +349,7 @@
             <div id="horizontal-divider"></div>
             <div class="options-container">
                 <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html" multiple />
+                <span id="videoPlaybackRate" class="inline-block-element" style="color: #3F51B5; font-weight: bold;"></span>
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
                 <span id='videoCanPlayStatus'>🔴</span>
                 <div class="inline-block-element">
@@ -1563,7 +1564,11 @@
                 if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING) {
                     playerState.originalSpeed = this.playbackRate;
                 }
+                $('#videoPlaybackRate').text(`x${this.playbackRate.toFixed(1)}`);
             });
+
+            // Initial playback rate display
+            $('#videoPlaybackRate').text(`x${$('#video')[0].playbackRate.toFixed(1)}`);
         });
     </script>
 </body>
