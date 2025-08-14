@@ -1200,6 +1200,23 @@
                 return fastForwardSpeed;
             }
 
+            function fastForwardCheckLoop() {
+                if (playerState.currentState !== PLAYER_STATE.FAST_FORWARDING) {
+                    return; // Stop the loop if we are no longer in fast-forwarding state
+                }
+
+                const video = $('#video')[0];
+                const currentTime = accTime(video.currentTime);
+                const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
+
+                if (currentTime >= playerState.targetTime || isDuringSubtitle) {
+                    playerState.currentState = PLAYER_STATE.RESTORING;
+                    updatePlayerState(); // Immediately call updatePlayerState to apply restoration without waiting for the next timeupdate tick.
+                } else {
+                    requestAnimationFrame(fastForwardCheckLoop); // Continue the loop
+                }
+            }
+
             function updatePlayerState() {
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
@@ -1231,6 +1248,9 @@
 
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
                                         $('#ff-sign').removeClass('hide-element');
+
+                                        // Start the high-frequency check loop
+                                        requestAnimationFrame(fastForwardCheckLoop);
                                     }
                                 } else {
                                     video.currentTime = targetTime;
@@ -1247,6 +1267,9 @@
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
                                         $('#ff-sign').removeClass('hide-element');
+
+                                        // Start the high-frequency check loop
+                                        requestAnimationFrame(fastForwardCheckLoop);
                                     }
                                 } else {
                                     video.currentTime = video.duration;
@@ -1258,12 +1281,6 @@
                                 }
                             }
                         }
-                    }
-                } else if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING) {
-                    // 2. FAST_FORWARDING State: Check if we need to stop
-                    const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
-                    if (currentTime >= playerState.targetTime || isDuringSubtitle) {
-                        playerState.currentState = PLAYER_STATE.RESTORING;
                     }
                 } else if (playerState.currentState === PLAYER_STATE.RESTORING) {
                     // 3. RESTORING State: Restore speed and return to IDLE
