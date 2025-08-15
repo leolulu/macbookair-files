@@ -1025,16 +1025,6 @@
                 });
             })();
 
-            var hideVideoSpeedControllerTimer = null;
-            function hideVideoSpeedControllerTemporarily() {
-                $('div.vsc-controller').addClass('hide-element-potently');
-                if (hideVideoSpeedControllerTimer) {
-                    clearTimeout(hideVideoSpeedControllerTimer)
-                }
-                hideVideoSpeedControllerTimer = setTimeout(() => {
-                    $('div.vsc-controller').removeClass('hide-element-potently');
-                }, 1000);
-            }
 
 
             var hideProgressBarTempTimer = null;
@@ -1273,7 +1263,6 @@
                                 if (enableFFMode) {
                                     const duration = video.duration - currentTime;
                                     if (duration > 1) {
-                                        hideVideoSpeedControllerTemporarily();
                                         playerState.targetTime = video.duration;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
@@ -1298,7 +1287,6 @@
                     if (video.playbackRate == playerState.originalSpeed) {
                         playerState.currentState = PLAYER_STATE.NORMAL;
                     }
-                    hideVideoSpeedControllerTemporarily();
                     video.playbackRate = playerState.originalSpeed;
                     $('#ff-sign').addClass('hide-element');
                     if (playerState.needCalibration && !playerState.skipCalibrationBySubClick) {
@@ -1681,7 +1669,6 @@
                 }
             })()
 
-            //TODO  移除多余的原本隐藏速度控制插件的格式代码
 
         });
     </script>
