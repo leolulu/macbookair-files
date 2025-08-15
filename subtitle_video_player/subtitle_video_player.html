@@ -1243,7 +1243,6 @@
 
                                 if (enableFFMode) {
                                     if (duration > 1) {
-                                        hideVideoSpeedControllerTemporarily();
                                         playerState.targetTime = targetTime;
                                         playerState.needCalibration = $('#FFWithoutCalibration').prop('checked') ? false : duration > 3;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
