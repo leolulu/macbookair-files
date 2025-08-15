@@ -332,6 +332,11 @@
         .inline-block-element {
             display: inline-block;
         }
+
+        #videoPlaybackRate {
+            color: #3F51B5;
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -349,7 +354,7 @@
             <div id="horizontal-divider"></div>
             <div class="options-container">
                 <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html" multiple />
-                <span id="videoPlaybackRate" class="inline-block-element" style="color: #3F51B5; font-weight: bold;">x1.0</span>
+                <span id="videoPlaybackRate" class="inline-block-element">x1.0</span>
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
                 <span id='videoCanPlayStatus'>🔴</span>
                 <div class="inline-block-element">
@@ -1162,7 +1167,8 @@
                 currentState: PLAYER_STATE.NORMAL,
                 originalSpeed: 1,
                 targetTime: 0,
-                needCalibration: false
+                needCalibration: false,
+                skipCalibrationBySubClick: false
             };
 
             function checkIsDuringSubtitle(currentTime) {
@@ -1227,6 +1233,11 @@
                 // 1. NORMAL State: Check if we need to start fast forwarding
                 if (playerState.currentState === PLAYER_STATE.NORMAL) {
                     playerState.originalSpeed = video.playbackRate; // Original speed could only be record in normal state
+
+                    if (playerState.skipCalibrationBySubClick) {
+                        playerState.skipCalibrationBySubClick = false;
+                    }
+
                     const skipBlanks = $('#skipBlanks').prop('checked');
                     if (skipBlanks) {
                         const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
@@ -1290,8 +1301,8 @@
                     hideVideoSpeedControllerTemporarily();
                     video.playbackRate = playerState.originalSpeed;
                     $('#ff-sign').addClass('hide-element');
-                    if (playerState.needCalibration) {
-                        video.currentTime = playerState.targetTime; //TODO 这个地方要做个判断，不然点击任何字幕，都只会跳转到下一句
+                    if (playerState.needCalibration && !playerState.skipCalibrationBySubClick) {
+                        video.currentTime = playerState.targetTime;
                     }
                 }
 
@@ -1324,6 +1335,9 @@
                 // Set up event listener for clicking on subtitles
                 $('.subtitle').click(function () {
                     var index = $(this).data('index');
+
+                    playerState.skipCalibrationBySubClick = true;
+
                     $('#video')[0].currentTime = subtitles[index].start;
                     if ($('#clickToPlay').prop('checked')) {
                         $('#video')[0].play();
@@ -1667,7 +1681,7 @@
                 }
             })()
 
-//TODO  移除多余的原本隐藏速度控制插件的格式代码
+            //TODO  移除多余的原本隐藏速度控制插件的格式代码
 
         });
     </script>
