@@ -1214,6 +1214,12 @@
                 }
             }
 
+            // 更新播放速率显示颜色
+            function updateVideoPlaybackRateColor(color) {
+                const element = document.getElementById('videoPlaybackRate');
+                element.style.color = color;
+            }
+
             function updatePlayerState() {
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
@@ -1249,6 +1255,9 @@
 
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
                                         $('#ff-sign').removeClass('hide-element');
+
+                                        // 更新播放速率显示颜色为红紫色（快进状态）
+                                        updateVideoPlaybackRateColor('#C94AFF');
 
                                         // Start the high-frequency check loop
                                         requestAnimationFrame(fastForwardCheckLoop);
@@ -1288,6 +1297,8 @@
                     }
                     video.playbackRate = playerState.originalSpeed;
                     $('#ff-sign').addClass('hide-element');
+                    // 恢复播放速率显示颜色为蓝色（正常状态）
+                    updateVideoPlaybackRateColor('#3F51B5');
                     if (playerState.needCalibration && !playerState.skipCalibrationBySubClick) {
                         video.currentTime = playerState.targetTime;
                     }
