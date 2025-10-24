@@ -36,6 +36,22 @@ converting_webp = []
 os.makedirs("./static/img", exist_ok=True)
 
 
+def get_txt_title_for_image(img_path):
+    """
+    检查图片路径是否存在对应的txt文件，如果存在则读取内容作为title
+    """
+    try:
+        txt_path = os.path.splitext(img_path)[0] + ".txt"
+        if os.path.exists(txt_path):
+            with open(txt_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                return content if content else None
+        return None
+    except Exception as e:
+        print(f"读取txt文件时出错: {e}")
+        return None
+
+
 def get_img_path_list(img_path_list: List):
     global browsed_img_list
     browsed_img_list = [path for path in browsed_img_list if os.path.exists(path.replace("%23", "#"))]
@@ -261,6 +277,7 @@ def popup_100_pics(n_clicks):
                     src=PRELOAD_IMG_URL,
                     style={"max-height": "380px", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
+                    title=get_txt_title_for_image(img_path),
                     **{"data-true-src": img_path},
                 ),
                 href=os.path.join(
