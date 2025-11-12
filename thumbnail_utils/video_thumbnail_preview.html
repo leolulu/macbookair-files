@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时视频缩略图预览工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: row;
+        }
+
+        .preview-area {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 5px;
+            background: #1a1a1a;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: #2d2d2d;
+            padding: 15px;
+            border-left: 1px solid #404040;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        .control-section {
+            background: #3a3a3a;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #555555;
+        }
+
+        .sidebar h3 {
+            font-size: 18px;
+            margin: 0 0 15px 0;
+            color: #007acc;
+            text-align: center;
+        }
+
+        .control-group {
+            margin-bottom: 10px;
+        }
+
+        .control-group label {
+            font-size: 14px;
+            color: #cccccc;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .control-group input {
+            background: #404040;
+            border: 1px solid #555555;
+            color: #ffffff;
+            padding: 6px 8px;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .btn {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: #005999;
+        }
+
+        .video-info {
+            background: #333333;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .video-info strong {
+            color: #00ff00;
+        }
+
+        .video-info div {
+            font-size: 12px;
+            color: #aaaaaa;
+            margin-top: 5px;
+        }
+
+        .pagination {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .pagination button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        .pagination button:disabled {
+            background: #666666;
+            cursor: not-allowed;
+        }
+        .pagination button:nth-child(2) {
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        .pagination-info {
+            color: #cccccc;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .page-indicator {
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .page-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #555555;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .page-dot.active {
+            background: #007acc;
+        }
+
+        .grid-size-display {
+            color: #00ff00;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        .preview-container {
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            position: relative;
+            background: #2d2d2d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .video-grid {
+            /* 基础样式，具体布局将由JavaScript通过CSS变量动态设置 */
+        }
+
+        .grid-item {
+            position: relative;
+            background: #000000;
+            overflow: hidden;
+            border: 1px solid #333333;
+        }
+
+        .grid-item video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 改为contain，保持视频完整显示 */
+            background: #000; /* 添加黑色背景，填充可能的空白区域 */
+        }
+
+        .time-range-overlay {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .current-time-overlay {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .loading {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #007acc;
+            font-size: 18px;
+        }
+
+        .error {
+            color: #ff6b6b;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* 新增CSS类用于替代内联样式 */
+        .video-file-input {
+            display: none;
+        }
+
+        .grid-input-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* 网格输入行的特殊样式 */
+        .grid-input-row {
+            position: relative;
+        }
+        
+        .grid-input-row input {
+            width: auto;
+            flex: 1;
+            -moz-appearance: textfield; /* 移除Firefox默认箭头 */
+        }
+        
+        /* 隐藏Webkit浏览器的箭头 */
+        .grid-input-row input[type="number"]::-webkit-inner-spin-button,
+        .grid-input-row input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        
+        /* 自定义增减按钮容器 */
+        .number-controls {
+            display: flex;
+            margin-left: 10px;
+            gap: 4px;
+        }
+        
+        /* 垂直按钮组特殊样式，用于对齐 */
+        .number-controls.vertical {
+            /* 使垂直按钮组居中对齐到输入框 */
+            align-items: center;
+            /* 调整位置使按钮与水平按钮对齐 */
+            margin-left: 8px;
+            /* 确保垂直居中 */
+            align-self: center;
+            /* 微调位置 */
+            position: relative;
+            top: 1px;
+        }
+        
+        /* 水平按钮组特殊样式 */
+        .number-controls.horizontal {
+            /* 使水平按钮组居中对齐到输入框 */
+            align-items: center;
+            margin-left: 8px;
+            /* 确保垂直居中 */
+            align-self: center;
+            /* 微调位置 */
+            position: relative;
+            top: 1px;
+        }
+        
+        /* 行数调整按钮 - 垂直排列 */
+        .number-controls.vertical {
+            flex-direction: column;
+            /* 垂直居中对齐 */
+            justify-content: center;
+            /* 设置固定高度以匹配水平按钮组 */
+            height: 60px;
+        }
+        
+        /* 列数调整按钮 - 水平排列 */
+        .number-controls.horizontal {
+            flex-direction: row;
+            /* 垂直居中对齐 */
+            align-items: center;
+            /* 设置固定高度 */
+            height: 30px;
+        }
+        
+        /* 列数调整按钮 - 水平排列 */
+        .number-controls.horizontal {
+            flex-direction: row;
+        }
+        
+        /* 自定义增减按钮 */
+        .number-btn {
+            width: 28px;
+            height: 28px;
+            background: #4a4a4a;
+            border: 1px solid #555555;
+            color: #ffffff;
+            font-size: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+            user-select: none;
+            /* 确保按钮内容垂直居中 */
+            line-height: 1;
+        }
+        
+        .number-btn:hover {
+            background: #5a5a5a;
+            border-color: #007acc;
+        }
+        
+        .number-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* 网格输入行标签优化 */
+        .grid-label {
+            font-size: 12px;
+            color: #aaaaaa;
+            margin-right: 8px;
+            min-width: 30px;
+        }
+        
+        /* 宫格数输入框 */
+        #gridSize, #gridSize2 {
+            padding: 6px;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        /* 行数输入框 - 调整宽度以实现对齐 */
+        #gridSize {
+            width: 40px;
+            margin-right: 15px;
+            text-align: center;
+            /* 确保输入框垂直居中 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* 列数输入框 - 调整宽度 */
+        #gridSize2 {
+            width: 40px;
+            text-align: center;
+            /* 确保输入框垂直居中 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* 列数输入框 - 调整宽度 */
+        #gridSize2 {
+            width: 40px;
+            text-align: center;
+        }
+        
+        /* 行列数控制区域 */
+        .grid-control-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .grid-control-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* JavaScript内联样式替代类 */
+        .video-element {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .visible {
+            display: block;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* 快捷时间按钮样式 */
+        .quick-time-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 5px;
+        }
+
+        .quick-btn {
+            background: #4a4a4a;
+            color: #ffffff;
+            border: 1px solid #555555;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            flex: 1;
+            min-width: 45px;
+        }
+
+        .quick-btn:hover {
+            background: #5a5a5a;
+            border-color: #007acc;
+        }
+
+        .quick-btn.active {
+            background: #007acc;
+            border-color: #007acc;
+            color: #ffffff;
+        }
+
+        /* 文件列表样式 */
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            background: #2d2d2d;
+        }
+
+        .file-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #404040;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-item:hover {
+            background: #3a3a3a;
+        }
+
+        .file-item.active {
+            background: #007acc;
+            color: #ffffff;
+        }
+
+        .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: normal; /* 改为normal，允许换行 */
+            word-wrap: break-word; /* 长单词可以换行 */
+            word-break: break-all; /* 强制换行 */
+            font-size: 13px;
+            min-width: 0; /* 确保flex子元素可以收缩 */
+            line-height: 1.3; /* 设置行高，使多行文本更美观 */
+        }
+
+        .file-remove {
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-size: 11px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .file-remove:hover {
+            background: #cc3333;
+        }
+
+        .file-info {
+            font-size: 11px;
+            color: #aaaaaa;
+            margin-top: 2px;
+        }
+
+        /* 动态网格布局类 */
+        .video-grid-dynamic {
+            --grid-columns: 4;
+            --grid-rows: 4;
+            --row-height: 120px;
+            grid-template-columns: repeat(var(--grid-columns), 1fr);
+            grid-template-rows: repeat(var(--grid-rows), var(--row-height));
+        }
+        
+        /* 固定的网格样式类，将通过JavaScript动态修改 */
+        #videoGrid {
+            display: grid;
+            width: 100%;
+            height: 100%;
+            gap: 2px;
+            background: #000000;
+        }
+    </style>
+</head>
+<body>
+    <!-- 左侧预览区域 -->
+    <div class="preview-area">
+        <div class="preview-container" id="previewContainer">
+            <div class="loading" id="loading">正在加载视频...</div>
+            <div class="video-grid video-grid-dynamic" id="videoGrid"></div>
+        </div>
+    </div>
+
+    <!-- 右侧控制面板 -->
+    <div class="sidebar">
+        <h3>视频缩略图工具</h3>
+        
+        <div class="control-group">
+            <button class="btn" onclick="selectVideo()">选择视频</button>
+            <input type="file" id="videoFile" accept="video/*" multiple class="video-file-input">
+        </div>
+
+        <!-- 文件列表区域 -->
+        <div class="control-section" id="fileListSection" style="display: none;">
+            <div class="control-group">
+                <label>已选择的视频文件:</label>
+                <div class="file-list" id="fileList"></div>
+            </div>
+        </div>
+
+        <div class="video-info hidden" id="videoInfo">
+            <div><strong id="videoName"></strong></div>
+            <div>
+                时长: <span id="videoDuration"></span><br>
+                分辨率: <span id="videoResolution"></span>
+            </div>
+        </div>
+
+        <div class="pagination hidden" id="pagination">
+            <button onclick="app.previousPage()">上一页</button>
+            <button onclick="app.nextPage()">下一页</button>
+            <div class="pagination-info" id="pageInfo">1 / 1</div>
+            <div style="font-size: 12px; color: #888; text-align: center;">
+                ←↑上一页  |  →↓下一页
+            </div>
+            <div class="page-indicator" id="pageIndicator"></div>
+        </div>
+
+        <div class="control-section">
+            <div class="control-group">
+                <div style="margin-bottom: 8px;">
+                    <div class="grid-control-row">
+                        <span class="grid-label">行数:</span>
+                        <div style="display: flex; align-items: center; flex: 1; height: 60px;">
+                            <input type="number" id="gridSize" min="1" max="6" value="4" onchange="updateGrid()">
+                            <div class="number-controls vertical">
+                                <div class="number-btn" onclick="changeGridSize(1, 1)">▲</div>
+                                <div class="number-btn" onclick="changeGridSize(1, -1)">▼</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid-control-row">
+                        <span class="grid-label">列数:</span>
+                        <div style="display: flex; align-items: center; flex: 1; height: 30px;">
+                            <input type="number" id="gridSize2" min="1" max="6" value="4" onchange="updateGrid()">
+                            <div class="number-controls horizontal">
+                                <div class="number-btn" onclick="changeGridSize(2, -1)">◄</div>
+                                <div class="number-btn" onclick="changeGridSize(2, 1)">►</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid-size-display" id="gridDisplay">4×4 = 16个</div>
+        </div>
+
+        <div class="control-section">
+            <div class="control-group">
+                <label>每格时长(秒):</label>
+                <input type="number" id="duration" min="1" max="300" value="30" onchange="updatePreview()">
+            </div>
+            <div class="control-group">
+                <label>快捷选择:</label>
+                <div class="quick-time-buttons">
+                    <button class="quick-btn" onclick="setDuration(2)">2秒</button>
+                    <button class="quick-btn" onclick="setDuration(5)">5秒</button>
+                    <button class="quick-btn" onclick="setDuration(10)">10秒</button>
+                    <button class="quick-btn" onclick="setDuration(20)">20秒</button>
+                    <button class="quick-btn" onclick="setDuration(30)">30秒</button>
+                    <button class="quick-btn" onclick="setDuration(60)">60秒</button>
+                    <button class="quick-btn" onclick="setDuration(120)">2分钟</button>
+                    <button class="quick-btn" onclick="setDuration(180)">3分钟</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class VideoThumbnailPreview {
+            constructor() {
+                this.currentVideo = null;
+                this.originalVideo = null;
+                this.isLoading = false;
+                this.currentPage = 0;
+                this.totalPages = 0;
+                
+                // 多文件支持状态
+                this.videoFiles = [];
+                this.currentVideoIndex = 0;
+                
+                this.updateGridDisplay();
+                this.initDragAndDrop();
+                this.initKeyboardEvents();
+            }
+            
+            // 初始化键盘事件
+            initKeyboardEvents() {
+                document.addEventListener('keydown', (e) => {
+                    // 检查是否有输入框获得了焦点
+                    if (document.activeElement &&
+                        (document.activeElement.tagName === 'INPUT' ||
+                         document.activeElement.tagName === 'TEXTAREA')) {
+                        return; // 如果正在输入，跳过键盘事件
+                    }
+                    
+                    switch(e.key) {
+                        case 'ArrowLeft':
+                        case 'ArrowUp':
+                            e.preventDefault();
+                            this.previousPage();
+                            break;
+                        case 'ArrowRight':
+                        case 'ArrowDown':
+                            e.preventDefault();
+                            this.nextPage();
+                            break;
+                    }
+                });
+            }
+
+            // 初始化拖放功能
+            initDragAndDrop() {
+                const dropZone = document.getElementById('videoFile');
+                const button = document.querySelector('.btn');
+                
+                [dropZone, button].forEach(element => {
+                    element.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        button.style.backgroundColor = '#F7C137';
+                        button.style.transform = 'scale(1.05)';
+                        e.dataTransfer.dropEffect = 'copy';
+                    });
+                    
+                    element.addEventListener('dragleave', (e) => {
+                        e.preventDefault();
+                        button.style.backgroundColor = '';
+                        button.style.transform = '';
+                    });
+                    
+                    element.addEventListener('drop', async (e) => {
+                        e.preventDefault();
+                        button.style.backgroundColor = '';
+                        button.style.transform = '';
+                        
+                        const files = Array.from(e.dataTransfer.files);
+                        if (files.length > 0) {
+                            // 处理多文件拖放
+                            this.videoFiles = files;
+                            this.currentVideoIndex = 0;
+                            this.currentVideo = this.videoFiles[0];
+                            
+                            this.updateFileList();
+                            await this.loadVideo();
+                        }
+                    });
+                });
+            }
+
+            async selectVideo() {
+                try {
+                    const input = document.getElementById('videoFile');
+                    input.click();
+                    
+                    return new Promise((resolve, reject) => {
+                        input.onchange = async (e) => {
+                            if (e.target.files.length > 0) {
+                                // 将选择的文件添加到文件列表
+                                this.videoFiles = Array.from(e.target.files);
+                                this.currentVideoIndex = 0;
+                                this.currentVideo = this.videoFiles[0];
+                                
+                                // 更新文件列表UI
+                                this.updateFileList();
+                                
+                                // 加载第一个视频
+                                await this.loadVideo();
+                                resolve();
+                            } else {
+                                resolve();
+                            }
+                        };
+                    });
+                } catch (error) {
+                    console.error('文件选择失败:', error);
+                    this.showError('文件选择失败，请重试');
+                }
+            }
+
+            async loadVideo() {
+                if (!this.currentVideo) return;
+
+                // 重置分页状态，确保新视频从第一页开始
+                this.currentPage = 0;
+                this.totalPages = 0;
+
+                this.isLoading = true;
+                this.showLoading(true);
+                this.clearError();
+
+                try {
+                    const videoURL = URL.createObjectURL(this.currentVideo);
+                    const video = document.createElement('video');
+                    
+                    await new Promise((resolve, reject) => {
+                        video.onloadedmetadata = resolve;
+                        video.onerror = reject;
+                        video.src = videoURL;
+                    });
+
+                    this.originalVideo = video;
+                    this.updateVideoInfo();
+                    this.updatePreview();
+                } catch (error) {
+                    console.error('视频加载失败:', error);
+                    this.showError('视频加载失败，请检查文件格式');
+                } finally {
+                    this.isLoading = false;
+                    this.showLoading(false);
+                }
+            }
+
+            updateVideoInfo() {
+                const video = this.originalVideo;
+                const duration = this.formatTime(video.duration);
+                const resolution = `${video.videoWidth}×${video.videoHeight}`;
+
+                document.getElementById('videoName').textContent = this.currentVideo.name;
+                document.getElementById('videoDuration').textContent = duration;
+                document.getElementById('videoResolution').textContent = resolution;
+                document.getElementById('videoInfo').classList.remove('hidden');
+                document.getElementById('videoInfo').classList.add('visible');
+            }
+
+            async updatePreview() {
+                if (!this.originalVideo) return;
+
+                this.isLoading = true;
+                this.showLoading(true);
+
+                try {
+                    updateQuickButtons(); // 更新快捷按钮状态
+                    this.calculatePages();
+                    this.updatePaginationUI();
+                    this.renderGrid();
+                } catch (error) {
+                    console.error('预览更新失败:', error);
+                    this.showError('预览更新失败');
+                } finally {
+                    this.isLoading = false;
+                    this.showLoading(false);
+                }
+            }
+
+            calculatePages() {
+                const rows = parseInt(document.getElementById('gridSize').value);
+                const cols = parseInt(document.getElementById('gridSize2').value);
+                const cellDuration = parseInt(document.getElementById('duration').value);
+                const totalCells = rows * cols;
+                const videoDuration = this.originalVideo.duration;
+                const pageDuration = totalCells * cellDuration;
+                
+                this.totalPages = Math.ceil(videoDuration / pageDuration);
+                this.currentPage = Math.min(this.currentPage, this.totalPages - 1);
+            }
+
+            updatePaginationUI() {
+                const pagination = document.getElementById('pagination');
+                const pageIndicator = document.getElementById('pageIndicator');
+                const pageInfo = document.getElementById('pageInfo');
+
+                if (this.totalPages > 1) {
+                    pagination.classList.remove('hidden');
+                    pagination.classList.add('visible');
+                    
+                    pageIndicator.innerHTML = '';
+                    for (let i = 0; i < this.totalPages; i++) {
+                        const dot = document.createElement('div');
+                        dot.className = 'page-dot' + (i === this.currentPage ? ' active' : '');
+                        dot.onclick = () => this.goToPage(i);
+                        pageIndicator.appendChild(dot);
+                    }
+                    
+                    pageInfo.textContent = `${this.currentPage + 1} / ${this.totalPages}`;
+                } else {
+                    pagination.classList.add('hidden');
+                    pagination.classList.remove('visible');
+                }
+            }
+
+            goToPage(pageIndex) {
+                if (pageIndex >= 0 && pageIndex < this.totalPages) {
+                    this.currentPage = pageIndex;
+                    this.updatePreview();
+                }
+            }
+
+            previousPage() {
+                if (this.currentPage > 0) {
+                    this.currentPage--;
+                    this.updatePreview();
+                }
+            }
+
+            nextPage() {
+                if (this.currentPage < this.totalPages - 1) {
+                    this.currentPage++;
+                    this.updatePreview();
+                }
+            }
+
+            renderGrid() {
+                const grid = document.getElementById('videoGrid');
+                grid.innerHTML = '';
+                
+                const rows = parseInt(document.getElementById('gridSize').value);
+                const cols = parseInt(document.getElementById('gridSize2').value);
+                const cellDuration = parseInt(document.getElementById('duration').value);
+
+                // 获取视频宽高比
+                const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
+                
+                // 计算网格布局参数
+                const container = document.getElementById('previewContainer');
+                if (!container) {
+                    console.error('previewContainer 元素未找到');
+                    return;
+                }
+                const containerHeight = container.clientHeight || 600;
+                const containerWidth = container.clientWidth || 800;
+                const gapSize = 2;
+                
+                // 计算总间隙
+                const totalGapHeight = (rows - 1) * gapSize;
+                const totalGapWidth = (cols - 1) * gapSize;
+                
+                // 计算可用空间
+                const availableHeight = containerHeight - totalGapHeight;
+                const availableWidth = containerWidth - totalGapWidth;
+                
+                // 计算两种可能的格子尺寸
+                // 1. 基于高度计算：格子高度填满可用高度
+                const cellHeightBasedOnHeight = availableHeight / rows;
+                const cellWidthBasedOnHeight = cellHeightBasedOnHeight * videoAspectRatio;
+                const totalWidthBasedOnHeight = cellWidthBasedOnHeight * cols + totalGapWidth;
+                
+                // 2. 基于宽度计算：格子宽度填满可用宽度
+                const cellWidthBasedOnWidth = availableWidth / cols;
+                const cellHeightBasedOnWidth = cellWidthBasedOnWidth / videoAspectRatio;
+                const totalHeightBasedOnWidth = cellHeightBasedOnWidth * rows + totalGapHeight;
+                
+                // 确定使用哪种计算方式
+                let finalCellWidth, finalCellHeight;
+                
+                if (totalWidthBasedOnHeight <= availableWidth) {
+                    // 基于高度的计算可以完全适应容器宽度
+                    finalCellHeight = cellHeightBasedOnHeight;
+                    finalCellWidth = cellWidthBasedOnHeight;
+                } else if (totalHeightBasedOnWidth <= availableHeight) {
+                    // 基于宽度的计算可以完全适应容器高度
+                    finalCellHeight = cellHeightBasedOnWidth;
+                    finalCellWidth = cellWidthBasedOnWidth;
+                } else {
+                    // 两种方式都不能完全适应，选择使预览区域更大的方式
+                    const areaBasedOnHeight = cellWidthBasedOnHeight * cellHeightBasedOnHeight * rows * cols;
+                    const areaBasedOnWidth = cellWidthBasedOnWidth * cellHeightBasedOnWidth * rows * cols;
+                    
+                    if (areaBasedOnHeight > areaBasedOnWidth) {
+                        finalCellHeight = cellHeightBasedOnHeight;
+                        finalCellWidth = cellWidthBasedOnHeight;
+                    } else {
+                        finalCellHeight = cellHeightBasedOnWidth;
+                        finalCellWidth = cellWidthBasedOnWidth;
+                    }
+                }
+                
+                // 确保最小尺寸
+                finalCellHeight = Math.max(120, finalCellHeight);
+                finalCellWidth = Math.max(120 * videoAspectRatio, finalCellWidth);
+                
+                // 应用动态CSS类
+                grid.classList.add('video-grid-dynamic');
+                
+                // 动态设置网格样式（通过修改CSS类的内容）
+                this.updateGridStyles(cols, rows, finalCellHeight, finalCellWidth);
+
+                const totalCells = rows * cols;
+                const videoDuration = this.originalVideo.duration;
+                const pageDuration = totalCells * cellDuration;
+                const pageStartTime = this.currentPage * pageDuration;
+                
+                for (let i = 0; i < totalCells; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-item';
+                    
+                    const thumbnailVideo = document.createElement('video');
+                    thumbnailVideo.src = this.originalVideo.src;
+                    thumbnailVideo.muted = true;
+                    thumbnailVideo.loop = false;
+                    thumbnailVideo.controls = false;
+                    thumbnailVideo.classList.add('video-element');
+                    
+                    const startTime = pageStartTime + i * cellDuration;
+                    const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
+                    
+                    if (startTime >= videoDuration) {
+                        cell.classList.add('hidden');
+                        grid.appendChild(cell);
+                        continue;
+                    }
+                    
+                    thumbnailVideo.addEventListener('loadedmetadata', () => {
+                        thumbnailVideo.currentTime = startTime;
+                    });
+                    
+                    thumbnailVideo.addEventListener('seeked', () => {
+                        thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
+                        
+                        thumbnailVideo.addEventListener('timeupdate', function loopHandler() {
+                            if (thumbnailVideo.currentTime >= endTime) {
+                                thumbnailVideo.currentTime = startTime;
+                            }
+                        });
+                    });
+                    
+                    const currentTimeOverlay = document.createElement('div');
+                    currentTimeOverlay.className = 'current-time-overlay';
+                    currentTimeOverlay.textContent = this.formatTime(startTime);
+                    
+                    thumbnailVideo.addEventListener('timeupdate', function() {
+                        currentTimeOverlay.textContent = app.formatTime(thumbnailVideo.currentTime);
+                    });
+                    
+                    const timeRangeOverlay = document.createElement('div');
+                    timeRangeOverlay.className = 'time-range-overlay';
+                    timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
+                    
+                    cell.appendChild(thumbnailVideo);
+                    cell.appendChild(currentTimeOverlay);
+                    cell.appendChild(timeRangeOverlay);
+                    
+                    grid.appendChild(cell);
+                }
+            }
+
+            formatTime(seconds) {
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                if (hours > 0) {
+                    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                } else {
+                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+            }
+
+            showLoading(show) {
+                if (show) {
+                    document.getElementById('loading').classList.remove('hidden');
+                    document.getElementById('loading').classList.add('visible');
+                } else {
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('loading').classList.add('visible');
+                }
+            }
+
+            showError(message) {
+                const container = document.getElementById('previewContainer');
+                let errorDiv = container.querySelector('.error');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'error';
+                    container.appendChild(errorDiv);
+                }
+                errorDiv.textContent = message;
+            }
+
+            clearError() {
+                const container = document.getElementById('previewContainer');
+                const errorDiv = container.querySelector('.error');
+                if (errorDiv) {
+                    errorDiv.remove();
+                }
+            }
+
+            updateGridDisplay() {
+                const rows = parseInt(document.getElementById('gridSize').value);
+                const cols = parseInt(document.getElementById('gridSize2').value);
+                const total = rows * cols;
+                document.getElementById('gridDisplay').textContent = `${rows}×${cols} = ${total}个`;
+            }
+            
+            // 更新文件列表显示
+            updateFileList() {
+                const fileListSection = document.getElementById('fileListSection');
+                const fileList = document.getElementById('fileList');
+                
+                if (this.videoFiles.length === 0) {
+                    fileListSection.style.display = 'none';
+                    return;
+                }
+                
+                fileListSection.style.display = 'block';
+                fileList.innerHTML = '';
+                
+                this.videoFiles.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item' + (index === this.currentVideoIndex ? ' active' : '');
+                    
+                    const fileNameDiv = document.createElement('div');
+                    fileNameDiv.className = 'file-name';
+                    fileNameDiv.textContent = file.name;
+                    
+                    const fileInfoDiv = document.createElement('div');
+                    fileInfoDiv.className = 'file-info';
+                    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+                    fileInfoDiv.textContent = `${sizeMB} MB`;
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'file-remove';
+                    removeBtn.textContent = '×';
+                    removeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.removeFile(index);
+                    };
+                    
+                    const contentDiv = document.createElement('div');
+                    contentDiv.style.flex = '1';
+                    contentDiv.appendChild(fileNameDiv);
+                    contentDiv.appendChild(fileInfoDiv);
+                    
+                    fileItem.appendChild(contentDiv);
+                    fileItem.appendChild(removeBtn);
+                    
+                    fileItem.onclick = () => this.switchToFile(index);
+                    
+                    fileList.appendChild(fileItem);
+                });
+            }
+            
+            // 切换到指定文件
+            async switchToFile(index) {
+                if (index < 0 || index >= this.videoFiles.length) return;
+                
+                this.currentVideoIndex = index;
+                this.currentVideo = this.videoFiles[index];
+                
+                // 更新文件列表的选中状态
+                this.updateFileList();
+                
+                // 重置分页状态
+                this.currentPage = 0;
+                this.totalPages = 0;
+                
+                // 加载新视频
+                await this.loadVideo();
+            }
+            
+            // 移除文件
+            removeFile(index) {
+                if (index < 0 || index >= this.videoFiles.length) return;
+                
+                this.videoFiles.splice(index, 1);
+                
+                // 调整当前文件索引
+                if (this.currentVideoIndex >= this.videoFiles.length) {
+                    this.currentVideoIndex = this.videoFiles.length - 1;
+                }
+                
+                // 更新当前视频
+                if (this.videoFiles.length > 0) {
+                    this.currentVideo = this.videoFiles[this.currentVideoIndex];
+                } else {
+                    this.currentVideo = null;
+                    this.originalVideo = null;
+                    this.clearVideoDisplay();
+                }
+                
+                this.updateFileList();
+                
+                // 如果还有文件，加载当前文件
+                if (this.videoFiles.length > 0) {
+                    this.loadVideo();
+                }
+            }
+            
+            // 清空视频显示
+            clearVideoDisplay() {
+                document.getElementById('videoGrid').innerHTML = '';
+                document.getElementById('videoInfo').classList.add('hidden');
+                document.getElementById('videoInfo').classList.remove('visible');
+                document.getElementById('pagination').classList.add('hidden');
+                document.getElementById('pagination').classList.remove('visible');
+            }
+            
+            // 动态更新网格样式
+            updateGridStyles(cols, rows, rowHeight, cellWidth = null) {
+                // 查找或创建动态样式表
+                let dynamicStyle = document.getElementById('dynamic-grid-styles');
+                if (!dynamicStyle) {
+                    dynamicStyle = document.createElement('style');
+                    dynamicStyle.id = 'dynamic-grid-styles';
+                    document.head.appendChild(dynamicStyle);
+                }
+                
+                // 根据是否提供宽度决定使用哪种布局
+                if (cellWidth) {
+                    // 使用固定宽度的格子
+                    dynamicStyle.textContent = `
+                        .video-grid-dynamic {
+                            --grid-columns: ${cols};
+                            --grid-rows: ${rows};
+                            --row-height: ${rowHeight}px;
+                            --cell-width: ${cellWidth}px;
+                            grid-template-columns: repeat(var(--grid-columns), var(--cell-width));
+                            grid-template-rows: repeat(var(--grid-rows), var(--row-height));
+                            justify-content: center;
+                            align-content: center;
+                            width: fit-content;
+                            margin: 0 auto;
+                        }
+                    `;
+                } else {
+                    // 使用弹性宽度的格子（原有逻辑）
+                    dynamicStyle.textContent = `
+                        .video-grid-dynamic {
+                            --grid-columns: ${cols};
+                            --grid-rows: ${rows};
+                            --row-height: ${rowHeight}px;
+                            grid-template-columns: repeat(var(--grid-columns), 1fr);
+                            grid-template-rows: repeat(var(--grid-rows), var(--row-height));
+                        }
+                    `;
+                }
+            }
+        }
+
+        // 实例化应用
+        const app = new VideoThumbnailPreview();
+
+        function selectVideo() {
+            app.selectVideo();
+        }
+
+        function updateGrid() {
+            app.updateGridDisplay();
+            app.updatePreview();
+        }
+
+        function updatePreview() {
+            app.updatePreview();
+        }
+
+        function setDuration(seconds) {
+            document.getElementById('duration').value = seconds;
+            updateQuickButtons();
+            app.updatePreview();
+        }
+        
+        // 宫格数增减函数
+        function changeGridSize(inputId, direction) {
+            const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
+            const currentValue = parseInt(input.value);
+            const minValue = parseInt(input.min);
+            const maxValue = parseInt(input.max);
+            const newValue = currentValue + direction;
+            
+            // 确保值在有效范围内
+            if (newValue >= minValue && newValue <= maxValue) {
+                input.value = newValue;
+                updateGrid();
+            }
+        }
+        
+        // 更新快捷按钮的选中状态
+        function updateQuickButtons() {
+            const currentDuration = parseInt(document.getElementById('duration').value);
+            const buttons = document.querySelectorAll('.quick-btn');
+            buttons.forEach(btn => {
+                const btnText = btn.textContent;
+                let btnValue;
+                if (btnText.includes('分钟')) {
+                    btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
+                } else {
+                    btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
+                }
+                
+                if (btnValue === currentDuration) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
