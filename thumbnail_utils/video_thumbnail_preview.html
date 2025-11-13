@@ -99,6 +99,14 @@
 
         .video-info strong {
             color: #00ff00;
+            display: block; /* 使文件名独占一行 */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: normal; /* 允许换行 */
+            word-wrap: break-word; /* 长单词可以换行 */
+            word-break: break-all; /* 强制换行 */
+            line-height: 1.3; /* 设置行高，使多行文本更美观 */
+            max-width: 100%; /* 确保不会超出容器 */
         }
 
         .video-info div {
@@ -664,6 +672,15 @@
                 </div>
             </div>
         </div>
+        
+        <div class="control-section">
+            <div class="control-group">
+                <button class="btn" onclick="app.forceCleanup()" style="background: #ff6b6b;">强制清理内存</button>
+                <div class="hint-text" style="margin-top: 5px;">
+                    如果感觉内存占用过高，点击此按钮释放资源
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -679,9 +696,136 @@
                 this.videoFiles = [];
                 this.currentVideoIndex = 0;
                 
+                // 资源跟踪
+                this.createdURLs = new Set(); // 跟踪创建的URL对象
+                this.createdVideos = []; // 跟踪创建的视频元素
+                this.eventListeners = []; // 跟踪事件监听器
+                
+                // 防抖机制
+                this.updatePreviewDebounced = this.debounce(this.updatePreview.bind(this), 300);
+                this.loadVideoDebounced = this.debounce(this.loadVideo.bind(this), 500);
+                
+                // 内存监控
+                this.memoryMonitorInterval = null;
+                this.startMemoryMonitoring();
+                
                 this.updateGridDisplay();
                 this.initDragAndDrop();
                 this.initKeyboardEvents();
+                
+                // 页面卸载时清理资源
+                window.addEventListener('beforeunload', () => this.cleanupAllResources());
+            }
+            
+            // 防抖函数
+            debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+            
+            // 开始内存监控
+            startMemoryMonitoring() {
+                const logMemoryUsage = () => {
+                    if (performance.memory) {
+                        const memory = performance.memory;
+                        console.log('内存使用情况:', {
+                            '已使用': `${(memory.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB`,
+                            '总计': `${(memory.totalJSHeapSize / 1024 / 1024).toFixed(2)} MB`,
+                            '限制': `${(memory.jsHeapSizeLimit / 1024 / 1024).toFixed(2)} MB`,
+                            '使用率': `${((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100).toFixed(1)}%`,
+                            'URL对象数量': this.createdURLs.size,
+                            '视频元素数量': this.createdVideos.length,
+                            '事件监听器数量': this.eventListeners.length
+                        });
+                        
+                        // 内存使用率警告
+                        const usagePercent = (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100;
+                        if (usagePercent > 80) {
+                            console.warn(`⚠️ 内存使用率过高: ${usagePercent.toFixed(1)}%，建议点击"强制清理内存"按钮`);
+                        }
+                    }
+                };
+                
+                // 初始记录
+                logMemoryUsage();
+                
+                // 每5秒记录一次
+                this.memoryMonitorInterval = setInterval(logMemoryUsage, 5000);
+            }
+            
+            // 停止内存监控
+            stopMemoryMonitoring() {
+                if (this.memoryMonitorInterval) {
+                    clearInterval(this.memoryMonitorInterval);
+                    this.memoryMonitorInterval = null;
+                }
+            }
+            
+            // 清理所有资源
+            cleanupAllResources() {
+                console.log('开始清理所有资源...');
+                this.stopMemoryMonitoring();
+                this.cleanupVideos();
+                this.cleanupURLs();
+                this.cleanupEventListeners();
+                console.log('资源清理完成');
+            }
+            
+            // 清理视频元素
+            cleanupVideos() {
+                console.log(`清理 ${this.createdVideos.length} 个视频元素...`);
+                this.createdVideos.forEach(video => {
+                    try {
+                        video.pause();
+                        video.src = '';
+                        video.load();
+                        if (video.parentNode) {
+                            video.parentNode.removeChild(video);
+                        }
+                    } catch (e) {
+                        console.error('清理视频元素失败:', e);
+                    }
+                });
+                this.createdVideos = [];
+            }
+            
+            // 清理URL对象
+            cleanupURLs() {
+                console.log(`清理 ${this.createdURLs.size} 个URL对象...`);
+                this.createdURLs.forEach(url => {
+                    try {
+                        URL.revokeObjectURL(url);
+                    } catch (e) {
+                        console.error('清理URL对象失败:', e);
+                    }
+                });
+                this.createdURLs.clear();
+            }
+            
+            // 清理事件监听器
+            cleanupEventListeners() {
+                console.log(`清理 ${this.eventListeners.length} 个事件监听器...`);
+                this.eventListeners.forEach(({element, event, handler}) => {
+                    try {
+                        element.removeEventListener(event, handler);
+                    } catch (e) {
+                        console.error('清理事件监听器失败:', e);
+                    }
+                });
+                this.eventListeners = [];
+            }
+            
+            // 添加事件监听器并跟踪
+            addTrackedEventListener(element, event, handler) {
+                element.addEventListener(event, handler);
+                this.eventListeners.push({element, event, handler});
             }
             
             // 初始化键盘事件
@@ -789,9 +933,18 @@
                 this.showLoading(true);
                 this.clearError();
 
+                // 清理之前的资源
+                this.cleanupVideos();
+                this.cleanupURLs();
+
                 try {
                     const videoURL = URL.createObjectURL(this.currentVideo);
+                    this.createdURLs.add(videoURL); // 跟踪URL对象
+                    console.log(`创建新的URL对象: ${videoURL.substring(0, 50)}...`);
+                    
                     const video = document.createElement('video');
+                    this.createdVideos.push(video); // 跟踪视频元素
+                    console.log(`创建新的视频元素，当前总数: ${this.createdVideos.length}`);
                     
                     await new Promise((resolve, reject) => {
                         video.onloadedmetadata = resolve;
@@ -809,6 +962,11 @@
                     this.isLoading = false;
                     this.showLoading(false);
                 }
+            }
+            
+            // 防抖版本的视频加载
+            loadVideoDebouncedWrapper() {
+                this.loadVideoDebounced();
             }
 
             updateVideoInfo() {
@@ -841,6 +999,11 @@
                     this.isLoading = false;
                     this.showLoading(false);
                 }
+            }
+            
+            // 防抖版本的预览更新
+            updatePreviewDebouncedWrapper() {
+                this.updatePreviewDebounced();
             }
 
             calculatePages() {
@@ -882,21 +1045,21 @@
             goToPage(pageIndex) {
                 if (pageIndex >= 0 && pageIndex < this.totalPages) {
                     this.currentPage = pageIndex;
-                    this.updatePreview();
+                    this.updatePreviewDebouncedWrapper();
                 }
             }
 
             previousPage() {
                 if (this.currentPage > 0) {
                     this.currentPage--;
-                    this.updatePreview();
+                    this.updatePreviewDebouncedWrapper();
                 }
             }
 
             nextPage() {
                 if (this.currentPage < this.totalPages - 1) {
                     this.currentPage++;
-                    this.updatePreview();
+                    this.updatePreviewDebouncedWrapper();
                 }
             }
 
@@ -980,6 +1143,8 @@
                 const pageDuration = totalCells * cellDuration;
                 const pageStartTime = this.currentPage * pageDuration;
                 
+                console.log(`开始渲染网格，将创建 ${totalCells} 个视频元素...`);
+                
                 for (let i = 0; i < totalCells; i++) {
                     const cell = document.createElement('div');
                     cell.className = 'grid-item';
@@ -991,6 +1156,9 @@
                     thumbnailVideo.controls = false;
                     thumbnailVideo.classList.add('video-element');
                     
+                    // 跟踪新创建的视频元素
+                    this.createdVideos.push(thumbnailVideo);
+                    
                     const startTime = pageStartTime + i * cellDuration;
                     const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
                     
@@ -1000,27 +1168,32 @@
                         continue;
                     }
                     
-                    thumbnailVideo.addEventListener('loadedmetadata', () => {
+                    // 使用跟踪的事件监听器
+                    const loadedMetadataHandler = () => {
                         thumbnailVideo.currentTime = startTime;
-                    });
+                    };
+                    this.addTrackedEventListener(thumbnailVideo, 'loadedmetadata', loadedMetadataHandler);
                     
-                    thumbnailVideo.addEventListener('seeked', () => {
+                    const seekedHandler = () => {
                         thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
                         
-                        thumbnailVideo.addEventListener('timeupdate', function loopHandler() {
+                        const loopHandler = () => {
                             if (thumbnailVideo.currentTime >= endTime) {
                                 thumbnailVideo.currentTime = startTime;
                             }
-                        });
-                    });
+                        };
+                        this.addTrackedEventListener(thumbnailVideo, 'timeupdate', loopHandler);
+                    };
+                    this.addTrackedEventListener(thumbnailVideo, 'seeked', seekedHandler);
                     
                     const currentTimeOverlay = document.createElement('div');
                     currentTimeOverlay.className = 'current-time-overlay';
                     currentTimeOverlay.textContent = this.formatTime(startTime);
                     
-                    thumbnailVideo.addEventListener('timeupdate', function() {
+                    const timeUpdateHandler = function() {
                         currentTimeOverlay.textContent = app.formatTime(thumbnailVideo.currentTime);
-                    });
+                    };
+                    this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
                     
                     const timeRangeOverlay = document.createElement('div');
                     timeRangeOverlay.className = 'time-range-overlay';
@@ -1032,6 +1205,8 @@
                     
                     grid.appendChild(cell);
                 }
+                
+                console.log(`网格渲染完成，当前视频元素总数: ${this.createdVideos.length}`);
             }
 
             formatTime(seconds) {
@@ -1143,8 +1318,8 @@
                 this.currentPage = 0;
                 this.totalPages = 0;
                 
-                // 加载新视频
-                await this.loadVideo();
+                // 使用防抖版本加载新视频
+                this.loadVideoDebouncedWrapper();
             }
             
             // 移除文件
@@ -1171,7 +1346,7 @@
                 
                 // 如果还有文件，加载当前文件
                 if (this.videoFiles.length > 0) {
-                    this.loadVideo();
+                    this.loadVideoDebouncedWrapper();
                 }
             }
             
@@ -1224,6 +1399,87 @@
                     `;
                 }
             }
+            
+            // 强制清理资源
+            forceCleanup() {
+                console.log('用户触发强制清理...');
+                
+                // 暂停所有视频
+                this.createdVideos.forEach(video => {
+                    try {
+                        video.pause();
+                    } catch (e) {
+                        console.error('暂停视频失败:', e);
+                    }
+                });
+                
+                // 清理网格中的视频元素
+                const grid = document.getElementById('videoGrid');
+                if (grid) {
+                    grid.innerHTML = '';
+                }
+                
+                // 清理所有资源
+                this.cleanupVideos();
+                this.cleanupURLs();
+                this.cleanupEventListeners();
+                
+                // 强制垃圾回收（如果浏览器支持）
+                if (window.gc) {
+                    window.gc();
+                    console.log('触发垃圾回收');
+                }
+                
+                // 重新记录内存使用情况
+                setTimeout(() => {
+                    if (performance.memory) {
+                        const memory = performance.memory;
+                        const usagePercent = (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100;
+                        console.log('清理后内存使用情况:', {
+                            '已使用': `${(memory.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB`,
+                            '总计': `${(memory.totalJSHeapSize / 1024 / 1024).toFixed(2)} MB`,
+                            '限制': `${(memory.jsHeapSizeLimit / 1024 / 1024).toFixed(2)} MB`,
+                            '使用率': `${usagePercent.toFixed(1)}%`
+                        });
+                        
+                        if (usagePercent < 50) {
+                            console.log('✅ 内存清理效果良好');
+                        } else if (usagePercent < 70) {
+                            console.log('⚠️ 内存使用率仍然较高，可能需要进一步清理');
+                        } else {
+                            console.log('❌ 内存清理效果不佳，建议刷新页面');
+                        }
+                    }
+                }, 100);
+                
+                // 显示清理完成提示
+                this.showNotification('内存清理完成');
+            }
+            
+            // 显示通知
+            showNotification(message) {
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #4CAF50;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 4px;
+                    z-index: 1000;
+                    font-size: 14px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                `;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 3000);
+            }
         }
 
         // 实例化应用
@@ -1235,17 +1491,17 @@
 
         function updateGrid() {
             app.updateGridDisplay();
-            app.updatePreview();
+            app.updatePreviewDebouncedWrapper();
         }
 
         function updatePreview() {
-            app.updatePreview();
+            app.updatePreviewDebouncedWrapper();
         }
 
         function setDuration(seconds) {
             document.getElementById('duration').value = seconds;
             updateQuickButtons();
-            app.updatePreview();
+            app.updatePreviewDebouncedWrapper();
         }
         
         // 宫格数增减函数
