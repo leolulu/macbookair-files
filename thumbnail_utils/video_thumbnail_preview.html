@@ -178,10 +178,6 @@
             overflow: hidden;
         }
 
-        .video-grid {
-            /* 基础样式，具体布局将由JavaScript通过CSS变量动态设置 */
-        }
-
         .grid-item {
             position: relative;
             background: #000000;
@@ -255,7 +251,9 @@
         .grid-input-row input {
             width: auto;
             flex: 1;
+            -webkit-appearance: textfield;
             -moz-appearance: textfield; /* 移除Firefox默认箭头 */
+            appearance: textfield;
         }
         
         /* 隐藏Webkit浏览器的箭头 */
@@ -580,7 +578,7 @@
     <div class="preview-area">
         <div class="preview-container" id="previewContainer">
             <div class="loading" id="loading">正在加载视频...</div>
-            <div class="video-grid video-grid-dynamic" id="videoGrid"></div>
+            <div class="video-grid-dynamic" id="videoGrid"></div>
         </div>
     </div>
 
