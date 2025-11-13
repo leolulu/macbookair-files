@@ -530,6 +530,49 @@
             gap: 2px;
             background: #000000;
         }
+        /* 通用工具类 */
+        .is-hidden {
+            display: none;
+        }
+
+        .spacing-bottom-sm {
+            margin-bottom: 8px;
+        }
+
+        .layout-flex-center {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .layout-flex-center-tall {
+            height: 60px;
+        }
+
+        .layout-flex-center-short {
+            height: 30px;
+        }
+
+        .content-flex {
+            flex: 1;
+        }
+
+        .hint-text {
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+        }
+
+        /* 拖放效果类 */
+        .btn.drag-over {
+            background-color: #F7C137;
+            transform: scale(1.05);
+        }
+
+        .btn.drag-leave {
+            background-color: #007acc;
+            transform: none;
+        }
     </style>
 </head>
 <body>
@@ -551,7 +594,7 @@
         </div>
 
         <!-- 文件列表区域 -->
-        <div class="control-section" id="fileListSection" style="display: none;">
+        <div class="control-section is-hidden" id="fileListSection">
             <div class="control-group">
                 <label>已选择的视频文件:</label>
                 <div class="file-list" id="fileList"></div>
@@ -570,7 +613,7 @@
             <button onclick="app.previousPage()">上一页</button>
             <button onclick="app.nextPage()">下一页</button>
             <div class="pagination-info" id="pageInfo">1 / 1</div>
-            <div style="font-size: 12px; color: #888; text-align: center;">
+            <div class="hint-text">
                 ←↑上一页  |  →↓下一页
             </div>
             <div class="page-indicator" id="pageIndicator"></div>
@@ -578,10 +621,10 @@
 
         <div class="control-section">
             <div class="control-group">
-                <div style="margin-bottom: 8px;">
+                <div class="spacing-bottom-sm">
                     <div class="grid-control-row">
                         <span class="grid-label">行数:</span>
-                        <div style="display: flex; align-items: center; flex: 1; height: 60px;">
+                        <div class="layout-flex-center layout-flex-center-tall">
                             <input type="number" id="gridSize" min="1" max="6" value="4" onchange="updateGrid()">
                             <div class="number-controls vertical">
                                 <div class="number-btn" onclick="changeGridSize(1, 1)">▲</div>
@@ -591,7 +634,7 @@
                     </div>
                     <div class="grid-control-row">
                         <span class="grid-label">列数:</span>
-                        <div style="display: flex; align-items: center; flex: 1; height: 30px;">
+                        <div class="layout-flex-center layout-flex-center-short">
                             <input type="number" id="gridSize2" min="1" max="6" value="4" onchange="updateGrid()">
                             <div class="number-controls horizontal">
                                 <div class="number-btn" onclick="changeGridSize(2, -1)">◄</div>
@@ -676,21 +719,22 @@
                 [dropZone, button].forEach(element => {
                     element.addEventListener('dragover', (e) => {
                         e.preventDefault();
-                        button.style.backgroundColor = '#F7C137';
-                        button.style.transform = 'scale(1.05)';
+                        button.classList.add('drag-over');
+                        button.classList.remove('drag-leave');
                         e.dataTransfer.dropEffect = 'copy';
                     });
                     
                     element.addEventListener('dragleave', (e) => {
                         e.preventDefault();
-                        button.style.backgroundColor = '';
-                        button.style.transform = '';
+                        button.classList.remove('drag-over');
+                        button.classList.add('drag-leave');
+                        setTimeout(() => button.classList.remove('drag-leave'), 200);
                     });
                     
                     element.addEventListener('drop', async (e) => {
                         e.preventDefault();
-                        button.style.backgroundColor = '';
-                        button.style.transform = '';
+                        button.classList.remove('drag-over');
+                        button.classList.remove('drag-leave');
                         
                         const files = Array.from(e.dataTransfer.files);
                         if (files.length > 0) {
@@ -1045,11 +1089,11 @@
                 const fileList = document.getElementById('fileList');
                 
                 if (this.videoFiles.length === 0) {
-                    fileListSection.style.display = 'none';
+                    fileListSection.classList.add('is-hidden');
                     return;
                 }
                 
-                fileListSection.style.display = 'block';
+                fileListSection.classList.remove('is-hidden');
                 fileList.innerHTML = '';
                 
                 this.videoFiles.forEach((file, index) => {
@@ -1074,7 +1118,7 @@
                     };
                     
                     const contentDiv = document.createElement('div');
-                    contentDiv.style.flex = '1';
+                    contentDiv.className = 'content-flex';
                     contentDiv.appendChild(fileNameDiv);
                     contentDiv.appendChild(fileInfoDiv);
                     
