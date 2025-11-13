@@ -692,6 +692,9 @@
                 this.currentPage = 0;
                 this.totalPages = 0;
                 
+                // 记录当前页面左上角第一个格子的起始时间
+                this.currentStartTime = 0;
+                
                 // 多文件支持状态
                 this.videoFiles = [];
                 this.currentVideoIndex = 0;
@@ -928,6 +931,7 @@
                 // 重置分页状态，确保新视频从第一页开始
                 this.currentPage = 0;
                 this.totalPages = 0;
+                this.currentStartTime = 0; // 重置起始时间
 
                 this.isLoading = true;
                 this.showLoading(true);
@@ -989,6 +993,17 @@
 
                 try {
                     updateQuickButtons(); // 更新快捷按钮状态
+                    
+                    // 保存当前的起始时间（如果还没有设置的话）
+                    if (this.currentStartTime === 0 && this.currentPage > 0) {
+                        const rows = parseInt(document.getElementById('gridSize').value);
+                        const cols = parseInt(document.getElementById('gridSize2').value);
+                        const cellDuration = parseInt(document.getElementById('duration').value);
+                        const totalCells = rows * cols;
+                        const pageDuration = totalCells * cellDuration;
+                        this.currentStartTime = this.currentPage * pageDuration;
+                    }
+                    
                     this.calculatePages();
                     this.updatePaginationUI();
                     this.renderGrid();
@@ -1015,7 +1030,11 @@
                 const pageDuration = totalCells * cellDuration;
                 
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
+                
+                // 根据currentStartTime计算正确的页码
+                this.currentPage = Math.floor(this.currentStartTime / pageDuration);
                 this.currentPage = Math.min(this.currentPage, this.totalPages - 1);
+                this.currentPage = Math.max(0, this.currentPage);
             }
 
             updatePaginationUI() {
@@ -1045,6 +1064,13 @@
             goToPage(pageIndex) {
                 if (pageIndex >= 0 && pageIndex < this.totalPages) {
                     this.currentPage = pageIndex;
+                    // 更新起始时间为新页面的起始时间
+                    const rows = parseInt(document.getElementById('gridSize').value);
+                    const cols = parseInt(document.getElementById('gridSize2').value);
+                    const cellDuration = parseInt(document.getElementById('duration').value);
+                    const totalCells = rows * cols;
+                    const pageDuration = totalCells * cellDuration;
+                    this.currentStartTime = this.currentPage * pageDuration;
                     this.updatePreviewDebouncedWrapper();
                 }
             }
@@ -1052,6 +1078,13 @@
             previousPage() {
                 if (this.currentPage > 0) {
                     this.currentPage--;
+                    // 更新起始时间为新页面的起始时间
+                    const rows = parseInt(document.getElementById('gridSize').value);
+                    const cols = parseInt(document.getElementById('gridSize2').value);
+                    const cellDuration = parseInt(document.getElementById('duration').value);
+                    const totalCells = rows * cols;
+                    const pageDuration = totalCells * cellDuration;
+                    this.currentStartTime = this.currentPage * pageDuration;
                     this.updatePreviewDebouncedWrapper();
                 }
             }
@@ -1059,6 +1092,13 @@
             nextPage() {
                 if (this.currentPage < this.totalPages - 1) {
                     this.currentPage++;
+                    // 更新起始时间为新页面的起始时间
+                    const rows = parseInt(document.getElementById('gridSize').value);
+                    const cols = parseInt(document.getElementById('gridSize2').value);
+                    const cellDuration = parseInt(document.getElementById('duration').value);
+                    const totalCells = rows * cols;
+                    const pageDuration = totalCells * cellDuration;
+                    this.currentStartTime = this.currentPage * pageDuration;
                     this.updatePreviewDebouncedWrapper();
                 }
             }
@@ -1141,7 +1181,9 @@
                 const totalCells = rows * cols;
                 const videoDuration = this.originalVideo.duration;
                 const pageDuration = totalCells * cellDuration;
-                const pageStartTime = this.currentPage * pageDuration;
+                
+                // 使用currentStartTime作为页面起始时间，而不是基于currentPage计算
+                const pageStartTime = this.currentStartTime;
                 
                 console.log(`开始渲染网格，将创建 ${totalCells} 个视频元素...`);
                 
@@ -1317,6 +1359,7 @@
                 // 重置分页状态
                 this.currentPage = 0;
                 this.totalPages = 0;
+                this.currentStartTime = 0; // 重置起始时间
                 
                 // 使用防抖版本加载新视频
                 this.loadVideoDebouncedWrapper();
