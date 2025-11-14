@@ -1311,7 +1311,28 @@
                 const total = rows * cols;
                 document.getElementById('gridDisplay').textContent = `${rows}×${cols} = ${total}个`;
             }
-            
+
+            // 获取视频时长
+            async getVideoDuration(file) {
+                return new Promise((resolve, reject) => {
+                    const videoURL = URL.createObjectURL(file);
+                    const video = document.createElement('video');
+                    
+                    video.onloadedmetadata = () => {
+                        const duration = this.formatTime(video.duration);
+                        URL.revokeObjectURL(videoURL);
+                        resolve(duration);
+                    };
+                    
+                    video.onerror = () => {
+                        URL.revokeObjectURL(videoURL);
+                        reject(new Error('无法加载视频文件'));
+                    };
+                    
+                    video.src = videoURL;
+                });
+            }
+
             // 更新文件列表显示
             updateFileList() {
                 const fileListSection = document.getElementById('fileListSection');
@@ -1336,7 +1357,7 @@
                     const fileInfoDiv = document.createElement('div');
                     fileInfoDiv.className = 'file-info';
                     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-                    fileInfoDiv.textContent = `${sizeMB} MB`;
+                    fileInfoDiv.innerHTML = `<span class="duration-info">加载中...</span> | ${sizeMB} MB`;
                     
                     const removeBtn = document.createElement('button');
                     removeBtn.className = 'file-remove';
@@ -1357,6 +1378,20 @@
                     fileItem.onclick = () => this.switchToFile(index);
                     
                     fileList.appendChild(fileItem);
+                    
+                    // 异步获取视频时长
+                    this.getVideoDuration(file).then(duration => {
+                        const durationSpan = fileInfoDiv.querySelector('.duration-info');
+                        if (durationSpan) {
+                            durationSpan.textContent = duration;
+                        }
+                    }).catch(error => {
+                        const durationSpan = fileInfoDiv.querySelector('.duration-info');
+                        if (durationSpan) {
+                            durationSpan.textContent = '未知';
+                        }
+                        console.warn(`获取视频时长失败: ${file.name}`, error);
+                    });
                 });
             }
             
