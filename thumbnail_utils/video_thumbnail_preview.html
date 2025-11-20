@@ -483,8 +483,15 @@
             cursor: pointer;
             transition: background 0.2s;
             display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .file-item-top {
+            display: flex;
             justify-content: space-between;
             align-items: center;
+            width: 100%;
         }
 
         .file-item:last-child {
@@ -531,6 +538,36 @@
             font-size: 11px;
             color: #aaaaaa;
             margin-top: 2px;
+        }
+
+        .file-progress-wrapper {
+            width: 100%;
+            height: 6px;
+            background: #404040;
+            border-radius: 3px;
+            margin-top: 4px;
+            position: relative;
+            overflow: hidden;
+            display: none; /* 默认隐藏，只有当前视频显示 */
+        }
+
+        .file-item.active .file-progress-wrapper {
+            display: block;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .file-progress-fill {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: #007acc;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .file-item.active .file-progress-fill {
+            background: #F7C137;
+            box-shadow: none;
         }
 
         /* 动态网格布局类 */
@@ -1021,6 +1058,7 @@
                     this.calculatePages();
                     this.updatePaginationUI();
                     this.renderGrid();
+                    this.updateFileProgress();
                 } catch (error) {
                     console.error('预览更新失败:', error);
                     this.showError('预览更新失败');
@@ -1371,9 +1409,26 @@
                     contentDiv.className = 'content-flex';
                     contentDiv.appendChild(fileNameDiv);
                     contentDiv.appendChild(fileInfoDiv);
+
+                    // 创建上半部分容器
+                    const topRow = document.createElement('div');
+                    topRow.className = 'file-item-top';
+                    topRow.appendChild(contentDiv);
+                    topRow.appendChild(removeBtn);
                     
-                    fileItem.appendChild(contentDiv);
-                    fileItem.appendChild(removeBtn);
+                    // 添加进度条容器
+                    const progressWrapper = document.createElement('div');
+                    progressWrapper.className = 'file-progress-wrapper';
+                    progressWrapper.id = `progress-wrapper-${index}`;
+                    
+                    const progressFill = document.createElement('div');
+                    progressFill.className = 'file-progress-fill';
+                    progressFill.id = `progress-fill-${index}`;
+                    
+                    progressWrapper.appendChild(progressFill);
+                    
+                    fileItem.appendChild(topRow);
+                    fileItem.appendChild(progressWrapper);
                     
                     fileItem.onclick = () => this.switchToFile(index);
                     
@@ -1451,6 +1506,41 @@
                 document.getElementById('pagination').classList.remove('visible');
             }
             
+            // 更新文件列表中的进度条
+            updateFileProgress() {
+                if (!this.originalVideo || this.currentVideoIndex === -1) return;
+
+                const rows = parseInt(document.getElementById('gridSize').value);
+                const cols = parseInt(document.getElementById('gridSize2').value);
+                const cellDuration = parseInt(document.getElementById('duration').value);
+                const totalCells = rows * cols;
+                const pageDuration = totalCells * cellDuration;
+                const videoDuration = this.originalVideo.duration;
+
+                if (!videoDuration) return;
+
+                // 计算当前覆盖的时间范围
+                const startTime = this.currentStartTime;
+                const endTime = Math.min(startTime + pageDuration, videoDuration);
+                
+                // 计算百分比
+                const startPercent = (startTime / videoDuration) * 100;
+                const widthPercent = ((endTime - startTime) / videoDuration) * 100;
+
+                // 更新DOM
+                const progressFill = document.getElementById(`progress-fill-${this.currentVideoIndex}`);
+                const progressWrapper = document.getElementById(`progress-wrapper-${this.currentVideoIndex}`);
+                
+                if (progressFill) {
+                    progressFill.style.left = `${startPercent}%`;
+                    progressFill.style.width = `${widthPercent}%`;
+                }
+
+                if (progressWrapper) {
+                    progressWrapper.title = `当前显示: ${this.formatTime(startTime)} - ${this.formatTime(endTime)} (总长: ${this.formatTime(videoDuration)})`;
+                }
+            }
+
             // 动态更新网格样式
             updateGridStyles(cols, rows, rowHeight, cellWidth = null) {
                 // 查找或创建动态样式表
