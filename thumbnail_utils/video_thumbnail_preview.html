@@ -725,6 +725,16 @@
                 this.createdVideos = [];
                 this.eventListeners = [];
                 
+                // 网格状态跟踪 - 用于优化页面切换
+                this.gridState = {
+                    isInitialized: false,
+                    rows: 0,
+                    cols: 0,
+                    totalCells: 0,
+                    cellDuration: 0,
+                    videoFile: null
+                };
+                
                 // 防抖机制
                 this.updatePreviewDebounced = this.debounce(this.updatePreview.bind(this), 300);
                 this.loadVideoDebounced = this.debounce(this.loadVideo.bind(this), 500);
@@ -938,6 +948,9 @@
                 this.totalPages = 0;
                 this.currentStartTime = 0; // 重置起始时间
 
+                // 重置网格状态，强制重新创建网格
+                this.resetGridState();
+
                 this.isLoading = true;
                 this.showLoading(true);
                 this.clearError();
@@ -1034,6 +1047,44 @@
                 return { rows, cols, cellDuration, totalCells, pageDuration };
             }
 
+            // 判断是否需要重新创建网格
+            needToRecreateGrid() {
+                const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
+                
+                return !this.gridState.isInitialized ||
+                       this.gridState.rows !== rows ||
+                       this.gridState.cols !== cols ||
+                       this.gridState.cellDuration !== cellDuration ||
+                       this.gridState.totalCells !== totalCells ||
+                       this.gridState.videoFile !== this.currentVideo;
+            }
+
+            // 更新网格状态
+            updateGridState() {
+                const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
+                
+                this.gridState = {
+                    isInitialized: true,
+                    rows,
+                    cols,
+                    totalCells,
+                    cellDuration,
+                    videoFile: this.currentVideo
+                };
+            }
+
+            // 重置网格状态
+            resetGridState() {
+                this.gridState = {
+                    isInitialized: false,
+                    rows: 0,
+                    cols: 0,
+                    totalCells: 0,
+                    cellDuration: 0,
+                    videoFile: null
+                };
+            }
+
             calculatePages() {
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
@@ -1076,7 +1127,16 @@
                     // 更新起始时间为新页面的起始时间
                     const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
-                    this.updatePreviewDebouncedWrapper();
+                    
+                    
+                    // 优化：只更新时间点，不重新创建网格
+                    if (this.gridState.isInitialized) {
+                        this.updatePaginationUI();
+                        this.updateGridTimePoints();
+                        this.updateFileProgress();
+                    } else {
+                        this.updatePreviewDebouncedWrapper();
+                    }
                 }
             }
 
@@ -1086,7 +1146,16 @@
                     // 更新起始时间为新页面的起始时间
                     const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
-                    this.updatePreviewDebouncedWrapper();
+                    
+                    
+                    // 优化：只更新时间点，不重新创建网格
+                    if (this.gridState.isInitialized) {
+                        this.updatePaginationUI();
+                        this.updateGridTimePoints();
+                        this.updateFileProgress();
+                    } else {
+                        this.updatePreviewDebouncedWrapper();
+                    }
                 }
             }
 
@@ -1096,7 +1165,16 @@
                     // 更新起始时间为新页面的起始时间
                     const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
-                    this.updatePreviewDebouncedWrapper();
+                    
+                    
+                    // 优化：只更新时间点，不重新创建网格
+                    if (this.gridState.isInitialized) {
+                        this.updatePaginationUI();
+                        this.updateGridTimePoints();
+                        this.updateFileProgress();
+                    } else {
+                        this.updatePreviewDebouncedWrapper();
+                    }
                 }
             }
 
@@ -1154,12 +1232,23 @@
             }
 
             renderGrid() {
+                // 判断是否需要重新创建网格
+                if (this.needToRecreateGrid()) {
+                    this.createGridElements();
+                } else {
+                    // 只更新时间点，不重新创建元素
+                    this.updateGridTimePoints();
+                }
+            }
+
+            // 创建网格元素（只在需要时调用）
+            createGridElements() {
                 const grid = document.getElementById('videoGrid');
                 grid.innerHTML = '';
                 
-                // 修复：清理旧网格视频和事件，只保留 originalVideo (index=0)，防止数组积累/内存泄漏
-                this.cleanupEventListeners();  // 移除旧网格视频事件监听器
-                this.createdVideos.splice(1);  // 移除旧网格视频引用，让GC回收
+                // 清理旧网格视频和事件，只保留 originalVideo (index=0)
+                this.cleanupEventListeners();
+                this.createdVideos.splice(1);
                 
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
@@ -1174,6 +1263,7 @@
                 for (let i = 0; i < totalCells; i++) {
                     const cell = document.createElement('div');
                     cell.className = 'grid-item';
+                    cell.dataset.gridIndex = i; // 添加网格索引标识
                     
                     const thumbnailVideo = document.createElement('video');
                     thumbnailVideo.src = this.originalVideo.src;
@@ -1181,6 +1271,7 @@
                     thumbnailVideo.loop = false;
                     thumbnailVideo.controls = false;
                     thumbnailVideo.classList.add('video-element');
+                    thumbnailVideo.dataset.gridIndex = i; // 添加网格索引标识
                     
                     this.createdVideos.push(thumbnailVideo);
                     
@@ -1214,8 +1305,8 @@
                     currentTimeOverlay.className = 'current-time-overlay';
                     currentTimeOverlay.textContent = this.formatTime(startTime);
                     
-                    const timeUpdateHandler = function() {
-                        currentTimeOverlay.textContent = app.formatTime(thumbnailVideo.currentTime);
+                    const timeUpdateHandler = () => {
+                        currentTimeOverlay.textContent = this.formatTime(thumbnailVideo.currentTime);
                     };
                     this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
                     
@@ -1228,6 +1319,169 @@
                     cell.appendChild(timeRangeOverlay);
                     
                     grid.appendChild(cell);
+                }
+                
+                // 更新网格状态
+                this.updateGridState();
+            }
+
+            // 更新网格时间点（只在页面切换时调用）
+            updateGridTimePoints() {
+                // 边界检查：确保原始视频存在且已加载
+                if (!this.originalVideo || !this.originalVideo.duration || this.originalVideo.duration <= 0) {
+                    console.warn('无法更新时间点：原始视频未准备好');
+                    return;
+                }
+                
+                const { cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                const videoDuration = this.originalVideo.duration;
+                const pageStartTime = this.currentStartTime;
+                
+                // 边界检查：确保时间参数有效
+                if (cellDuration <= 0 || totalCells <= 0 || pageDuration <= 0) {
+                    console.warn('无效的网格配置参数');
+                    return;
+                }
+                
+                // 遍历现有的视频元素，只更新时间相关属性
+                this.createdVideos.forEach((video, index) => {
+                    if (index === 0) return; // 跳过originalVideo
+                    
+                    const gridIndex = parseInt(video.dataset.gridIndex);
+                    if (isNaN(gridIndex)) return; // 跳过没有网格索引的视频
+                    
+                    // 计算格子在整个视频中的实际开始时间
+                    const startTime = pageStartTime + gridIndex * cellDuration;
+                    const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
+                    
+                    // 获取对应的单元格和覆盖层元素
+                    const cell = video.parentElement;
+                    if (!cell) {
+                        console.warn(`找不到网格索引 ${gridIndex} 的单元格`);
+                        return;
+                    }
+                    
+                    const currentTimeOverlay = cell.querySelector('.current-time-overlay');
+                    const timeRangeOverlay = cell.querySelector('.time-range-overlay');
+                    
+                    // 根据当前页面和格子索引，判断是否应该显示该格子
+                    const shouldShowCell = startTime < videoDuration;
+                    
+                    if (shouldShowCell) {
+                        // 显示有效的格子
+                        cell.classList.remove('hidden');
+                        
+                        try {
+                            // 移除旧的时间更新事件监听器
+                            this.removeVideoTimeUpdateListeners(video);
+                            
+                            // 更新时间显示覆盖层 - 显示在整个视频中的实际时间
+                            if (currentTimeOverlay) {
+                                currentTimeOverlay.textContent = this.formatTime(startTime);
+                            }
+                            
+                            if (timeRangeOverlay) {
+                                timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
+                            }
+                            
+                            // 重新绑定循环播放逻辑和时间更新
+                            const seekedHandler = () => {
+                                // 确保时间显示正确
+                                if (currentTimeOverlay) {
+                                    currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                }
+                                
+                                video.play().catch(e => console.log('自动播放被阻止:', e));
+                                
+                                const loopHandler = () => {
+                                    if (video.currentTime >= endTime) {
+                                        video.currentTime = startTime;
+                                    }
+                                };
+                                this.addTrackedEventListener(video, 'timeupdate', loopHandler);
+                                
+                                // 添加时间更新处理器
+                                if (currentTimeOverlay) {
+                                    const timeUpdateHandler = () => {
+                                        currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                    };
+                                    this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
+                                }
+                            };
+                            
+                            // 设置视频时间点并等待seeked事件
+                            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+                                // 如果视频已经准备好，直接设置时间点
+                                video.currentTime = startTime;
+                                
+                                // 等待一小段时间确保seek完成，然后播放
+                                setTimeout(() => {
+                                    if (currentTimeOverlay) {
+                                        currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                    }
+                                    video.play().catch(e => console.log('自动播放被阻止:', e));
+                                    
+                                    const loopHandler = () => {
+                                        if (video.currentTime >= endTime) {
+                                            video.currentTime = startTime;
+                                        }
+                                    };
+                                    this.addTrackedEventListener(video, 'timeupdate', loopHandler);
+                                    
+                                    // 添加时间更新处理器
+                                    if (currentTimeOverlay) {
+                                        const timeUpdateHandler = () => {
+                                            currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                        };
+                                        this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
+                                    }
+                                }, 50);
+                            } else {
+                                // 如果视频还没准备好，等待seeked事件
+                                this.addTrackedEventListener(video, 'seeked', seekedHandler);
+                                video.currentTime = startTime;
+                            }
+                        } catch (e) {
+                            console.error(`更新网格索引 ${gridIndex} 的时间点失败:`, e);
+                        }
+                    } else {
+                        // 隐藏超出视频长度的格子
+                        cell.classList.add('hidden');
+                        try {
+                            video.pause();
+                        } catch (e) {
+                            console.warn('暂停视频失败:', e);
+                        }
+                        return;
+                    }
+                    
+                });
+            }
+
+            // 移除特定视频的时间更新事件监听器
+            removeVideoTimeUpdateListeners(video) {
+                if (!video) {
+                    console.warn('尝试移除空视频的事件监听器');
+                    return;
+                }
+                
+                try {
+                    // 找到并移除与该视频相关的所有事件监听器（不仅仅是timeupdate）
+                    const listenersToRemove = this.eventListeners.filter(({element}) => element === video);
+                    
+                    listenersToRemove.forEach(({element, event, handler}) => {
+                        try {
+                            element.removeEventListener(event, handler);
+                        } catch (e) {
+                            console.warn(`移除事件监听器失败 (${event}):`, e);
+                        }
+                    });
+                    
+                    // 从数组中移除所有相关的事件监听器
+                    this.eventListeners = this.eventListeners.filter(({element}) => element !== video);
+                    
+                } catch (e) {
+                    console.error('移除视频事件监听器失败:', e);
                 }
             }
 
@@ -1399,6 +1653,9 @@
                 this.totalPages = 0;
                 this.currentStartTime = 0; // 重置起始时间
                 
+                // 重置网格状态，强制重新创建网格
+                this.resetGridState();
+                
                 // 使用防抖版本加载新视频
                 this.loadVideoDebouncedWrapper();
             }
@@ -1540,6 +1797,9 @@
                 this.cleanupURLs();
                 this.cleanupEventListeners();
                 
+                // 重置网格状态
+                this.resetGridState();
+                
                 // 强制垃圾回收（如果浏览器支持）
                 if (window.gc) {
                     window.gc();
@@ -1620,6 +1880,8 @@
 
         function updateGrid() {
             app.updateGridDisplay();
+            // 网格大小改变时重置网格状态，强制重新创建
+            app.resetGridState();
             app.updatePreviewDebouncedWrapper();
         }
 
@@ -1630,6 +1892,8 @@
         function setDuration(seconds) {
             document.getElementById('duration').value = seconds;
             updateQuickButtons();
+            // 时长改变时重置网格状态，强制重新创建
+            app.resetGridState();
             app.updatePreviewDebouncedWrapper();
         }
         
