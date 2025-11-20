@@ -993,7 +993,7 @@
 
             async updatePreview() {
                 if (!this.originalVideo) return;
-
+            
                 this.isLoading = true;
                 this.showLoading(true);
 
@@ -1156,6 +1156,10 @@
             renderGrid() {
                 const grid = document.getElementById('videoGrid');
                 grid.innerHTML = '';
+                
+                // 修复：清理旧网格视频和事件，只保留 originalVideo (index=0)，防止数组积累/内存泄漏
+                this.cleanupEventListeners();  // 移除旧网格视频事件监听器
+                this.createdVideos.splice(1);  // 移除旧网格视频引用，让GC回收
                 
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
