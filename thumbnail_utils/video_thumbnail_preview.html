@@ -263,10 +263,6 @@
             display: flex;
             align-items: center;
             gap: 5px;
-        }
-
-        /* 网格输入行的特殊样式 */
-        .grid-input-row {
             position: relative;
         }
         
@@ -274,7 +270,7 @@
             width: auto;
             flex: 1;
             -webkit-appearance: textfield;
-            -moz-appearance: textfield; /* 移除Firefox默认箭头 */
+            -moz-appearance: textfield;
             appearance: textfield;
         }
         
@@ -288,56 +284,25 @@
         /* 自定义增减按钮容器 */
         .number-controls {
             display: flex;
-            margin-left: 10px;
+            margin-left: 8px;
             gap: 4px;
-        }
-        
-        /* 垂直按钮组特殊样式，用于对齐 */
-        .number-controls.vertical {
-            /* 使垂直按钮组居中对齐到输入框 */
             align-items: center;
-            /* 调整位置使按钮与水平按钮对齐 */
-            margin-left: 8px;
-            /* 确保垂直居中 */
             align-self: center;
-            /* 微调位置 */
             position: relative;
             top: 1px;
         }
         
-        /* 水平按钮组特殊样式 */
-        .number-controls.horizontal {
-            /* 使水平按钮组居中对齐到输入框 */
-            align-items: center;
-            margin-left: 8px;
-            /* 确保垂直居中 */
-            align-self: center;
-            /* 微调位置 */
-            position: relative;
-            top: 1px;
-        }
-        
-        /* 行数调整按钮 - 垂直排列 */
+        /* 垂直按钮组 - 垂直排列，固定高度60px */
         .number-controls.vertical {
             flex-direction: column;
-            /* 垂直居中对齐 */
             justify-content: center;
-            /* 设置固定高度以匹配水平按钮组 */
             height: 60px;
         }
         
-        /* 列数调整按钮 - 水平排列 */
+        /* 水平按钮组 - 水平排列，固定高度30px */
         .number-controls.horizontal {
             flex-direction: row;
-            /* 垂直居中对齐 */
-            align-items: center;
-            /* 设置固定高度 */
             height: 30px;
-        }
-        
-        /* 列数调整按钮 - 水平排列 */
-        .number-controls.horizontal {
-            flex-direction: row;
         }
         
         /* 自定义增减按钮 */
@@ -388,7 +353,6 @@
             width: 40px;
             margin-right: 15px;
             text-align: center;
-            /* 确保输入框垂直居中 */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -398,16 +362,9 @@
         #gridSize2 {
             width: 40px;
             text-align: center;
-            /* 确保输入框垂直居中 */
             display: flex;
             align-items: center;
             justify-content: center;
-        }
-        
-        /* 列数输入框 - 调整宽度 */
-        #gridSize2 {
-            width: 40px;
-            text-align: center;
         }
         
         /* 行列数控制区域 */
@@ -568,6 +525,19 @@
         .file-item.active .file-progress-fill {
             background: #F7C137;
             box-shadow: none;
+        }
+
+        /* 垂直进度标识线样式 */
+        .progress-indicator-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #00558e;
+            z-index: 10;
+            pointer-events: none;
+            transition: left 0.1s ease;
+            box-shadow: 0 0 4px rgba(255, 68, 68, 0.6);
         }
 
         /* 动态网格布局类 */
@@ -751,9 +721,9 @@
                 this.currentVideoIndex = 0;
                 
                 // 资源跟踪
-                this.createdURLs = new Set(); // 跟踪创建的URL对象
-                this.createdVideos = []; // 跟踪创建的视频元素
-                this.eventListeners = []; // 跟踪事件监听器
+                this.createdURLs = new Set();
+                this.createdVideos = [];
+                this.eventListeners = [];
                 
                 // 防抖机制
                 this.updatePreviewDebounced = this.debounce(this.updatePreview.bind(this), 300);
@@ -835,6 +805,10 @@
             // 清理视频元素
             cleanupVideos() {
                 console.log(`清理 ${this.createdVideos.length} 个视频元素...`);
+                
+                // 停止进度标识线更新
+                this.stopProgressIndicator();
+                
                 this.createdVideos.forEach(video => {
                     try {
                         video.pause();
@@ -1010,6 +984,9 @@
                     this.originalVideo = video;
                     this.updateVideoInfo();
                     this.updatePreview();
+                    
+                    // 启动垂直进度标识线更新
+                    this.startProgressIndicator();
                 } catch (error) {
                     console.error('视频加载失败:', error);
                     this.showError('视频加载失败，请检查文件格式');
@@ -1047,11 +1024,7 @@
                     
                     // 保存当前的起始时间（如果还没有设置的话）
                     if (this.currentStartTime === 0 && this.currentPage > 0) {
-                        const rows = parseInt(document.getElementById('gridSize').value);
-                        const cols = parseInt(document.getElementById('gridSize2').value);
-                        const cellDuration = parseInt(document.getElementById('duration').value);
-                        const totalCells = rows * cols;
-                        const pageDuration = totalCells * cellDuration;
+                        const { pageDuration } = this.getPageConfig();
                         this.currentStartTime = this.currentPage * pageDuration;
                     }
                     
@@ -1073,13 +1046,19 @@
                 this.updatePreviewDebounced();
             }
 
-            calculatePages() {
+            // 获取页面配置参数
+            getPageConfig() {
                 const rows = parseInt(document.getElementById('gridSize').value);
                 const cols = parseInt(document.getElementById('gridSize2').value);
                 const cellDuration = parseInt(document.getElementById('duration').value);
                 const totalCells = rows * cols;
-                const videoDuration = this.originalVideo.duration;
                 const pageDuration = totalCells * cellDuration;
+                return { rows, cols, cellDuration, totalCells, pageDuration };
+            }
+
+            calculatePages() {
+                const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                const videoDuration = this.originalVideo.duration;
                 
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
                 
@@ -1117,11 +1096,7 @@
                 if (pageIndex >= 0 && pageIndex < this.totalPages) {
                     this.currentPage = pageIndex;
                     // 更新起始时间为新页面的起始时间
-                    const rows = parseInt(document.getElementById('gridSize').value);
-                    const cols = parseInt(document.getElementById('gridSize2').value);
-                    const cellDuration = parseInt(document.getElementById('duration').value);
-                    const totalCells = rows * cols;
-                    const pageDuration = totalCells * cellDuration;
+                    const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
                     this.updatePreviewDebouncedWrapper();
                 }
@@ -1131,11 +1106,7 @@
                 if (this.currentPage > 0) {
                     this.currentPage--;
                     // 更新起始时间为新页面的起始时间
-                    const rows = parseInt(document.getElementById('gridSize').value);
-                    const cols = parseInt(document.getElementById('gridSize2').value);
-                    const cellDuration = parseInt(document.getElementById('duration').value);
-                    const totalCells = rows * cols;
-                    const pageDuration = totalCells * cellDuration;
+                    const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
                     this.updatePreviewDebouncedWrapper();
                 }
@@ -1145,69 +1116,47 @@
                 if (this.currentPage < this.totalPages - 1) {
                     this.currentPage++;
                     // 更新起始时间为新页面的起始时间
-                    const rows = parseInt(document.getElementById('gridSize').value);
-                    const cols = parseInt(document.getElementById('gridSize2').value);
-                    const cellDuration = parseInt(document.getElementById('duration').value);
-                    const totalCells = rows * cols;
-                    const pageDuration = totalCells * cellDuration;
+                    const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
                     this.updatePreviewDebouncedWrapper();
                 }
             }
 
-            renderGrid() {
-                const grid = document.getElementById('videoGrid');
-                grid.innerHTML = '';
-                
-                const rows = parseInt(document.getElementById('gridSize').value);
-                const cols = parseInt(document.getElementById('gridSize2').value);
-                const cellDuration = parseInt(document.getElementById('duration').value);
-
-                // 获取视频宽高比
-                const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
-                
-                // 计算网格布局参数
+            // 计算单元格尺寸
+            calculateCellDimensions(rows, cols, videoAspectRatio) {
                 const container = document.getElementById('previewContainer');
                 if (!container) {
                     console.error('previewContainer 元素未找到');
-                    return;
+                    return { width: 0, height: 0 };
                 }
+                
                 const containerHeight = container.clientHeight || 600;
                 const containerWidth = container.clientWidth || 800;
                 const gapSize = 2;
                 
-                // 计算总间隙
                 const totalGapHeight = (rows - 1) * gapSize;
                 const totalGapWidth = (cols - 1) * gapSize;
                 
-                // 计算可用空间
                 const availableHeight = containerHeight - totalGapHeight;
                 const availableWidth = containerWidth - totalGapWidth;
                 
-                // 计算两种可能的格子尺寸
-                // 1. 基于高度计算：格子高度填满可用高度
                 const cellHeightBasedOnHeight = availableHeight / rows;
                 const cellWidthBasedOnHeight = cellHeightBasedOnHeight * videoAspectRatio;
                 const totalWidthBasedOnHeight = cellWidthBasedOnHeight * cols + totalGapWidth;
                 
-                // 2. 基于宽度计算：格子宽度填满可用宽度
                 const cellWidthBasedOnWidth = availableWidth / cols;
                 const cellHeightBasedOnWidth = cellWidthBasedOnWidth / videoAspectRatio;
                 const totalHeightBasedOnWidth = cellHeightBasedOnWidth * rows + totalGapHeight;
                 
-                // 确定使用哪种计算方式
                 let finalCellWidth, finalCellHeight;
                 
                 if (totalWidthBasedOnHeight <= availableWidth) {
-                    // 基于高度的计算可以完全适应容器宽度
                     finalCellHeight = cellHeightBasedOnHeight;
                     finalCellWidth = cellWidthBasedOnHeight;
                 } else if (totalHeightBasedOnWidth <= availableHeight) {
-                    // 基于宽度的计算可以完全适应容器高度
                     finalCellHeight = cellHeightBasedOnWidth;
                     finalCellWidth = cellWidthBasedOnWidth;
                 } else {
-                    // 两种方式都不能完全适应，选择使预览区域更大的方式
                     const areaBasedOnHeight = cellWidthBasedOnHeight * cellHeightBasedOnHeight * rows * cols;
                     const areaBasedOnWidth = cellWidthBasedOnWidth * cellHeightBasedOnWidth * rows * cols;
                     
@@ -1220,21 +1169,24 @@
                     }
                 }
                 
-                // 确保最小尺寸
                 finalCellHeight = Math.max(120, finalCellHeight);
                 finalCellWidth = Math.max(120 * videoAspectRatio, finalCellWidth);
                 
-                // 应用动态CSS类
-                grid.classList.add('video-grid-dynamic');
+                return { width: finalCellWidth, height: finalCellHeight };
+            }
+
+            renderGrid() {
+                const grid = document.getElementById('videoGrid');
+                grid.innerHTML = '';
                 
-                // 动态设置网格样式（通过修改CSS类的内容）
+                const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
+                const { width: finalCellWidth, height: finalCellHeight } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
+
+                grid.classList.add('video-grid-dynamic');
                 this.updateGridStyles(cols, rows, finalCellHeight, finalCellWidth);
 
-                const totalCells = rows * cols;
                 const videoDuration = this.originalVideo.duration;
-                const pageDuration = totalCells * cellDuration;
-                
-                // 使用currentStartTime作为页面起始时间，而不是基于currentPage计算
                 const pageStartTime = this.currentStartTime;
                 
                 console.log(`开始渲染网格，将创建 ${totalCells} 个视频元素...`);
@@ -1250,7 +1202,6 @@
                     thumbnailVideo.controls = false;
                     thumbnailVideo.classList.add('video-element');
                     
-                    // 跟踪新创建的视频元素
                     this.createdVideos.push(thumbnailVideo);
                     
                     const startTime = pageStartTime + i * cellDuration;
@@ -1262,7 +1213,6 @@
                         continue;
                     }
                     
-                    // 使用跟踪的事件监听器
                     const loadedMetadataHandler = () => {
                         thumbnailVideo.currentTime = startTime;
                     };
@@ -1425,7 +1375,13 @@
                     progressFill.className = 'file-progress-fill';
                     progressFill.id = `progress-fill-${index}`;
                     
+                    // 添加垂直进度标识线
+                    const progressIndicator = document.createElement('div');
+                    progressIndicator.className = 'progress-indicator-line';
+                    progressIndicator.id = `progress-indicator-${index}`;
+                    
                     progressWrapper.appendChild(progressFill);
+                    progressWrapper.appendChild(progressIndicator);
                     
                     fileItem.appendChild(topRow);
                     fileItem.appendChild(progressWrapper);
@@ -1510,26 +1466,19 @@
             updateFileProgress() {
                 if (!this.originalVideo || this.currentVideoIndex === -1) return;
 
-                const rows = parseInt(document.getElementById('gridSize').value);
-                const cols = parseInt(document.getElementById('gridSize2').value);
-                const cellDuration = parseInt(document.getElementById('duration').value);
-                const totalCells = rows * cols;
-                const pageDuration = totalCells * cellDuration;
+                const { pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
-
                 if (!videoDuration) return;
 
-                // 计算当前覆盖的时间范围
                 const startTime = this.currentStartTime;
                 const endTime = Math.min(startTime + pageDuration, videoDuration);
                 
-                // 计算百分比
                 const startPercent = (startTime / videoDuration) * 100;
                 const widthPercent = ((endTime - startTime) / videoDuration) * 100;
 
-                // 更新DOM
                 const progressFill = document.getElementById(`progress-fill-${this.currentVideoIndex}`);
                 const progressWrapper = document.getElementById(`progress-wrapper-${this.currentVideoIndex}`);
+                const progressIndicator = document.getElementById(`progress-indicator-${this.currentVideoIndex}`);
                 
                 if (progressFill) {
                     progressFill.style.left = `${startPercent}%`;
@@ -1538,6 +1487,12 @@
 
                 if (progressWrapper) {
                     progressWrapper.title = `当前显示: ${this.formatTime(startTime)} - ${this.formatTime(endTime)} (总长: ${this.formatTime(videoDuration)})`;
+                }
+
+                if (progressIndicator) {
+                    const firstCellProgressPercent = this.getFirstCellProgress();
+                    const indicatorPosition = startPercent + (firstCellProgressPercent * widthPercent / 100);
+                    progressIndicator.style.left = `${indicatorPosition}%`;
                 }
             }
 
@@ -1585,6 +1540,9 @@
             // 强制清理资源
             forceCleanup() {
                 console.log('用户触发强制清理...');
+                
+                // 停止进度标识线更新
+                this.stopProgressIndicator();
                 
                 // 暂停所有视频
                 this.createdVideos.forEach(video => {
@@ -1636,6 +1594,36 @@
                 
                 // 显示清理完成提示
                 this.showNotification('内存清理完成');
+            }
+            
+            // 启动垂直进度标识线更新
+            startProgressIndicator() {
+                // 每100ms更新一次垂直线位置
+                this.progressIndicatorInterval = setInterval(() => {
+                    this.updateFileProgress();
+                }, 100);
+            }
+            
+            // 停止垂直进度标识线更新
+            stopProgressIndicator() {
+                if (this.progressIndicatorInterval) {
+                    clearInterval(this.progressIndicatorInterval);
+                    this.progressIndicatorInterval = null;
+                }
+            }
+            
+            // 计算第一个格子的播放进度百分比
+            getFirstCellProgress() {
+                if (!this.originalVideo || this.createdVideos.length === 0) return 0;
+                
+                const cellDuration = parseInt(document.getElementById('duration').value);
+                const firstVideo = this.createdVideos[0];
+                if (!firstVideo || isNaN(firstVideo.currentTime)) return 0;
+                
+                const progressInCell = firstVideo.currentTime - this.currentStartTime;
+                const clampedProgress = Math.max(0, Math.min(progressInCell, cellDuration));
+                
+                return (clampedProgress / cellDuration) * 100;
             }
             
             // 显示通知
