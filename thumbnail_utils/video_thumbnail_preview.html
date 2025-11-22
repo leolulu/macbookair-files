@@ -616,6 +616,10 @@
             margin-bottom: 10px;
         }
 
+        #video-source-tabs {
+            margin-top: -10px;
+        }
+
         .tab-button {
             background: transparent;
             color: #cccccc;
@@ -677,11 +681,9 @@
 
     <!-- 右侧控制面板 -->
     <div class="sidebar">
-        <h3>视频缩略图工具</h3>
-        
         <!-- 视频源选择区域 -->
         <div class="control-section">
-            <div class="video-source-tabs">
+            <div class="video-source-tabs" id="video-source-tabs">
                 <button class="tab-button active" onclick="switchTab('local')">本地视频</button>
                 <button class="tab-button" onclick="switchTab('remote')">远程视频</button>
             </div>
