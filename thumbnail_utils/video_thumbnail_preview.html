@@ -841,6 +841,9 @@
                 
                 // 全局错误捕获
                 this.initGlobalErrorHandling();
+                
+                // 启动视频播放状态检测器
+                this.startVideoPlayMonitor();
             }
             
             // 防抖函数
@@ -880,9 +883,85 @@
                 }
             }
             
+            // 启动视频播放状态检测器
+            startVideoPlayMonitor() {
+                // 每10秒检查一次所有视频的播放状态
+                this.playMonitorInterval = setInterval(() => {
+                    this.checkVideosPlayState();
+                }, 10000);
+            }
+            
+            // 停止视频播放状态检测器
+            stopVideoPlayMonitor() {
+                if (this.playMonitorInterval) {
+                    clearInterval(this.playMonitorInterval);
+                    this.playMonitorInterval = null;
+                }
+            }
+            
+            // 检查所有视频的播放状态
+            checkVideosPlayState() {
+                // 跳过originalVideo (index=0)，只检查缩略图视频
+                this.createdVideos.forEach((video, index) => {
+                    if (index === 0) return; // 跳过originalVideo
+                    
+                    try {
+                        // 检查视频是否暂停或卡住
+                        if (!video || !video.readyState || video.readyState < 2) {
+                            // 视频未准备好，跳过
+                            return;
+                        }
+                        
+                        // 检查视频是否暂停
+                        if (video.paused || video.ended) {
+                            console.log(`检测到视频暂停，尝试恢复播放: 格子${index - 1}`);
+                            video.play().catch(e => {
+                                console.log(`自动播放被阻止:`, e);
+                                // 如果播放被阻止，尝试通过用户交互方式触发
+                                this.requestPlayPermission(video);
+                            });
+                            return;
+                        }
+                        
+                        // 检查视频是否卡住（当前时间没有变化）
+                        const currentTime = video.currentTime;
+                        if (typeof video._lastCheckTime !== 'undefined' &&
+                            Math.abs(currentTime - video._lastCheckTime) < 0.01) {
+                            // 时间没有变化，可能是卡住了
+                            console.log(`检测到视频卡住，尝试重新播放: 格子${index - 1}`);
+                            video.play().catch(e => {
+                                console.log(`重新播放被阻止:`, e);
+                                this.requestPlayPermission(video);
+                            });
+                        }
+                        
+                        // 更新上次检查的时间
+                        video._lastCheckTime = currentTime;
+                        
+                    } catch (e) {
+                        console.error(`检查视频播放状态失败:`, e);
+                    }
+                });
+            }
+            
+            // 请求播放权限（通过模拟用户交互）
+            requestPlayPermission(video) {
+                // 尝试通过静音来获得播放权限
+                if (video.muted === false) {
+                    video.muted = true;
+                    video.play().then(() => {
+                        // 播放成功后恢复静音状态
+                        video.muted = false;
+                    }).catch(e => {
+                        console.log(`静音播放也失败:`, e);
+                    });
+                }
+            }
+            
             // 清理所有资源
             cleanupAllResources() {
                 this.stopMemoryMonitoring();
+                this.stopVideoPlayMonitor();
                 this.cleanupVideos();
                 this.cleanupURLs();
                 this.cleanupEventListeners();
@@ -1901,6 +1980,9 @@
             forceCleanup() {
                 // 停止进度标识线更新
                 this.stopProgressIndicator();
+                
+                // 停止视频播放状态检测器
+                this.stopVideoPlayMonitor();
                 
                 // 暂停所有视频
                 this.createdVideos.forEach(video => {
