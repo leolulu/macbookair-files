@@ -206,7 +206,9 @@
             background: #000000;
             overflow: hidden;
             border: 1px solid #333333;
+            cursor: pointer;
         }
+
 
         .grid-item video {
             width: 100%;
@@ -1327,7 +1329,10 @@
                     this.currentPage--;
                     // 更新起始时间为新页面的起始时间
                     const { pageDuration } = this.getPageConfig();
-                    this.currentStartTime = this.currentPage * pageDuration;
+                    const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
+                    if (newStartTime < this.currentStartTime) {
+                        this.setPageStartTime(newStartTime);
+                    }
                     
                     
                     // 优化：只更新时间点，不重新创建网格
@@ -1346,7 +1351,11 @@
                     this.currentPage++;
                     // 更新起始时间为新页面的起始时间
                     const { pageDuration } = this.getPageConfig();
-                    this.currentStartTime = this.currentPage * pageDuration;
+                    const videoDuration = this.originalVideo.duration;
+                    const newStartTime = this.currentStartTime + pageDuration;
+                    if (newStartTime < videoDuration) {
+                        this.setPageStartTime(newStartTime);
+                    }
                     
                     
                     // 优化：只更新时间点，不重新创建网格
@@ -1358,6 +1367,16 @@
                         this.updatePreviewDebouncedWrapper();
                     }
                 }
+            }
+
+            setPageStartTime(newStartTime) {
+                this.currentStartTime = newStartTime;
+                const { pageDuration } = this.getPageConfig();
+                this.currentPage = Math.floor(newStartTime / pageDuration);
+                this.currentPage = Math.max(0, Math.min(this.currentPage, this.totalPages - 1));
+                this.updatePaginationUI();
+                this.updateGridTimePoints();
+                this.updateFileProgress();
             }
 
             // 计算单元格尺寸
@@ -1499,6 +1518,17 @@
                     cell.appendChild(thumbnailVideo);
                     cell.appendChild(currentTimeOverlay);
                     cell.appendChild(timeRangeOverlay);
+                    
+                    // 新增功能：单击格子将该格子时间设为页面起始时间
+                    cell.style.cursor = 'pointer';
+                    cell.onclick = (e) => {
+                        e.stopPropagation();
+                        const gridIndex = parseInt(cell.dataset.gridIndex);
+                        if (isNaN(gridIndex)) return;
+                        const { cellDuration } = this.getPageConfig();
+                        const newStartTime = this.currentStartTime + gridIndex * cellDuration;
+                        this.setPageStartTime(newStartTime);
+                    };
                     
                     grid.appendChild(cell);
                 }
