@@ -699,7 +699,6 @@
             <!-- 远程视频 Tab 内容 -->
             <div id="remoteTab" class="tab-content">
                 <div class="control-group">
-                    <label>远程视频 URL:</label>
                     <input type="url" id="remoteUrlInput" placeholder="粘贴视频URL后点击下方按钮" class="remote-url-input">
                     <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
                 </div>
@@ -1069,7 +1068,10 @@
 
                     this.originalVideo = video;
                     this.updateVideoInfo();
-                    this.updatePreview();
+                    // 确保在第一次加载时也正确应用缩放计算
+                    setTimeout(() => {
+                        this.updatePreview();
+                    }, 0);
                     
                     // 启动垂直进度标识线更新
                     this.startProgressIndicator();
