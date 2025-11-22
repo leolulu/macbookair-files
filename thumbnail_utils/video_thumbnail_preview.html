@@ -508,15 +508,6 @@
             overflow: hidden;
         }
 
-        /* Hide progress bar for non-active local files */
-        .file-item:not(.active) .file-progress-wrapper {
-            display: none;
-        }
-
-        .file-item.active .file-progress-wrapper {
-            background: rgba(0, 0, 0, 0.3);
-        }
-
         .file-progress-fill {
             position: absolute;
             top: 0;
@@ -527,8 +518,7 @@
             transition: all 0.3s ease;
         }
 
-        /* Active local or remote video progress fill style */
-        .file-item.active .file-progress-fill,
+        /* Unified progress fill style */
         #videoInfo .file-progress-fill {
             background: #F7C137;
             box-shadow: none;
@@ -1790,25 +1780,7 @@
                     topRow.appendChild(contentDiv);
                     topRow.appendChild(removeBtn);
                     
-                    // 添加进度条容器
-                    const progressWrapper = document.createElement('div');
-                    progressWrapper.className = 'file-progress-wrapper';
-                    progressWrapper.id = `progress-wrapper-${index}`;
-                    
-                    const progressFill = document.createElement('div');
-                    progressFill.className = 'file-progress-fill';
-                    progressFill.id = `progress-fill-${index}`;
-                    
-                    // 添加垂直进度标识线
-                    const progressIndicator = document.createElement('div');
-                    progressIndicator.className = 'progress-indicator-line';
-                    progressIndicator.id = `progress-indicator-${index}`;
-                    
-                    progressWrapper.appendChild(progressFill);
-                    progressWrapper.appendChild(progressIndicator);
-                    
                     fileItem.appendChild(topRow);
-                    fileItem.appendChild(progressWrapper);
                     
                     fileItem.onclick = () => this.switchToFile(index);
                     
@@ -1907,12 +1879,7 @@
                 const widthPercent = ((endTime - startTime) / videoDuration) * 100;
 
                 // 统一更新进度条逻辑
-                let progressWrapper;
-                if (this.currentVideoUrl) {
-                    progressWrapper = document.getElementById('unified-progress');
-                } else {
-                    progressWrapper = document.getElementById(`progress-wrapper-${this.currentVideoIndex}`);
-                }
+                const progressWrapper = document.getElementById('unified-progress');
 
                 if (progressWrapper) {
                     const progressFill = progressWrapper.querySelector('.file-progress-fill');
@@ -2178,25 +2145,22 @@
                 // 清空旧的进度条
                 container.innerHTML = '';
 
-                // 只在有远程视频URL时创建进度条
-                if (this.currentVideoUrl) {
-                    const progressWrapper = document.createElement('div');
-                    progressWrapper.className = 'file-progress-wrapper';
-                    progressWrapper.id = 'unified-progress'; // 使用唯一ID
+                const progressWrapper = document.createElement('div');
+                progressWrapper.className = 'file-progress-wrapper';
+                progressWrapper.id = 'unified-progress';
 
-                    const progressFill = document.createElement('div');
-                    progressFill.className = 'file-progress-fill';
-                    progressFill.style.left = '0%';
-                    progressFill.style.width = '0%';
-                    
-                    const progressIndicator = document.createElement('div');
-                    progressIndicator.className = 'progress-indicator-line';
-                    progressIndicator.style.left = '0%';
+                const progressFill = document.createElement('div');
+                progressFill.className = 'file-progress-fill';
+                progressFill.style.left = '0%';
+                progressFill.style.width = '0%';
+                
+                const progressIndicator = document.createElement('div');
+                progressIndicator.className = 'progress-indicator-line';
+                progressIndicator.style.left = '0%';
 
-                    progressWrapper.appendChild(progressFill);
-                    progressWrapper.appendChild(progressIndicator);
-                    container.appendChild(progressWrapper);
-                }
+                progressWrapper.appendChild(progressFill);
+                progressWrapper.appendChild(progressIndicator);
+                container.appendChild(progressWrapper);
             }
 }
 
