@@ -95,6 +95,7 @@
             padding: 10px;
             border-radius: 4px;
             font-size: 14px;
+            width: 100%;
         }
 
         .video-info strong {
@@ -109,7 +110,7 @@
             max-width: 100%; /* 确保不会超出容器 */
         }
 
-        .video-info div {
+        .video-info-details {
             font-size: 12px;
             color: #aaaaaa;
             margin-top: 5px;
@@ -505,29 +506,34 @@
             margin-top: 4px;
             position: relative;
             overflow: hidden;
-            display: none; /* 默认隐藏，只有当前视频显示 */
+        }
+
+        /* Hide progress bar for non-active local files */
+        .file-item:not(.active) .file-progress-wrapper {
+            display: none;
         }
 
         .file-item.active .file-progress-wrapper {
-            display: block;
             background: rgba(0, 0, 0, 0.3);
         }
 
         .file-progress-fill {
             position: absolute;
             top: 0;
+            left: 0;
             height: 100%;
             background: #007acc;
             border-radius: 2px;
             transition: all 0.3s ease;
         }
 
-        .file-item.active .file-progress-fill {
+        /* Active local or remote video progress fill style */
+        .file-item.active .file-progress-fill,
+        #videoInfo .file-progress-fill {
             background: #F7C137;
             box-shadow: none;
         }
 
-        /* 垂直进度标识线样式 */
         .progress-indicator-line {
             position: absolute;
             top: 0;
@@ -538,7 +544,9 @@
             pointer-events: none;
             transition: left 0.1s ease;
             box-shadow: 0 0 4px rgba(255, 68, 68, 0.6);
+            left: 0;
         }
+
 
         /* 动态网格布局类 */
         .video-grid-dynamic {
@@ -600,6 +608,62 @@
             background-color: #007acc;
             transform: none;
         }
+
+        /* Tab 切换样式 */
+        .video-source-tabs {
+            display: flex;
+            border-bottom: 1px solid #555555;
+            margin-bottom: 10px;
+        }
+
+        .tab-button {
+            background: transparent;
+            color: #cccccc;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            flex: 1;
+        }
+
+        .tab-button:hover {
+            color: #ffffff;
+            background: rgba(0, 122, 204, 0.1);
+        }
+
+        .tab-button.active {
+            color: #007acc;
+            border-bottom-color: #007acc;
+            background: rgba(0, 122, 204, 0.05);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 文件列表区域样式调整 */
+        .file-list-section {
+            margin-top: 10px;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+
+        .remote-url-input {
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 6px 8px;
+            background: #404040;
+            border: 1px solid #555555;
+            color: #ffffff;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -615,13 +679,33 @@
     <div class="sidebar">
         <h3>视频缩略图工具</h3>
         
-        <div class="control-group">
-            <button class="btn" onclick="selectVideo()">选择视频</button>
-            <input type="file" id="videoFile" accept="video/*" multiple class="video-file-input">
+        <!-- 视频源选择区域 -->
+        <div class="control-section">
+            <div class="video-source-tabs">
+                <button class="tab-button active" onclick="switchTab('local')">本地视频</button>
+                <button class="tab-button" onclick="switchTab('remote')">远程视频</button>
+            </div>
+            
+            <!-- 本地视频 Tab 内容 -->
+            <div id="localTab" class="tab-content active">
+                <div class="control-group">
+                    <button class="btn" onclick="selectVideo()">选择视频</button>
+                    <input type="file" id="videoFile" accept="video/*" multiple class="video-file-input">
+                </div>
+            </div>
+            
+            <!-- 远程视频 Tab 内容 -->
+            <div id="remoteTab" class="tab-content">
+                <div class="control-group">
+                    <label>远程视频 URL:</label>
+                    <input type="url" id="remoteUrlInput" placeholder="粘贴视频URL后点击下方按钮" class="remote-url-input">
+                    <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
+                </div>
+            </div>
         </div>
-
+        
         <!-- 文件列表区域 -->
-        <div class="control-section is-hidden" id="fileListSection">
+        <div class="control-section is-hidden file-list-section" id="fileListSection">
             <div class="control-group">
                 <label>已选择的视频文件:</label>
                 <div class="file-list" id="fileList"></div>
@@ -629,11 +713,13 @@
         </div>
 
         <div class="video-info hidden" id="videoInfo">
-            <div><strong id="videoName"></strong></div>
-            <div>
+            <div class="video-info-name"><strong id="videoName"></strong></div>
+            <div class="video-info-details">
                 时长: <span id="videoDuration"></span><br>
                 分辨率: <span id="videoResolution"></span>
             </div>
+            <!-- 统一的进度条容器 -->
+            <div id="unifiedProgressBarContainer" style="margin-top: 8px; min-height: 8px;"></div>
         </div>
 
         <div class="pagination hidden" id="pagination">
@@ -709,6 +795,7 @@
             constructor() {
                 this.currentVideo = null;
                 this.originalVideo = null;
+                this.currentVideoUrl = null;
                 this.isLoading = false;
                 this.currentPage = 0;
                 this.totalPages = 0;
@@ -746,9 +833,13 @@
                 this.updateGridDisplay();
                 this.initDragAndDrop();
                 this.initKeyboardEvents();
+                // 移除剪贴板监听功能
                 
                 // 页面卸载时清理资源
                 window.addEventListener('beforeunload', () => this.cleanupAllResources());
+                
+                // 全局错误捕获
+                this.initGlobalErrorHandling();
             }
             
             // 防抖函数
@@ -943,10 +1034,12 @@
             async loadVideo() {
                 if (!this.currentVideo) return;
 
+                this.currentVideoUrl = null;
+
                 // 重置分页状态，确保新视频从第一页开始
                 this.currentPage = 0;
                 this.totalPages = 0;
-                this.currentStartTime = 0; // 重置起始时间
+                this.currentStartTime = 0;
 
                 // 重置网格状态，强制重新创建网格
                 this.resetGridState();
@@ -981,6 +1074,7 @@
                 } catch (error) {
                     console.error('视频加载失败:', error);
                     this.showError('视频加载失败，请检查文件格式');
+                    this.showNotification('视频加载失败，请检查文件格式', true);
                 } finally {
                     this.isLoading = false;
                     this.showLoading(false);
@@ -996,12 +1090,26 @@
                 const video = this.originalVideo;
                 const duration = this.formatTime(video.duration);
                 const resolution = `${video.videoWidth}×${video.videoHeight}`;
+    
+                const nameEl = document.getElementById('videoName');
+                if (this.currentVideoUrl) {
+                    nameEl.textContent = `远程视频: ${this.currentVideoUrl}`;
+                } else if (this.currentVideo) {
+                    nameEl.textContent = this.currentVideo.name;
+                } else {
+                    nameEl.textContent = '无视频';
+                }
 
-                document.getElementById('videoName').textContent = this.currentVideo.name;
                 document.getElementById('videoDuration').textContent = duration;
                 document.getElementById('videoResolution').textContent = resolution;
                 document.getElementById('videoInfo').classList.remove('hidden');
                 document.getElementById('videoInfo').classList.add('visible');
+                
+                // 为当前视频（本地或远程）创建或更新进度条
+                this.createOrUpdateProgressBar();
+                
+                // 立即更新进度条显示
+                this.updateFileProgress();
             }
 
             async updatePreview() {
@@ -1026,6 +1134,7 @@
                 } catch (error) {
                     console.error('预览更新失败:', error);
                     this.showError('预览更新失败');
+                    this.showNotification('预览更新失败', true);
                 } finally {
                     this.isLoading = false;
                     this.showLoading(false);
@@ -1639,9 +1748,12 @@
             }
             
             // 切换到指定文件
+            // 在 switchToFile 时也重置 URL
             async switchToFile(index) {
+                this.currentVideoUrl = null;
                 if (index < 0 || index >= this.videoFiles.length) return;
                 
+                // 设置当前文件索引和视频对象
                 this.currentVideoIndex = index;
                 this.currentVideo = this.videoFiles[index];
                 
@@ -1699,7 +1811,7 @@
             
             // 更新文件列表中的进度条
             updateFileProgress() {
-                if (!this.originalVideo || this.currentVideoIndex === -1) return;
+                if (!this.originalVideo || !this.originalVideo.duration) return;
 
                 const { pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
@@ -1711,23 +1823,32 @@
                 const startPercent = (startTime / videoDuration) * 100;
                 const widthPercent = ((endTime - startTime) / videoDuration) * 100;
 
-                const progressFill = document.getElementById(`progress-fill-${this.currentVideoIndex}`);
-                const progressWrapper = document.getElementById(`progress-wrapper-${this.currentVideoIndex}`);
-                const progressIndicator = document.getElementById(`progress-indicator-${this.currentVideoIndex}`);
-                
-                if (progressFill) {
-                    progressFill.style.left = `${startPercent}%`;
-                    progressFill.style.width = `${widthPercent}%`;
+                // 统一更新进度条逻辑
+                let progressWrapper;
+                if (this.currentVideoUrl) {
+                    progressWrapper = document.getElementById('unified-progress');
+                } else {
+                    progressWrapper = document.getElementById(`progress-wrapper-${this.currentVideoIndex}`);
                 }
 
                 if (progressWrapper) {
-                    progressWrapper.title = `当前显示: ${this.formatTime(startTime)} - ${this.formatTime(endTime)} (总长: ${this.formatTime(videoDuration)})`;
-                }
+                    const progressFill = progressWrapper.querySelector('.file-progress-fill');
+                    const progressIndicator = progressWrapper.querySelector('.progress-indicator-line');
 
-                if (progressIndicator) {
-                    const firstCellProgressPercent = this.getFirstCellProgress();
-                    const indicatorPosition = startPercent + (firstCellProgressPercent * widthPercent / 100);
-                    progressIndicator.style.left = `${indicatorPosition}%`;
+                    if (progressFill) {
+                        // 直接使用内联样式设置位置和宽度
+                        progressFill.style.left = `${startPercent}%`;
+                        progressFill.style.width = `${widthPercent}%`;
+                    }
+
+                    progressWrapper.title = `当前显示: ${this.formatTime(startTime)} - ${this.formatTime(endTime)} (总长: ${this.formatTime(videoDuration)})`;
+
+                    if (progressIndicator) {
+                        const firstCellProgressPercent = this.getFirstCellProgress();
+                        const indicatorPosition = startPercent + (firstCellProgressPercent * widthPercent / 100);
+                        // 直接使用内联样式设置位置
+                        progressIndicator.style.left = `${indicatorPosition}%`;
+                    }
                 }
             }
 
@@ -1806,7 +1927,7 @@
                 }
                 
                 // 显示清理完成提示
-                this.showNotification('内存清理完成');
+                this.showNotification('内存清理完成', false);
             }
             
             // 启动垂直进度标识线更新
@@ -1846,13 +1967,13 @@
             }
             
             // 显示通知
-            showNotification(message) {
+            showNotification(message, isError = false) {
                 const notification = document.createElement('div');
                 notification.style.cssText = `
                     position: fixed;
                     top: 20px;
                     right: 20px;
-                    background: #4CAF50;
+                    background: ${isError ? '#f44336' : '#4CAF50'};
                     color: white;
                     padding: 12px 20px;
                     border-radius: 4px;
@@ -1869,12 +1990,134 @@
                     }
                 }, 3000);
             }
+
+            async loadRemoteVideo(url) {
+        if (!url || typeof url !== 'string') {
+            this.showError('无效的视频 URL');
+            return;
         }
 
-        // 实例化应用
-        const app = new VideoThumbnailPreview();
+        // 重置本地视频状态
+        this.currentVideo = null;
+        this.currentVideoUrl = url;
+        
+        // 重置分页和网格状态
+        this.currentPage = 0;
+        this.totalPages = 0;
+        this.currentStartTime = 0;
+        this.resetGridState();
 
-        function selectVideo() {
+        this.isLoading = true;
+        this.showLoading(true);
+        this.clearError();
+
+        try {
+            const video = document.createElement('video');
+
+            await new Promise((resolve, reject) => {
+                video.onloadedmetadata = () => {
+                    video.onerror = null; // 成功加载元数据后，移除错误处理器
+                    // 清理旧资源
+                    this.cleanupVideos();
+                    this.cleanupURLs();
+                    
+                    this.originalVideo = video;
+                    this.createdVideos.push(video);
+                    resolve();
+                };
+                video.onerror = () => {
+                    reject(new Error('无法加载视频，请检查 URL 和 CORS'));
+                };
+                video.src = url;
+            });
+
+            this.updateVideoInfo();
+            this.updatePreview();
+            
+            // 启动进度指示器
+            this.startProgressIndicator();
+            
+            // 立即更新一次进度条
+            this.updateFileProgress();
+            
+        } catch (error) {
+            console.error('远程视频加载失败:', error);
+            this.showError(`远程视频加载失败: ${error.message}`);
+            this.showNotification(`远程视频加载失败: ${error.message}`, true);
+        } finally {
+            this.isLoading = false;
+            this.showLoading(false);
+        }
+    }
+    
+    // 初始化全局错误处理
+    initGlobalErrorHandling() {
+        // 捕获 JavaScript 运行时错误
+        window.onerror = (message, source, lineno, colno, error) => {
+            console.error('全局错误捕获:', message, source, lineno, colno, error);
+            // 显示错误提示，但不显示给用户过多的技术细节
+            this.showNotification('发生未知错误，请查看控制台了解详情', true);
+            // 阻止默认的错误处理
+            return true;
+        };
+        
+        // 捕获未处理的 Promise 拒绝
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('未处理的 Promise 拒绝:', event.reason);
+            // 显示错误提示，但不显示给用户过多的技术细节
+            this.showNotification('发生未知错误，请查看控制台了解详情', true);
+            // 阻止默认的 Promise 拒绝处理
+            event.preventDefault();
+        });
+        
+        // 捕获资源加载错误
+        window.addEventListener('error', (event) => {
+            // 过滤掉一些不重要的资源错误
+            if (event.target !== window) {
+                console.warn('资源加载错误:', event.target);
+                // 对于视频资源加载错误，我们已经在具体方法中处理了，这里不再重复提示
+                // 其他资源错误可以考虑提示，但为了避免过多提示，这里暂不处理
+            }
+        }, true);
+    }
+    
+    // 移除剪贴板监听功能，避免用户困惑
+    // 用户需要手动粘贴URL到输入框，然后点击确认按钮加载
+    
+            // 创建或更新统一的进度条
+            createOrUpdateProgressBar() {
+                const container = document.getElementById('unifiedProgressBarContainer');
+                if (!container) return;
+
+                // 清空旧的进度条
+                container.innerHTML = '';
+
+                // 只在有远程视频URL时创建进度条
+                if (this.currentVideoUrl) {
+                    const progressWrapper = document.createElement('div');
+                    progressWrapper.className = 'file-progress-wrapper';
+                    progressWrapper.id = 'unified-progress'; // 使用唯一ID
+
+                    const progressFill = document.createElement('div');
+                    progressFill.className = 'file-progress-fill';
+                    progressFill.style.left = '0%';
+                    progressFill.style.width = '0%';
+                    
+                    const progressIndicator = document.createElement('div');
+                    progressIndicator.className = 'progress-indicator-line';
+                    progressIndicator.style.left = '0%';
+
+                    progressWrapper.appendChild(progressFill);
+                    progressWrapper.appendChild(progressIndicator);
+                    container.appendChild(progressWrapper);
+                }
+            }
+}
+
+    // 实例化应用
+    const app = new VideoThumbnailPreview();
+
+    function selectVideo() {
             app.selectVideo();
         }
 
@@ -1912,6 +2155,37 @@
             }
         }
         
+        // Tab 切换函数
+        function switchTab(tabName) {
+            // 移除所有 Tab 按钮的 active 类
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 隐藏所有 Tab 内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 获取文件列表区域元素
+            const fileListSection = document.getElementById('fileListSection');
+            
+            // 激活选中的 Tab
+            if (tabName === 'local') {
+                document.querySelector('.tab-button:nth-child(1)').classList.add('active');
+                document.getElementById('localTab').classList.add('active');
+                // 如果有本地文件，则显示文件列表
+                if (app.videoFiles.length > 0) {
+                    fileListSection.classList.remove('is-hidden');
+                }
+            } else if (tabName === 'remote') {
+                document.querySelector('.tab-button:nth-child(2)').classList.add('active');
+                document.getElementById('remoteTab').classList.add('active');
+                // 远程模式下，隐藏文件列表
+                fileListSection.classList.add('is-hidden');
+            }
+        }
+
         // 更新快捷按钮的选中状态
         function updateQuickButtons() {
             const currentDuration = parseInt(document.getElementById('duration').value);
