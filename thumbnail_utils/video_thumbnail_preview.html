@@ -1359,14 +1359,14 @@
                             pageDuration,
                             videoDuration,
                             currentStartTime: this.currentStartTime,
-                            startTimeText: this.formatTime(this.currentStartTime),
-                            endTimeText: this.formatTime(endTime),
-                            durationText: this.formatTime(videoDuration)
+                            startMin: (this.currentStartTime / 60).toFixed(1),
+                            endMin: (endTime / 60).toFixed(1),
+                            totalMin: (videoDuration / 60).toFixed(1)
                         };
                     }
                     
                     // 同时显示时间范围和页码信息
-                    const timeRangeText = `${this._cachedPageConfig.startTimeText} ~ ${this._cachedPageConfig.endTimeText} / ${this._cachedPageConfig.durationText}`;
+                    const timeRangeText = `${this._cachedPageConfig.startMin}~${this._cachedPageConfig.endMin} / ${this._cachedPageConfig.totalMin}`;
                     const pageText = `${this.currentPage + 1} / ${this.totalPages}`;
                     pageInfo.innerHTML = `
                         <div class="time-range-display">${timeRangeText}</div>
