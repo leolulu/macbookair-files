@@ -349,6 +349,32 @@
         .number-btn:active {
             transform: scale(0.95);
         }
+
+        .number-btn.both-btn {
+            background: #4a5a4a;
+        }
+
+        .number-btn.both-btn:hover {
+            background: #5a6a5a;
+            border-color: #28a745;
+        }
+
+        .controls-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex: 1;
+        }
+        
+        .number-controls:not(.both-controls) {
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+        
+        .number-controls.both-controls {
+            margin-left: auto;
+            flex-shrink: 0;
+        }
         
         /* 网格输入行标签优化 */
         .grid-label {
@@ -746,9 +772,14 @@
                         <span class="grid-label">行数:</span>
                         <div class="layout-flex-center layout-flex-center-tall">
                             <input type="number" id="gridSize" min="1" max="6" value="4" onchange="updateGrid()">
-                            <div class="number-controls vertical">
-                                <div class="number-btn" onclick="changeGridSize(1, 1)">▲</div>
-                                <div class="number-btn" onclick="changeGridSize(1, -1)">▼</div>
+                            <div class="controls-wrapper">
+                                <div class="number-controls vertical">
+                                    <div class="number-btn" onclick="changeGridSize(1, 1)">▲</div>
+                                    <div class="number-btn" onclick="changeGridSize(1, -1)">▼</div>
+                                </div>
+                                <div class="number-controls both-controls">
+                                    <div class="number-btn both-btn" onclick="changeBothGridSize(1)">⊕</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -756,9 +787,14 @@
                         <span class="grid-label">列数:</span>
                         <div class="layout-flex-center layout-flex-center-short">
                             <input type="number" id="gridSize2" min="1" max="6" value="4" onchange="updateGrid()">
-                            <div class="number-controls horizontal">
-                                <div class="number-btn" onclick="changeGridSize(2, -1)">◄</div>
-                                <div class="number-btn" onclick="changeGridSize(2, 1)">►</div>
+                            <div class="controls-wrapper">
+                                <div class="number-controls horizontal">
+                                    <div class="number-btn" onclick="changeGridSize(2, -1)">◄</div>
+                                    <div class="number-btn" onclick="changeGridSize(2, 1)">►</div>
+                                </div>
+                                <div class="number-controls both-controls">
+                                    <div class="number-btn both-btn" onclick="changeBothGridSize(-1)">⊖</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2321,6 +2357,13 @@ function setDuration(seconds) {
     app.updatePreviewDebouncedWrapper();
 }
         
+// 同时调整行列数
+function changeBothGridSize(direction) {
+    changeGridSize(1, direction);
+    changeGridSize(2, direction);
+    updateGrid();
+}
+
 // 宫格数增减函数
 function changeGridSize(inputId, direction) {
     const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
