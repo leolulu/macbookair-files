@@ -1305,7 +1305,8 @@
                        this.gridState.cols !== cols ||
                        this.gridState.cellDuration !== cellDuration ||
                        this.gridState.totalCells !== totalCells ||
-                       this.gridState.videoFile !== this.currentVideo;
+                       this.gridState.videoFile !== this.currentVideo ||
+                       this.currentVideoUrl;  // 远程视频强制每次重建网格
             }
 
             // 更新网格状态
@@ -1422,8 +1423,10 @@
                     this.currentStartTime = this.currentPage * pageDuration;
                     
                     
-                    // 优化：只更新时间点，不重新创建网格
-                    if (this.gridState.isInitialized) {
+                    // 远程视频强制重绘，本地保持非重绘优化
+                    if (this.currentVideoUrl) {
+                        this.updatePreviewDebouncedWrapper();
+                    } else if (this.gridState.isInitialized) {
                         this.updatePaginationUI();
                         this.updateGridTimePoints();
                         this.updateFileProgress();
@@ -1444,8 +1447,10 @@
                 const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
                 
-                // 优化：只更新时间点，不重新创建网格
-                if (this.gridState.isInitialized) {
+                // 远程视频强制重绘，本地保持非重绘优化
+                if (this.currentVideoUrl) {
+                    this.updatePreviewDebouncedWrapper();
+                } else if (this.gridState.isInitialized) {
                     this.updatePaginationUI();
                     this.updateGridTimePoints();
                     this.updateFileProgress();
@@ -1466,8 +1471,10 @@
                     }
                     
                     
-                    // 优化：只更新时间点，不重新创建网格
-                    if (this.gridState.isInitialized) {
+                    // 远程视频强制重绘，本地保持非重绘优化
+                    if (this.currentVideoUrl) {
+                        this.updatePreviewDebouncedWrapper();
+                    } else if (this.gridState.isInitialized) {
                         this.updatePaginationUI();
                         this.updateGridTimePoints();
                         this.updateFileProgress();
@@ -1487,8 +1494,15 @@
                 this.currentStartTime = newStartTime;
                 this.calculatePages();
                 this.updatePaginationUI();
-                this.updateGridTimePoints();
-                this.updateFileProgress();
+                
+                // 在线视频强制重绘，本地保持非重绘优化
+                if (this.currentVideoUrl) {
+                    this.resetGridState();
+                    this.updatePreviewDebouncedWrapper();
+                } else {
+                    this.updateGridTimePoints();
+                    this.updateFileProgress();
+                }
             }
 
             // 计算单元格尺寸
