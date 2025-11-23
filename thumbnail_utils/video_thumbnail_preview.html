@@ -163,6 +163,24 @@
             text-align: center;
         }
 
+        .time-range-display {
+            color: #cccccc;
+            font-size: 12px;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .page-number-display {
+            color: #007acc;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            padding: 2px 4px;
+            border: 1px solid #007acc;
+            border-radius: 3px;
+            background: rgba(0, 122, 204, 0.1);
+        }
+
         .page-indicator {
             display: flex;
             gap: 4px;
@@ -957,6 +975,7 @@
                 this.cleanupVideos();
                 this.cleanupURLs();
                 this.cleanupEventListeners();
+                this.cleanupCaches();
             }
             
             // 清理视频元素
@@ -1001,6 +1020,17 @@
                     }
                 });
                 this.eventListeners = [];
+            }
+            
+            // 清理缓存
+            cleanupCaches() {
+                // 清理时间格式化缓存
+                if (this._timeFormatCache) {
+                    this._timeFormatCache.clear();
+                }
+                
+                // 清理页面配置缓存
+                this._cachedPageConfig = null;
             }
             
             // 添加事件监听器并跟踪
@@ -1115,6 +1145,9 @@
 
                 // 重置网格状态，强制重新创建网格
                 this.resetGridState();
+                
+                // 清理缓存，避免旧数据影响新视频
+                this.cleanupCaches();
 
                 this.isLoading = true;
                 this.showLoading(true);
@@ -1181,7 +1214,7 @@
                 document.getElementById('videoInfo').classList.add('visible');
                 
                 // 为当前视频（本地或远程）创建或更新进度条
-                createOrUpdateProgressBar();
+                this.createOrUpdateProgressBar();
                 
                 // 立即更新进度条显示
                 this.updateFileProgress();
@@ -1273,12 +1306,22 @@
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
                 
+                // 确保数值有效性
+                if (!videoDuration || videoDuration <= 0 || pageDuration <= 0) {
+                    this.totalPages = 1;
+                    this.currentPage = 0;
+                    this.currentStartTime = 0;
+                    return;
+                }
+                
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
                 
                 // 全量 clamp 起始时间，避免无效页显示
                 const maxStartTime = Math.max(0, videoDuration - pageDuration);
                 this.currentStartTime = Math.max(0, Math.min(this.currentStartTime, maxStartTime));
-                this.currentPage = Math.floor(this.currentStartTime / pageDuration);
+                
+                // 确保页码计算的一致性，使用浮点数精度处理
+                this.currentPage = Math.max(0, Math.min(Math.floor(this.currentStartTime / pageDuration), this.totalPages - 1));
             }
 
             updatePaginationUI() {
@@ -1290,18 +1333,50 @@
                     pagination.classList.remove('hidden');
                     pagination.classList.add('visible');
                     
-                    pageIndicator.innerHTML = '';
-                    for (let i = 0; i < this.totalPages; i++) {
-                        const dot = document.createElement('div');
-                        dot.className = 'page-dot' + (i === this.currentPage ? ' active' : '');
-                        dot.onclick = () => this.goToPage(i);
-                        pageIndicator.appendChild(dot);
+                    // 只在页数变化时重新创建页面指示器
+                    if (pageIndicator.children.length !== this.totalPages) {
+                        pageIndicator.innerHTML = '';
+                        for (let i = 0; i < this.totalPages; i++) {
+                            const dot = document.createElement('div');
+                            dot.className = 'page-dot';
+                            dot.onclick = () => this.goToPage(i);
+                            pageIndicator.appendChild(dot);
+                        }
                     }
                     
-                    const { pageDuration } = this.getPageConfig();
-                    const videoDuration = this.originalVideo.duration;
-                    const endTime = Math.min(this.currentStartTime + pageDuration, videoDuration);
-                    pageInfo.textContent = `${this.formatTime(this.currentStartTime)} ~ ${this.formatTime(endTime)} / ${this.formatTime(videoDuration)}`;
+                    // 更新页面指示器的激活状态
+                    const dots = pageIndicator.querySelectorAll('.page-dot');
+                    dots.forEach((dot, index) => {
+                        dot.classList.toggle('active', index === this.currentPage);
+                    });
+                    
+                    // 缓存计算结果，避免重复计算
+                    if (!this._cachedPageConfig ||
+                        this._cachedPageConfig.pageDuration !== this.getPageConfig().pageDuration ||
+                        this._cachedPageConfig.videoDuration !== this.originalVideo.duration ||
+                        this._cachedPageConfig.currentStartTime !== this.currentStartTime) {
+                        
+                        const { pageDuration } = this.getPageConfig();
+                        const videoDuration = this.originalVideo.duration;
+                        const endTime = Math.min(this.currentStartTime + pageDuration, videoDuration);
+                        
+                        this._cachedPageConfig = {
+                            pageDuration,
+                            videoDuration,
+                            currentStartTime: this.currentStartTime,
+                            startTimeText: this.formatTime(this.currentStartTime),
+                            endTimeText: this.formatTime(endTime),
+                            durationText: this.formatTime(videoDuration)
+                        };
+                    }
+                    
+                    // 同时显示时间范围和页码信息
+                    const timeRangeText = `${this._cachedPageConfig.startTimeText} ~ ${this._cachedPageConfig.endTimeText} / ${this._cachedPageConfig.durationText}`;
+                    const pageText = `${this.currentPage + 1} / ${this.totalPages}`;
+                    pageInfo.innerHTML = `
+                        <div class="time-range-display">${timeRangeText}</div>
+                        <div class="page-number-display">${pageText}</div>
+                    `;
                 } else {
                     pagination.classList.add('hidden');
                     pagination.classList.remove('visible');
@@ -1328,9 +1403,14 @@
             }
 
             previousPage() {
+                // 添加边界检查，确保不会超出第一页
+                if (this.currentStartTime <= 0) {
+                    return; // 已经在第一页，无法继续向前
+                }
+                
                 // 更新起始时间为新页面的起始时间
                 const { pageDuration } = this.getPageConfig();
-                const newStartTime = this.currentStartTime - pageDuration;
+                const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
                 
                 // 优化：只更新时间点，不重新创建网格
@@ -1367,6 +1447,12 @@
             }
 
             setPageStartTime(newStartTime) {
+                // 确保时间值的有效性
+                if (typeof newStartTime !== 'number' || isNaN(newStartTime)) {
+                    console.warn('setPageStartTime: 无效的时间值', newStartTime);
+                    return;
+                }
+                
                 this.currentStartTime = newStartTime;
                 this.calculatePages();
                 this.updatePaginationUI();
@@ -1693,14 +1779,39 @@
             }
 
             formatTime(seconds) {
+                // 添加缓存机制，避免重复格式化相同的时间值
+                const cacheKey = Math.round(seconds * 100) / 100; // 保留2位小数的精度
+                if (this._timeFormatCache && this._timeFormatCache.has(cacheKey)) {
+                    return this._timeFormatCache.get(cacheKey);
+                }
+                
+                // 初始化缓存
+                if (!this._timeFormatCache) {
+                    this._timeFormatCache = new Map();
+                    // 限制缓存大小，避免内存泄漏
+                    this._timeFormatCache.maxSize = 100;
+                }
+                
                 const hours = Math.floor(seconds / 3600);
                 const mins = Math.floor((seconds % 3600) / 60);
                 const secs = Math.floor(seconds % 60);
+                let formattedTime;
+                
                 if (hours > 0) {
-                    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    formattedTime = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 } else {
-                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    formattedTime = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 }
+                
+                // 缓存结果
+                if (this._timeFormatCache.size >= this._timeFormatCache.maxSize) {
+                    // 清理最旧的缓存项
+                    const firstKey = this._timeFormatCache.keys().next().value;
+                    this._timeFormatCache.delete(firstKey);
+                }
+                this._timeFormatCache.set(cacheKey, formattedTime);
+                
+                return formattedTime;
             }
 
             showLoading(show) {
@@ -2162,33 +2273,31 @@
     // 移除剪贴板监听功能，避免用户困惑
     // 用户需要手动粘贴URL到输入框，然后点击确认按钮加载
     
-}
-        
-// 创建或更新统一的进度条
-function createOrUpdateProgressBar() {
-    const container = document.getElementById('unifiedProgressBarContainer');
-    if (!container) return;
+            // 创建或更新统一的进度条
+            createOrUpdateProgressBar() {
+                const container = document.getElementById('unifiedProgressBarContainer');
+                if (!container) return;
 
-    // 清空旧的进度条
-    container.innerHTML = '';
+                // 清空旧的进度条
+                container.innerHTML = '';
 
-    const progressWrapper = document.createElement('div');
-    progressWrapper.className = 'file-progress-wrapper';
-    progressWrapper.id = 'unified-progress';
+                const progressWrapper = document.createElement('div');
+                progressWrapper.className = 'file-progress-wrapper';
+                progressWrapper.id = 'unified-progress';
 
-    const progressFill = document.createElement('div');
-    progressFill.className = 'file-progress-fill';
-    progressFill.style.left = '0%';
-    progressFill.style.width = '0%';
-            
-    const progressIndicator = document.createElement('div');
-    progressIndicator.className = 'progress-indicator-line';
-    progressIndicator.style.left = '0%';
+                const progressFill = document.createElement('div');
+                progressFill.className = 'file-progress-fill';
+                progressFill.style.left = '0%';
+                progressFill.style.width = '0%';
+                        
+                const progressIndicator = document.createElement('div');
+                progressIndicator.className = 'progress-indicator-line';
+                progressIndicator.style.left = '0%';
 
-    progressWrapper.appendChild(progressFill);
-    progressWrapper.appendChild(progressIndicator);
-    container.appendChild(progressWrapper);
-}
+                progressWrapper.appendChild(progressFill);
+                progressWrapper.appendChild(progressIndicator);
+                container.appendChild(progressWrapper);
+            }
 }
 
 // 实例化应用
