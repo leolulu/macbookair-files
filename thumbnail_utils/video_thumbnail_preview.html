@@ -1312,9 +1312,8 @@
                 
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
                 
-                // 全量 clamp 起始时间，避免无效页显示
-                const maxStartTime = Math.max(0, videoDuration - pageDuration);
-                this.currentStartTime = Math.max(0, Math.min(this.currentStartTime, maxStartTime));
+                // 保底防止起始时间变成负数，确保第一页的第一个格子从0秒开始
+                this.currentStartTime = Math.max(0, this.currentStartTime);
                 
                 // 确保页码计算的一致性，使用浮点数精度处理
                 this.currentPage = Math.max(0, Math.min(Math.floor(this.currentStartTime / pageDuration), this.totalPages - 1));
