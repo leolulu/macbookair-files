@@ -163,6 +163,20 @@
             text-align: center;
         }
 
+        .time-range-display {
+            color: #cccccc;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .page-number-display {
+            color: #007acc;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            padding: 0 4px;
+        }
+
         .page-indicator {
             display: flex;
             gap: 4px;
@@ -957,6 +971,7 @@
                 this.cleanupVideos();
                 this.cleanupURLs();
                 this.cleanupEventListeners();
+                this.cleanupCaches();
             }
             
             // 清理视频元素
@@ -1001,6 +1016,17 @@
                     }
                 });
                 this.eventListeners = [];
+            }
+            
+            // 清理缓存
+            cleanupCaches() {
+                // 清理时间格式化缓存
+                if (this._timeFormatCache) {
+                    this._timeFormatCache.clear();
+                }
+                
+                // 清理页面配置缓存
+                this._cachedPageConfig = null;
             }
             
             // 添加事件监听器并跟踪
@@ -1115,6 +1141,9 @@
 
                 // 重置网格状态，强制重新创建网格
                 this.resetGridState();
+                
+                // 清理缓存，避免旧数据影响新视频
+                this.cleanupCaches();
 
                 this.isLoading = true;
                 this.showLoading(true);
@@ -1273,12 +1302,21 @@
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
                 
+                // 确保数值有效性
+                if (!videoDuration || videoDuration <= 0 || pageDuration <= 0) {
+                    this.totalPages = 1;
+                    this.currentPage = 0;
+                    this.currentStartTime = 0;
+                    return;
+                }
+                
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
                 
-                // 根据currentStartTime计算正确的页码
-                this.currentPage = Math.floor(this.currentStartTime / pageDuration);
-                this.currentPage = Math.min(this.currentPage, this.totalPages - 1);
-                this.currentPage = Math.max(0, this.currentPage);
+                // 保底防止起始时间变成负数，确保第一页的第一个格子从0秒开始
+                this.currentStartTime = Math.max(0, this.currentStartTime);
+                
+                // 确保页码计算的一致性，使用浮点数精度处理
+                this.currentPage = Math.max(0, Math.min(Math.floor(this.currentStartTime / pageDuration), this.totalPages - 1));
             }
 
             updatePaginationUI() {
@@ -1290,15 +1328,50 @@
                     pagination.classList.remove('hidden');
                     pagination.classList.add('visible');
                     
-                    pageIndicator.innerHTML = '';
-                    for (let i = 0; i < this.totalPages; i++) {
-                        const dot = document.createElement('div');
-                        dot.className = 'page-dot' + (i === this.currentPage ? ' active' : '');
-                        dot.onclick = () => this.goToPage(i);
-                        pageIndicator.appendChild(dot);
+                    // 只在页数变化时重新创建页面指示器
+                    if (pageIndicator.children.length !== this.totalPages) {
+                        pageIndicator.innerHTML = '';
+                        for (let i = 0; i < this.totalPages; i++) {
+                            const dot = document.createElement('div');
+                            dot.className = 'page-dot';
+                            dot.onclick = () => this.goToPage(i);
+                            pageIndicator.appendChild(dot);
+                        }
                     }
                     
-                    pageInfo.textContent = `${this.currentPage + 1} / ${this.totalPages}`;
+                    // 更新页面指示器的激活状态
+                    const dots = pageIndicator.querySelectorAll('.page-dot');
+                    dots.forEach((dot, index) => {
+                        dot.classList.toggle('active', index === this.currentPage);
+                    });
+                    
+                    // 缓存计算结果，避免重复计算
+                    if (!this._cachedPageConfig ||
+                        this._cachedPageConfig.pageDuration !== this.getPageConfig().pageDuration ||
+                        this._cachedPageConfig.videoDuration !== this.originalVideo.duration ||
+                        this._cachedPageConfig.currentStartTime !== this.currentStartTime) {
+                        
+                        const { pageDuration } = this.getPageConfig();
+                        const videoDuration = this.originalVideo.duration;
+                        const endTime = Math.min(this.currentStartTime + pageDuration, videoDuration);
+                        
+                        this._cachedPageConfig = {
+                            pageDuration,
+                            videoDuration,
+                            currentStartTime: this.currentStartTime,
+                            startTimeText: this.formatTime(this.currentStartTime),
+                            endTimeText: this.formatTime(endTime),
+                            durationText: this.formatTime(videoDuration)
+                        };
+                    }
+                    
+                    // 同时显示时间范围和页码信息
+                    const timeRangeText = `${this._cachedPageConfig.startTimeText} ~ ${this._cachedPageConfig.endTimeText} / ${this._cachedPageConfig.durationText}`;
+                    const pageText = `${this.currentPage + 1} / ${this.totalPages}`;
+                    pageInfo.innerHTML = `
+                        <div class="time-range-display">${timeRangeText}</div>
+                        <div class="page-number-display">${pageText}</div>
+                    `;
                 } else {
                     pagination.classList.add('hidden');
                     pagination.classList.remove('visible');
@@ -1325,24 +1398,23 @@
             }
 
             previousPage() {
-                if (this.currentPage > 0) {
-                    this.currentPage--;
-                    // 更新起始时间为新页面的起始时间
-                    const { pageDuration } = this.getPageConfig();
-                    const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
-                    if (newStartTime < this.currentStartTime) {
-                        this.setPageStartTime(newStartTime);
-                    }
-                    
-                    
-                    // 优化：只更新时间点，不重新创建网格
-                    if (this.gridState.isInitialized) {
-                        this.updatePaginationUI();
-                        this.updateGridTimePoints();
-                        this.updateFileProgress();
-                    } else {
-                        this.updatePreviewDebouncedWrapper();
-                    }
+                // 添加边界检查，确保不会超出第一页
+                if (this.currentStartTime <= 0) {
+                    return; // 已经在第一页，无法继续向前
+                }
+                
+                // 更新起始时间为新页面的起始时间
+                const { pageDuration } = this.getPageConfig();
+                const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
+                this.setPageStartTime(newStartTime);
+                
+                // 优化：只更新时间点，不重新创建网格
+                if (this.gridState.isInitialized) {
+                    this.updatePaginationUI();
+                    this.updateGridTimePoints();
+                    this.updateFileProgress();
+                } else {
+                    this.updatePreviewDebouncedWrapper();
                 }
             }
 
@@ -1370,10 +1442,14 @@
             }
 
             setPageStartTime(newStartTime) {
+                // 确保时间值的有效性
+                if (typeof newStartTime !== 'number' || isNaN(newStartTime)) {
+                    console.warn('setPageStartTime: 无效的时间值', newStartTime);
+                    return;
+                }
+                
                 this.currentStartTime = newStartTime;
-                const { pageDuration } = this.getPageConfig();
-                this.currentPage = Math.floor(newStartTime / pageDuration);
-                this.currentPage = Math.max(0, Math.min(this.currentPage, this.totalPages - 1));
+                this.calculatePages();
                 this.updatePaginationUI();
                 this.updateGridTimePoints();
                 this.updateFileProgress();
@@ -1698,14 +1774,39 @@
             }
 
             formatTime(seconds) {
+                // 添加缓存机制，避免重复格式化相同的时间值
+                const cacheKey = Math.round(seconds * 100) / 100; // 保留2位小数的精度
+                if (this._timeFormatCache && this._timeFormatCache.has(cacheKey)) {
+                    return this._timeFormatCache.get(cacheKey);
+                }
+                
+                // 初始化缓存
+                if (!this._timeFormatCache) {
+                    this._timeFormatCache = new Map();
+                    // 限制缓存大小，避免内存泄漏
+                    this._timeFormatCache.maxSize = 100;
+                }
+                
                 const hours = Math.floor(seconds / 3600);
                 const mins = Math.floor((seconds % 3600) / 60);
                 const secs = Math.floor(seconds % 60);
+                let formattedTime;
+                
                 if (hours > 0) {
-                    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    formattedTime = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 } else {
-                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    formattedTime = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 }
+                
+                // 缓存结果
+                if (this._timeFormatCache.size >= this._timeFormatCache.maxSize) {
+                    // 清理最旧的缓存项
+                    const firstKey = this._timeFormatCache.keys().next().value;
+                    this._timeFormatCache.delete(firstKey);
+                }
+                this._timeFormatCache.set(cacheKey, formattedTime);
+                
+                return formattedTime;
             }
 
             showLoading(show) {
@@ -2183,7 +2284,7 @@
                 progressFill.className = 'file-progress-fill';
                 progressFill.style.left = '0%';
                 progressFill.style.width = '0%';
-                
+                        
                 const progressIndicator = document.createElement('div');
                 progressIndicator.className = 'progress-indicator-line';
                 progressIndicator.style.left = '0%';
@@ -2194,98 +2295,98 @@
             }
 }
 
-    // 实例化应用
-    const app = new VideoThumbnailPreview();
+// 实例化应用
+const app = new VideoThumbnailPreview();
 
-    function selectVideo() {
-            app.selectVideo();
-        }
+function selectVideo() {
+    app.selectVideo();
+}
 
-        function updateGrid() {
-            app.updateGridDisplay();
-            // 网格大小改变时重置网格状态，强制重新创建
-            app.resetGridState();
-            app.updatePreviewDebouncedWrapper();
-        }
+function updateGrid() {
+    app.updateGridDisplay();
+    // 网格大小改变时重置网格状态，强制重新创建
+    app.resetGridState();
+    app.updatePreviewDebouncedWrapper();
+}
 
-        function updatePreview() {
-            app.updatePreviewDebouncedWrapper();
-        }
+function updatePreview() {
+    app.updatePreviewDebouncedWrapper();
+}
 
-        function setDuration(seconds) {
-            document.getElementById('duration').value = seconds;
-            updateQuickButtons();
-            // 时长改变时重置网格状态，强制重新创建
-            app.resetGridState();
-            app.updatePreviewDebouncedWrapper();
-        }
+function setDuration(seconds) {
+    document.getElementById('duration').value = seconds;
+    updateQuickButtons();
+    // 时长改变时重置网格状态，强制重新创建
+    app.resetGridState();
+    app.updatePreviewDebouncedWrapper();
+}
         
-        // 宫格数增减函数
-        function changeGridSize(inputId, direction) {
-            const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
-            const currentValue = parseInt(input.value);
-            const minValue = parseInt(input.min);
-            const maxValue = parseInt(input.max);
-            const newValue = currentValue + direction;
+// 宫格数增减函数
+function changeGridSize(inputId, direction) {
+    const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
+    const currentValue = parseInt(input.value);
+    const minValue = parseInt(input.min);
+    const maxValue = parseInt(input.max);
+    const newValue = currentValue + direction;
             
-            // 确保值在有效范围内
-            if (newValue >= minValue && newValue <= maxValue) {
-                input.value = newValue;
-                updateGrid();
-            }
-        }
+    // 确保值在有效范围内
+    if (newValue >= minValue && newValue <= maxValue) {
+        input.value = newValue;
+        updateGrid();
+    }
+}
         
-        // Tab 切换函数
-        function switchTab(tabName) {
-            // 移除所有 Tab 按钮的 active 类
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
+// Tab 切换函数
+function switchTab(tabName) {
+    // 移除所有 Tab 按钮的 active 类
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
             
-            // 隐藏所有 Tab 内容
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
+    // 隐藏所有 Tab 内容
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
             
-            // 获取文件列表区域元素
-            const fileListSection = document.getElementById('fileListSection');
+    // 获取文件列表区域元素
+    const fileListSection = document.getElementById('fileListSection');
             
-            // 激活选中的 Tab
-            if (tabName === 'local') {
-                document.querySelector('.tab-button:nth-child(1)').classList.add('active');
-                document.getElementById('localTab').classList.add('active');
-                // 如果有本地文件，则显示文件列表
-                if (app.videoFiles.length > 0) {
-                    fileListSection.classList.remove('is-hidden');
-                }
-            } else if (tabName === 'remote') {
-                document.querySelector('.tab-button:nth-child(2)').classList.add('active');
-                document.getElementById('remoteTab').classList.add('active');
-                // 远程模式下，隐藏文件列表
-                fileListSection.classList.add('is-hidden');
-            }
+    // 激活选中的 Tab
+    if (tabName === 'local') {
+        document.querySelector('.tab-button:nth-child(1)').classList.add('active');
+        document.getElementById('localTab').classList.add('active');
+        // 如果有本地文件，则显示文件列表
+        if (app.videoFiles.length > 0) {
+            fileListSection.classList.remove('is-hidden');
         }
+    } else if (tabName === 'remote') {
+        document.querySelector('.tab-button:nth-child(2)').classList.add('active');
+        document.getElementById('remoteTab').classList.add('active');
+        // 远程模式下，隐藏文件列表
+        fileListSection.classList.add('is-hidden');
+    }
+}
 
-        // 更新快捷按钮的选中状态
-        function updateQuickButtons() {
-            const currentDuration = parseInt(document.getElementById('duration').value);
-            const buttons = document.querySelectorAll('.quick-btn');
-            buttons.forEach(btn => {
-                const btnText = btn.textContent;
-                let btnValue;
-                if (btnText.includes('分钟')) {
-                    btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
-                } else {
-                    btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
-                }
+// 更新快捷按钮的选中状态
+function updateQuickButtons() {
+    const currentDuration = parseInt(document.getElementById('duration').value);
+    const buttons = document.querySelectorAll('.quick-btn');
+    buttons.forEach(btn => {
+        const btnText = btn.textContent;
+        let btnValue;
+        if (btnText.includes('分钟')) {
+            btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
+        } else {
+            btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
+        }
                 
-                if (btnValue === currentDuration) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
+        if (btnValue === currentDuration) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
         }
+    });
+}
     </script>
 </body>
 </html>
