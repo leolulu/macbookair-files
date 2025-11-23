@@ -1181,7 +1181,7 @@
                 document.getElementById('videoInfo').classList.add('visible');
                 
                 // 为当前视频（本地或远程）创建或更新进度条
-                this.createOrUpdateProgressBar();
+                createOrUpdateProgressBar();
                 
                 // 立即更新进度条显示
                 this.updateFileProgress();
@@ -1275,10 +1275,10 @@
                 
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
                 
-                // 根据currentStartTime计算正确的页码
+                // 全量 clamp 起始时间，避免无效页显示
+                const maxStartTime = Math.max(0, videoDuration - pageDuration);
+                this.currentStartTime = Math.max(0, Math.min(this.currentStartTime, maxStartTime));
                 this.currentPage = Math.floor(this.currentStartTime / pageDuration);
-                this.currentPage = Math.min(this.currentPage, this.totalPages - 1);
-                this.currentPage = Math.max(0, this.currentPage);
             }
 
             updatePaginationUI() {
@@ -1298,7 +1298,10 @@
                         pageIndicator.appendChild(dot);
                     }
                     
-                    pageInfo.textContent = `${this.currentPage + 1} / ${this.totalPages}`;
+                    const { pageDuration } = this.getPageConfig();
+                    const videoDuration = this.originalVideo.duration;
+                    const endTime = Math.min(this.currentStartTime + pageDuration, videoDuration);
+                    pageInfo.textContent = `${this.formatTime(this.currentStartTime)} ~ ${this.formatTime(endTime)} / ${this.formatTime(videoDuration)}`;
                 } else {
                     pagination.classList.add('hidden');
                     pagination.classList.remove('visible');
@@ -1325,24 +1328,18 @@
             }
 
             previousPage() {
-                if (this.currentPage > 0) {
-                    this.currentPage--;
-                    // 更新起始时间为新页面的起始时间
-                    const { pageDuration } = this.getPageConfig();
-                    const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
-                    if (newStartTime < this.currentStartTime) {
-                        this.setPageStartTime(newStartTime);
-                    }
-                    
-                    
-                    // 优化：只更新时间点，不重新创建网格
-                    if (this.gridState.isInitialized) {
-                        this.updatePaginationUI();
-                        this.updateGridTimePoints();
-                        this.updateFileProgress();
-                    } else {
-                        this.updatePreviewDebouncedWrapper();
-                    }
+                // 更新起始时间为新页面的起始时间
+                const { pageDuration } = this.getPageConfig();
+                const newStartTime = this.currentStartTime - pageDuration;
+                this.setPageStartTime(newStartTime);
+                
+                // 优化：只更新时间点，不重新创建网格
+                if (this.gridState.isInitialized) {
+                    this.updatePaginationUI();
+                    this.updateGridTimePoints();
+                    this.updateFileProgress();
+                } else {
+                    this.updatePreviewDebouncedWrapper();
                 }
             }
 
@@ -1371,9 +1368,7 @@
 
             setPageStartTime(newStartTime) {
                 this.currentStartTime = newStartTime;
-                const { pageDuration } = this.getPageConfig();
-                this.currentPage = Math.floor(newStartTime / pageDuration);
-                this.currentPage = Math.max(0, Math.min(this.currentPage, this.totalPages - 1));
+                this.calculatePages();
                 this.updatePaginationUI();
                 this.updateGridTimePoints();
                 this.updateFileProgress();
@@ -2167,125 +2162,127 @@
     // 移除剪贴板监听功能，避免用户困惑
     // 用户需要手动粘贴URL到输入框，然后点击确认按钮加载
     
-            // 创建或更新统一的进度条
-            createOrUpdateProgressBar() {
-                const container = document.getElementById('unifiedProgressBarContainer');
-                if (!container) return;
+}
+        
+// 创建或更新统一的进度条
+function createOrUpdateProgressBar() {
+    const container = document.getElementById('unifiedProgressBarContainer');
+    if (!container) return;
 
-                // 清空旧的进度条
-                container.innerHTML = '';
+    // 清空旧的进度条
+    container.innerHTML = '';
 
-                const progressWrapper = document.createElement('div');
-                progressWrapper.className = 'file-progress-wrapper';
-                progressWrapper.id = 'unified-progress';
+    const progressWrapper = document.createElement('div');
+    progressWrapper.className = 'file-progress-wrapper';
+    progressWrapper.id = 'unified-progress';
 
-                const progressFill = document.createElement('div');
-                progressFill.className = 'file-progress-fill';
-                progressFill.style.left = '0%';
-                progressFill.style.width = '0%';
-                
-                const progressIndicator = document.createElement('div');
-                progressIndicator.className = 'progress-indicator-line';
-                progressIndicator.style.left = '0%';
+    const progressFill = document.createElement('div');
+    progressFill.className = 'file-progress-fill';
+    progressFill.style.left = '0%';
+    progressFill.style.width = '0%';
+            
+    const progressIndicator = document.createElement('div');
+    progressIndicator.className = 'progress-indicator-line';
+    progressIndicator.style.left = '0%';
 
-                progressWrapper.appendChild(progressFill);
-                progressWrapper.appendChild(progressIndicator);
-                container.appendChild(progressWrapper);
-            }
+    progressWrapper.appendChild(progressFill);
+    progressWrapper.appendChild(progressIndicator);
+    container.appendChild(progressWrapper);
+}
 }
 
-    // 实例化应用
-    const app = new VideoThumbnailPreview();
+// 实例化应用
+const app = new VideoThumbnailPreview();
 
-    function selectVideo() {
-            app.selectVideo();
-        }
+function selectVideo() {
+    app.selectVideo();
+}
 
-        function updateGrid() {
-            app.updateGridDisplay();
-            // 网格大小改变时重置网格状态，强制重新创建
-            app.resetGridState();
-            app.updatePreviewDebouncedWrapper();
-        }
+function updateGrid() {
+    app.updateGridDisplay();
+    // 网格大小改变时重置网格状态，强制重新创建
+    app.resetGridState();
+    app.updatePreviewDebouncedWrapper();
+}
 
-        function updatePreview() {
-            app.updatePreviewDebouncedWrapper();
-        }
+function updatePreview() {
+    app.updatePreviewDebouncedWrapper();
+}
 
-        function setDuration(seconds) {
-            document.getElementById('duration').value = seconds;
-            updateQuickButtons();
-            // 时长改变时重置网格状态，强制重新创建
-            app.resetGridState();
-            app.updatePreviewDebouncedWrapper();
-        }
+function setDuration(seconds) {
+    document.getElementById('duration').value = seconds;
+    updateQuickButtons();
+    // 时长改变时重置网格状态，强制重新创建
+    app.resetGridState();
+    app.updatePreviewDebouncedWrapper();
+}
         
-        // 宫格数增减函数
-        function changeGridSize(inputId, direction) {
-            const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
-            const currentValue = parseInt(input.value);
-            const minValue = parseInt(input.min);
-            const maxValue = parseInt(input.max);
-            const newValue = currentValue + direction;
+// 宫格数增减函数
+function changeGridSize(inputId, direction) {
+    const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
+    const currentValue = parseInt(input.value);
+    const minValue = parseInt(input.min);
+    const maxValue = parseInt(input.max);
+    const newValue = currentValue + direction;
             
-            // 确保值在有效范围内
-            if (newValue >= minValue && newValue <= maxValue) {
-                input.value = newValue;
-                updateGrid();
-            }
-        }
+    // 确保值在有效范围内
+    if (newValue >= minValue && newValue <= maxValue) {
+        input.value = newValue;
+        updateGrid();
+    }
+}
         
-        // Tab 切换函数
-        function switchTab(tabName) {
-            // 移除所有 Tab 按钮的 active 类
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
+// Tab 切换函数
+function switchTab(tabName) {
+    // 移除所有 Tab 按钮的 active 类
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
             
-            // 隐藏所有 Tab 内容
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
+    // 隐藏所有 Tab 内容
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
             
-            // 获取文件列表区域元素
-            const fileListSection = document.getElementById('fileListSection');
+    // 获取文件列表区域元素
+    const fileListSection = document.getElementById('fileListSection');
             
-            // 激活选中的 Tab
-            if (tabName === 'local') {
-                document.querySelector('.tab-button:nth-child(1)').classList.add('active');
-                document.getElementById('localTab').classList.add('active');
-                // 如果有本地文件，则显示文件列表
-                if (app.videoFiles.length > 0) {
-                    fileListSection.classList.remove('is-hidden');
-                }
-            } else if (tabName === 'remote') {
-                document.querySelector('.tab-button:nth-child(2)').classList.add('active');
-                document.getElementById('remoteTab').classList.add('active');
-                // 远程模式下，隐藏文件列表
-                fileListSection.classList.add('is-hidden');
-            }
+    // 激活选中的 Tab
+    if (tabName === 'local') {
+        document.querySelector('.tab-button:nth-child(1)').classList.add('active');
+        document.getElementById('localTab').classList.add('active');
+        // 如果有本地文件，则显示文件列表
+        if (app.videoFiles.length > 0) {
+            fileListSection.classList.remove('is-hidden');
         }
+    } else if (tabName === 'remote') {
+        document.querySelector('.tab-button:nth-child(2)').classList.add('active');
+        document.getElementById('remoteTab').classList.add('active');
+        // 远程模式下，隐藏文件列表
+        fileListSection.classList.add('is-hidden');
+    }
+}
 
-        // 更新快捷按钮的选中状态
-        function updateQuickButtons() {
-            const currentDuration = parseInt(document.getElementById('duration').value);
-            const buttons = document.querySelectorAll('.quick-btn');
-            buttons.forEach(btn => {
-                const btnText = btn.textContent;
-                let btnValue;
-                if (btnText.includes('分钟')) {
-                    btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
-                } else {
-                    btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
-                }
+// 更新快捷按钮的选中状态
+function updateQuickButtons() {
+    const currentDuration = parseInt(document.getElementById('duration').value);
+    const buttons = document.querySelectorAll('.quick-btn');
+    buttons.forEach(btn => {
+        const btnText = btn.textContent;
+        let btnValue;
+        if (btnText.includes('分钟')) {
+            btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
+        } else {
+            btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
+        }
                 
-                if (btnValue === currentDuration) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
+        if (btnValue === currentDuration) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
         }
+    });
+}
     </script>
 </body>
 </html>
