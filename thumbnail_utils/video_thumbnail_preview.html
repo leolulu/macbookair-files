@@ -1354,6 +1354,11 @@
                 
                 // 确保页码计算的一致性，使用浮点数精度处理
                 this.currentPage = Math.max(0, Math.min(Math.floor(this.currentStartTime / pageDuration), this.totalPages - 1));
+                
+                // 如果当前页面内容覆盖到视频末尾（浮点容差），强制设为最后一页
+                if (this.currentStartTime + pageDuration >= videoDuration - 0.1) {
+                    this.currentPage = this.totalPages - 1;
+                }
             }
 
             updatePaginationUI() {
@@ -1381,6 +1386,14 @@
                     dots.forEach((dot, index) => {
                         dot.classList.toggle('active', index === this.currentPage);
                     });
+                    
+                    // 更新按钮disabled状态
+                    const prevBtn = pagination.querySelector('button:nth-child(1)');
+                    const nextBtn = pagination.querySelector('button:nth-child(2)');
+                    const { pageDuration } = this.getPageConfig();
+                    const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
+                    if (prevBtn) prevBtn.disabled = this.currentStartTime <= 0;
+                    if (nextBtn) nextBtn.disabled = (this.currentStartTime + pageDuration >= videoDuration - 0.1);
                     
                     // 缓存计算结果，避免重复计算
                     if (!this._cachedPageConfig ||
@@ -1437,12 +1450,6 @@
             }
 
             previousPage() {
-                // 添加边界检查，确保不会超出第一页
-                if (this.currentStartTime <= 0) {
-                    return; // 已经在第一页，无法继续向前
-                }
-                
-                // 更新起始时间为新页面的起始时间
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
@@ -1460,27 +1467,19 @@
             }
 
             nextPage() {
-                if (this.currentPage < this.totalPages - 1) {
-                    this.currentPage++;
-                    // 更新起始时间为新页面的起始时间
-                    const { pageDuration } = this.getPageConfig();
-                    const videoDuration = this.originalVideo.duration;
-                    const newStartTime = this.currentStartTime + pageDuration;
-                    if (newStartTime < videoDuration) {
-                        this.setPageStartTime(newStartTime);
-                    }
-                    
-                    
-                    // 远程视频强制重绘，本地保持非重绘优化
-                    if (this.currentVideoUrl) {
-                        this.updatePreviewDebouncedWrapper();
-                    } else if (this.gridState.isInitialized) {
-                        this.updatePaginationUI();
-                        this.updateGridTimePoints();
-                        this.updateFileProgress();
-                    } else {
-                        this.updatePreviewDebouncedWrapper();
-                    }
+                const { pageDuration } = this.getPageConfig();
+                const newStartTime = this.currentStartTime + pageDuration;
+                this.setPageStartTime(newStartTime);
+                
+                // 远程视频强制重绘，本地保持非重绘优化
+                if (this.currentVideoUrl) {
+                    this.updatePreviewDebouncedWrapper();
+                } else if (this.gridState.isInitialized) {
+                    this.updatePaginationUI();
+                    this.updateGridTimePoints();
+                    this.updateFileProgress();
+                } else {
+                    this.updatePreviewDebouncedWrapper();
                 }
             }
 
@@ -1491,7 +1490,8 @@
                     return;
                 }
                 
-                this.currentStartTime = newStartTime;
+                this.currentStartTime = Math.max(0, newStartTime);
+                
                 this.calculatePages();
                 this.updatePaginationUI();
                 
