@@ -731,7 +731,7 @@
             <!-- 远程视频 Tab 内容 -->
                         <div id="remoteTab" class="tab-content">
                             <div class="control-group">
-                                <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input" onkeypress="handleRemoteUrlKeyPress(event)">
+                                <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input" onkeypress="handleRemoteUrlKeyPress(event)" ondblclick="clearRemoteUrlInput()">
                                 <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
                             </div>
                         </div>
@@ -2452,6 +2452,13 @@ function handleRemoteUrlKeyPress(event) {
         const url = document.getElementById('remoteUrlInput').value;
         app.loadRemoteVideo(url);
     }
+}
+
+// 清空远程URL输入框
+function clearRemoteUrlInput() {
+    const input = document.getElementById('remoteUrlInput');
+    input.value = '';
+    input.focus();
 }
      </script>
 </body>
