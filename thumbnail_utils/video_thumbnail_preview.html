@@ -729,12 +729,12 @@
             </div>
             
             <!-- 远程视频 Tab 内容 -->
-            <div id="remoteTab" class="tab-content">
-                <div class="control-group">
-                    <input type="url" id="remoteUrlInput" placeholder="粘贴视频URL后点击下方按钮" class="remote-url-input">
-                    <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
-                </div>
-            </div>
+                        <div id="remoteTab" class="tab-content">
+                            <div class="control-group">
+                                <input type="url" id="remoteUrlInput" placeholder="粘贴视频URL后点击下方按钮或按回车键" class="remote-url-input" onkeypress="handleRemoteUrlKeyPress(event)">
+                                <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
+                            </div>
+                        </div>
         </div>
         
         <!-- 文件列表区域 -->
@@ -2444,6 +2444,15 @@ function updateQuickButtons() {
         }
     });
 }
-    </script>
+
+// 处理远程URL输入框的回车键事件
+function handleRemoteUrlKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        const url = document.getElementById('remoteUrlInput').value;
+        app.loadRemoteVideo(url);
+    }
+}
+     </script>
 </body>
 </html>
