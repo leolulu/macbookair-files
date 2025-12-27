@@ -341,13 +341,18 @@
             line-height: 1;
         }
         
-        .number-btn:hover {
+        .number-btn:hover:not(:disabled) {
             background: #5a5a5a;
             border-color: #007acc;
         }
         
-        .number-btn:active {
+        .number-btn:active:not(:disabled) {
             transform: scale(0.95);
+        }
+        
+        .number-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
         }
 
         .number-btn.both-btn {
@@ -767,6 +772,10 @@
 
         <div class="control-section">
             <div class="control-group">
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;">
+                    <input type="checkbox" id="autoCalculateCols" onchange="toggleAutoCalculateCols()" style="width: 16px; height: 16px;">
+                    <span style="font-size: 14px; color: #cccccc;">自动计算列数</span>
+                </label>
                 <div class="spacing-bottom-sm">
                     <div class="grid-control-row">
                         <span class="grid-label">行数:</span>
@@ -876,6 +885,7 @@
                 this.updateGridDisplay();
                 this.initDragAndDrop();
                 this.initKeyboardEvents();
+                this.initWindowResizeListener();
                 // 移除剪贴板监听功能
                 
                 // 页面卸载时清理资源
@@ -1096,6 +1106,23 @@
                 });
             }
 
+            // 初始化窗口大小改变监听
+            initWindowResizeListener() {
+                window.addEventListener('resize', () => {
+                    // 使用防抖避免频繁计算
+                    if (this.resizeTimeout) {
+                        clearTimeout(this.resizeTimeout);
+                    }
+                    this.resizeTimeout = setTimeout(() => {
+                        const checkbox = document.getElementById('autoCalculateCols');
+                        if (checkbox && checkbox.checked && this.originalVideo) {
+                            calculateAndSetCols();
+                            updateGrid();
+                        }
+                    }, 300);
+                });
+            }
+
             // 初始化拖放功能
             initDragAndDrop() {
                 const dropZone = document.getElementById('videoFile');
@@ -1250,6 +1277,12 @@
                 
                 // 立即更新进度条显示
                 this.updateFileProgress();
+                
+                // 如果启用了自动计算列数，在视频加载后重新计算
+                const checkbox = document.getElementById('autoCalculateCols');
+                if (checkbox && checkbox.checked) {
+                    calculateAndSetCols();
+                }
             }
 
             async updatePreview() {
@@ -2352,7 +2385,124 @@ function selectVideo() {
     app.selectVideo();
 }
 
+function toggleAutoCalculateCols() {
+    const checkbox = document.getElementById('autoCalculateCols');
+    const colsInput = document.getElementById('gridSize2');
+    const allButtons = document.querySelectorAll('.number-btn');
+    const rowButtons = document.querySelectorAll('.grid-control-row:first-child .number-btn:not(.both-btn)');
+    
+    if (checkbox.checked) {
+        // 禁用列数输入框
+        colsInput.disabled = true;
+        colsInput.style.opacity = '0.5';
+        
+        // 禁用所有按钮
+        allButtons.forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.3';
+            btn.style.cursor = 'not-allowed';
+        });
+        
+        // 单独启用行数的 ▲、▼ 按钮
+        rowButtons.forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+        });
+        
+        calculateAndSetCols();
+    } else {
+        // 启用列数输入框
+        colsInput.disabled = false;
+        colsInput.style.opacity = '1';
+        
+        // 启用所有按钮
+        allButtons.forEach(btn => {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+        });
+    }
+    updateGrid();
+}
+
+function calculateAndSetCols() {
+    const checkbox = document.getElementById('autoCalculateCols');
+    if (!checkbox.checked || !app.originalVideo) return;
+    
+    const rows = parseInt(document.getElementById('gridSize').value);
+    const videoWidth = app.originalVideo.videoWidth;
+    const videoHeight = app.originalVideo.videoHeight;
+    const container = document.getElementById('previewContainer');
+    
+    if (!videoWidth || !videoHeight || !container) return;
+    
+    // 获取容器尺寸
+    const containerWidth = container.clientWidth || 800;
+    const containerHeight = container.clientHeight || 600;
+    
+    // 计算视频宽高比
+    const videoAspectRatio = videoWidth / videoHeight;
+    
+    // 计算能够最大化显示面积的列数
+    const optimalCols = calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight);
+    
+    // 设置列数
+    const colsInput = document.getElementById('gridSize2');
+    colsInput.value = optimalCols;
+    
+    console.log(`自动计算列数: 行数=${rows}, 视频宽高比=${videoAspectRatio.toFixed(2)}, 最优列数=${optimalCols}`);
+}
+
+function calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight) {
+    // 计算容器宽高比（默认 16:9）
+    const screenRatio = containerWidth / containerHeight;
+    
+    // 计算精确列数（参考 Python 脚本的算法）
+    // cols_precise = screen_ratio * height * rows / width
+    // videoAspectRatio = width / height，所以 height / width = 1 / videoAspectRatio
+    const colsPrecise = screenRatio * rows / videoAspectRatio;
+    
+    console.log(`计算精确列数: screenRatio=${screenRatio.toFixed(2)}, rows=${rows}, videoAspectRatio=${videoAspectRatio.toFixed(2)}, colsPrecise=${colsPrecise.toFixed(2)}`);
+    
+    // 以精确列数为基准，生成候选列数（±2）
+    const baseCols = Math.round(colsPrecise);
+    const candidateCols = [baseCols - 2, baseCols - 1, baseCols, baseCols + 1, baseCols + 2]
+        .filter(cols => cols > 0); // 过滤掉小于等于0的值
+    
+    console.log(`候选列数: ${candidateCols.join(', ')}`);
+    
+    // 计算每个候选列数的屏占比
+    const candidateColsRatio = candidateCols.map(cols => (videoAspectRatio * cols) / rows);
+    const candidateColsScreenToBodyRatio = candidateColsRatio.map(ratio =>
+        ratio <= screenRatio ? ratio / screenRatio : screenRatio / ratio
+    );
+    
+    const results = candidateCols.map((cols, index) => ({
+        cols,
+        ratio: candidateColsRatio[index],
+        screenToBodyRatio: candidateColsScreenToBodyRatio[index]
+    }));
+    
+    console.log(`计算结果: ${results.map(r => `列数${r.cols}: ${Math.round(r.screenToBodyRatio * 100)}%`).join(', ')}`);
+    
+    // 找到屏占比最高的列数
+    const maxResult = results.reduce((max, current) =>
+        current.screenToBodyRatio > max.screenToBodyRatio ? current : max
+    );
+    
+    console.log(`最大屏占比列数结果：列数【${maxResult.cols}】，屏占比【${Math.round(maxResult.screenToBodyRatio * 100)}%】`);
+    
+    return maxResult.cols;
+}
+
 function updateGrid() {
+    // 如果启用了自动计算，先计算列数
+    const checkbox = document.getElementById('autoCalculateCols');
+    if (checkbox.checked) {
+        calculateAndSetCols();
+    }
+    
     app.updateGridDisplay();
     // 网格大小改变时重置网格状态，强制重新创建
     app.resetGridState();
