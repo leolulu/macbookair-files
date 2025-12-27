@@ -832,6 +832,15 @@
             </div>
         </div>
         
+        <div class="control-section" style="padding: 8px 12px;">
+            <div class="control-group" style="margin-bottom: 0;">
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer;">
+                    <input type="checkbox" id="remoteVideoOptimization" style="width: 16px; height: 16px;">
+                    <span style="font-size: 14px; color: #cccccc;">远程视频翻页不重绘</span>
+                </label>
+            </div>
+        </div>
+        
         <div class="control-section">
             <div class="control-group">
                 <button class="btn" onclick="app.forceCleanup()" style="background: #ff6b6b;">强制清理内存</button>
@@ -1333,13 +1342,20 @@
             needToRecreateGrid() {
                 const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
                 
+                // 检查是否启用了远程视频翻页优化
+                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
+                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
+                
+                // 如果启用了远程视频优化，且只是远程视频，则不强制重建
+                const shouldForceRebuildForRemote = this.currentVideoUrl && !remoteOptimizationEnabled;
+                
                 return !this.gridState.isInitialized ||
                        this.gridState.rows !== rows ||
                        this.gridState.cols !== cols ||
                        this.gridState.cellDuration !== cellDuration ||
                        this.gridState.totalCells !== totalCells ||
                        this.gridState.videoFile !== this.currentVideo ||
-                       this.currentVideoUrl;  // 远程视频强制每次重建网格
+                       shouldForceRebuildForRemote;  // 远程视频根据优化设置决定是否重建
             }
 
             // 更新网格状态
@@ -1468,15 +1484,21 @@
                     const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
                     
+                    // 检查是否启用了远程视频翻页优化
+                    const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
+                    const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
                     
-                    // 远程视频强制重绘，本地保持非重绘优化
-                    if (this.currentVideoUrl) {
+                    // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
+                    if (this.currentVideoUrl && !remoteOptimizationEnabled) {
+                        // 远程视频且未启用优化：强制重绘
                         this.updatePreviewDebouncedWrapper();
                     } else if (this.gridState.isInitialized) {
+                        // 本地视频或远程视频已启用优化：只调整时间点
                         this.updatePaginationUI();
                         this.updateGridTimePoints();
                         this.updateFileProgress();
                     } else {
+                        // 网格未初始化：完全重绘
                         this.updatePreviewDebouncedWrapper();
                     }
                 }
@@ -1487,14 +1509,21 @@
                 const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
                 
-                // 远程视频强制重绘，本地保持非重绘优化
-                if (this.currentVideoUrl) {
+                // 检查是否启用了远程视频翻页优化
+                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
+                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
+                
+                // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
+                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
+                    // 远程视频且未启用优化：强制重绘
                     this.updatePreviewDebouncedWrapper();
                 } else if (this.gridState.isInitialized) {
+                    // 本地视频或远程视频已启用优化：只调整时间点
                     this.updatePaginationUI();
                     this.updateGridTimePoints();
                     this.updateFileProgress();
                 } else {
+                    // 网格未初始化：完全重绘
                     this.updatePreviewDebouncedWrapper();
                 }
             }
@@ -1504,14 +1533,21 @@
                 const newStartTime = this.currentStartTime + pageDuration;
                 this.setPageStartTime(newStartTime);
                 
-                // 远程视频强制重绘，本地保持非重绘优化
-                if (this.currentVideoUrl) {
+                // 检查是否启用了远程视频翻页优化
+                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
+                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
+                
+                // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
+                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
+                    // 远程视频且未启用优化：强制重绘
                     this.updatePreviewDebouncedWrapper();
                 } else if (this.gridState.isInitialized) {
+                    // 本地视频或远程视频已启用优化：只调整时间点
                     this.updatePaginationUI();
                     this.updateGridTimePoints();
                     this.updateFileProgress();
                 } else {
+                    // 网格未初始化：完全重绘
                     this.updatePreviewDebouncedWrapper();
                 }
             }
@@ -1528,11 +1564,17 @@
                 this.calculatePages();
                 this.updatePaginationUI();
                 
-                // 在线视频强制重绘，本地保持非重绘优化
-                if (this.currentVideoUrl) {
+                // 检查是否启用了远程视频翻页优化
+                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
+                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
+                
+                // 在线视频根据优化设置决定是否重绘，本地保持非重绘优化
+                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
+                    // 远程视频且未启用优化：强制重绘
                     this.resetGridState();
                     this.updatePreviewDebouncedWrapper();
                 } else {
+                    // 本地视频或远程视频已启用优化：只调整时间点
                     this.updateGridTimePoints();
                     this.updateFileProgress();
                 }
