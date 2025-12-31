@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - 'subtitle_video_player/**'
+  workflow_dispatch:
 
 jobs:
   checkout-and-publish:
