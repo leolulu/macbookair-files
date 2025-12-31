@@ -465,65 +465,189 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
     <script>
-        // ass-to-srt 原始逻辑 - 从 node_modules/ass-to-srt/index.js 提取
-        var re_ass = new RegExp('Dialogue:\\s*\\\\d+,'
-            + '(\\\\d+:\\\\d\\\\d:\\\\d\\\\d.\\\\d\\\\d),'
-            + '(\\\\d+:\\\\d\\\\d:\\\\d\\\\d.\\\\d\\\\d),'
-            + '([^,]*)'
-            + ','
-            + '([^,]*)'
-            + '(?:[^,]*,){4}'
-            + '(.*)$', 'i');
-        var re_newline = /\\\\N/ig;
-        var re_style = /\\{[^}]+\\}/g;
-
+        // ASS to SRT 转换 - 使用动态 Format 解析
+        // 辅助函数：解析 Format 行，获取字段索引
+        function parseFormatLine(lines) {
+            var inEventsSection = false;
+            
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                
+                // 检测进入 [Events] 部分
+                if (line === '[Events]') {
+                    inEventsSection = true;
+                    continue;
+                }
+                
+                // 检测离开 [Events] 部分（遇到其他 [xxx] 部分）
+                if (line.startsWith('[') && inEventsSection) {
+                    break; // 已经离开 Events 部分，停止搜索
+                }
+                
+                // 只在 Events 部分内查找 Format 行
+                if (inEventsSection && line.startsWith('Format:')) {
+                    var fields = line.substring(7).split(',').map(function(f) {
+                        return f.trim();
+                    });
+                    return {
+                        fields: fields,
+                        startIdx: fields.indexOf('Start'),
+                        endIdx: fields.indexOf('End'),
+                        textIdx: fields.indexOf('Text'),
+                        styleIdx: fields.indexOf('Style'),
+                        actorIdx: fields.indexOf('Name')
+                    };
+                }
+            }
+            
+            return null; // 在 Events 部分中未找到 Format 行
+        }
+        
+        // 辅助函数：解析 Dialogue 行，提取字幕信息
+        function parseDialogueLine(line, formatInfo) {
+            // 去掉 "Dialogue:" 前缀
+            var content = line.substring(9);
+            
+            // 找到 Text 字段开始的位置（第 textIdx 个逗号之后）
+            var commaCount = 0;
+            var textStartPos = 0;
+            for (var i = 0; i < content.length; i++) {
+                if (content[i] === ',') {
+                    commaCount++;
+                    if (commaCount === formatInfo.textIdx) {
+                        textStartPos = i + 1;  // 跳过逗号本身
+                        break;
+                    }
+                }
+            }
+            
+            // 直接提取 Text 字段（从 textStartPos 到结尾）
+            var text = content.substring(textStartPos);
+            
+            // 提取 Text 之前的部分，用逗号切分获取其他字段
+            var beforeText = content.substring(0, textStartPos - 1);
+            var parts = beforeText.split(',');
+            
+            return {
+                start: formatInfo.startIdx < parts.length ? parts[formatInfo.startIdx] : '',
+                end: formatInfo.endIdx < parts.length ? parts[formatInfo.endIdx] : '',
+                text: text,
+                style: formatInfo.styleIdx >= 0 && formatInfo.styleIdx < parts.length ? parts[formatInfo.styleIdx] : '',
+                actor: formatInfo.actorIdx >= 0 && formatInfo.actorIdx < parts.length ? parts[formatInfo.actorIdx] : ''
+            };
+        }
+        
+        // 辅助函数：清理字幕文本（去除样式标签、换行符）
+        function cleanText(text) {
+            // 去除样式标签 {xxx}
+            text = text.replace(/\{[^}]+\}/g, '');
+            // 将 \N 替换为换行符
+            text = text.replace(/\\N/gi, '\n');
+            return text.trim();
+        }
+        
+        // 辅助函数：灵活解析 ASS 时间格式
+        function parseAssTime(assTime) {
+            // 支持 H:MM:SS.CC 或 H:MM:SS.CCC 格式
+            var parts = assTime.split(':');
+            var h = parseInt(parts[0], 10) || 0;
+            var m = parseInt(parts[1], 10) || 0;
+            
+            // 处理秒和毫秒
+            var secParts = parts[2].split('.');
+            var s = parseInt(secParts[0], 10) || 0;
+            var msStr = secParts[1] || '0';
+            // 补齐到3位
+            while (msStr.length < 3) {
+                msStr += '0';
+            }
+            var ms = parseInt(msStr, 10) || 0;
+            
+            return h * 3600 + m * 60 + s + ms / 1000;
+        }
+        
+        // 辅助函数：将 ASS 时间转换为 SRT 时间格式
+        function assTimeToSrtTime(assTime) {
+            var h = '00', m = '00', s = '00', ms = '000';
+            var t = assTime.split(':');
+            if (t.length > 0) {
+                h = t[0].length == 1 ? '0' + t[0] : t[0];
+            }
+            if (t.length > 1) {
+                m = t[1].length == 1 ? '0' + t[1] : t[1];
+            }
+            if (t.length > 2) {
+                var t2 = t[2].split('.');
+                if (t2.length > 0) {
+                    s = t2[0].length == 1 ? '0' + t2[0] : t2[0];
+                }
+                if (t2.length > 0) {
+                    ms = t2[1].length == 2 ? t2[1] + '0' : (t2[1].length == 1 ? t2[1] + '00' : t2[1]);
+                }
+            }
+            return [h, m, s + ',' + ms].join(':');
+        }
+        
+        // 主函数：ASS 转 SRT
         function ass2srt(assText) {
-          var srts = [];
-          String(assText).split(/\\r*\\n/).forEach(function(line) {
-            var m = line.match(re_ass);
-            if(!m) return;
-
-            var start = m[1], end = m[2], what = m[3], actor = m[4], text = m[5];
-            text = text.replace(re_style, '').replace(re_newline, '\\r\\n');
-            srts.push({start: start, end: end, text: text});
-          });
-
-          var i = 1;
-          var output = srts.sort(function(d1, d2) {
-            var s1 = assTime2Int(d1.start);
-            var s2 = assTime2Int(d2.start);
-            var e1 = assTime2Int(d1.end);
-            var e2 = assTime2Int(d2.end);
-
-            return s1 != s2 ? s1 - s2 : e1 - e2;
-          }).map(function(srt) {
-            var start = assTime2SrtTime(srt.start);
-            var end = assTime2SrtTime(srt.end);
-            return (i++) + '\\n'
-              + start + ' --> ' + end + '\\n'
-              + srt.text + '\\n\\n';
-          }).join('');
-
-          return output;
+            var lines = String(assText).split(/\r*\n/);
+            
+            // 步骤 1: 解析 Format 行
+            var formatInfo = parseFormatLine(lines);
+            if (!formatInfo) {
+                console.warn('No Format line found in ASS file, using default format');
+                // 使用默认格式
+                formatInfo = {
+                    fields: ['Layer', 'Start', 'End', 'Style', 'Name', 'MarginL', 'MarginR', 'MarginV', 'Effect', 'Text'],
+                    startIdx: 1,
+                    endIdx: 2,
+                    textIdx: 9,
+                    styleIdx: 3,
+                    actorIdx: 4
+                };
+            }
+            
+            // 步骤 2: 解析所有 Dialogue 行
+            var srts = [];
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                
+                // 只处理 Dialogue 行，忽略 Comment 行和其他行
+                if (!line.startsWith('Dialogue:')) {
+                    continue;
+                }
+                
+                var subtitle = parseDialogueLine(line, formatInfo);
+                if (subtitle.start && subtitle.end && subtitle.text) {
+                    var text = cleanText(subtitle.text);
+                    srts.push({
+                        start: subtitle.start,
+                        end: subtitle.end,
+                        text: text
+                    });
+                }
+            }
+            
+            // 步骤 3: 排序并转换为 SRT 格式
+            var i = 1;
+            var output = srts.sort(function(d1, d2) {
+                var s1 = parseAssTime(d1.start);
+                var s2 = parseAssTime(d2.start);
+                var e1 = parseAssTime(d1.end);
+                var e2 = parseAssTime(d2.end);
+                
+                return s1 != s2 ? s1 - s2 : e1 - e2;
+            }).map(function(srt) {
+                var start = assTimeToSrtTime(srt.start);
+                var end = assTimeToSrtTime(srt.end);
+                return (i++) + '\n'
+                    + start + ' --> ' + end + '\n'
+                    + srt.text + '\n\n';
+            }).join('');
+            
+            return output;
         }
-
-        function assTime2Int(assTime) {
-          return parseInt(assTime.replace(/[^0-9]/g, ''));
-        }
-
-        function assTime2SrtTime(assTime) {
-          var h = m = s = '00', ms = '000';
-          var t = assTime.split(':');
-          if(t.length > 0) h = t[0].length == 1 ? '0'+t[0] : t[0];
-          if(t.length > 1) m = t[1].length == 1 ? '0'+t[1] : t[1];
-          if(t.length > 2) {
-            var t2 = t[2].split('.');
-            if(t2.length > 0) s = t2[0].length == 1 ? '0'+t2[0] : t2[0];
-            if(t2.length > 0) ms = t2[1].length == 2 ? t2[1]+'0' : t2[1].length == 1 ? t2[1]+'00' : t2[1];
-          }
-          return [h, m , s+','+ms].join(':');
-        }
-
+        
         // 暴露到全局
         window.ass2srt = ass2srt;
     </script>
