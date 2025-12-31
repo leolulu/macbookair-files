@@ -13,7 +13,6 @@ jobs:
 
     env:
       PLAYER_CODE_FOLDER_NAME: subtitle_video_player
-      JS_FILE_NAME: ass2srtEntry.js
       HTML_FILE_NAME: subtitle_video_player.html
       UPLOAD_FOLDER_NAME: subtitleVideoPlayer
 
@@ -24,5 +23,4 @@ jobs:
       - name: Publish to DUFS
         run: |
           cd ${{ env.PLAYER_CODE_FOLDER_NAME }}
-          curl -T ${{ env.JS_FILE_NAME }}   ${{ vars.DUFS_BASE_URL }}/${{ env.UPLOAD_FOLDER_NAME }}/${{ env.JS_FILE_NAME }}
           curl -T ${{ env.HTML_FILE_NAME }} ${{ vars.DUFS_BASE_URL }}/${{ env.UPLOAD_FOLDER_NAME }}/${{ env.HTML_FILE_NAME }}
