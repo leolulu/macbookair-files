@@ -229,6 +229,16 @@
             height: 100%;
             object-fit: contain; /* 改为contain，保持视频完整显示 */
             background: #000; /* 添加黑色背景，填充可能的空白区域 */
+            transform-origin: center center;
+            cursor: grab;
+            user-select: none;
+            /* 性能优化：启用GPU硬件加速 */
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .grid-item video:active {
+            cursor: grabbing;
         }
 
         .time-range-overlay {
@@ -868,6 +878,15 @@
                 this.videoFiles = [];
                 this.currentVideoIndex = 0;
                 
+                // 全局视频缩放和拖动状态（所有格子共享）
+                this.videoScale = 1;
+                this.videoTranslateX = 0;
+                this.videoTranslateY = 0;
+                this.isDragging = false;
+                this.dragStartX = 0;
+                this.dragStartY = 0;
+                this.hasMoved = false;
+                
                 // 资源跟踪
                 this.createdURLs = new Set();
                 this.createdVideos = [];
@@ -1063,6 +1082,9 @@
             
             // 清理事件监听器
             cleanupEventListeners() {
+                // 清理 document 级别事件监听器
+                this.removeDocumentLevelEventListeners();
+                
                 this.eventListeners.forEach(({element, event, handler}) => {
                     try {
                         element.removeEventListener(event, handler);
@@ -1382,6 +1404,10 @@
                     cellDuration: 0,
                     videoFile: null
                 };
+                // 重置缩放和拖动状态
+                this.videoScale = 1;
+                this.videoTranslateX = 0;
+                this.videoTranslateY = 0;
             }
 
             calculatePages() {
@@ -1736,6 +1762,146 @@
                 
                 // 更新网格状态
                 this.updateGridState();
+                
+                // 初始化视频缩放和拖动事件
+                this.initVideoDragAndZoom();
+            }
+            
+            // 初始化视频缩放和拖动事件
+            initVideoDragAndZoom() {
+                // 移除旧的 document 级别事件监听器
+                this.removeDocumentLevelEventListeners();
+                
+                // 添加 document 级别事件监听器（只添加一次）
+                this.addDocumentLevelEventListeners();
+                
+                // 为每个视频附加事件
+                const videos = document.querySelectorAll('.grid-item video');
+                videos.forEach(video => {
+                    this.attachVideoEvents(video);
+                });
+            }
+            
+            // 移除 document 级别事件监听器
+            removeDocumentLevelEventListeners() {
+                if (this.mouseMoveHandler) {
+                    document.removeEventListener('mousemove', this.mouseMoveHandler);
+                    this.mouseMoveHandler = null;
+                }
+                if (this.mouseUpHandler) {
+                    document.removeEventListener('mouseup', this.mouseUpHandler);
+                    this.mouseUpHandler = null;
+                }
+            }
+            
+            // 添加 document 级别事件监听器
+            addDocumentLevelEventListeners() {
+                // 鼠标移动拖动视频
+                this.mouseMoveHandler = (e) => {
+                    if (this.isDragging) {
+                        // 检测是否发生了实际移动
+                        const currentTranslateX = e.clientX - this.dragStartX;
+                        const currentTranslateY = e.clientY - this.dragStartY;
+                        
+                        // 如果位置有变化，标记为已移动
+                        if (Math.abs(currentTranslateX - this.videoTranslateX) > 1 ||
+                            Math.abs(currentTranslateY - this.videoTranslateY) > 1) {
+                            this.hasMoved = true;
+                        }
+                        
+                        this.videoTranslateX = currentTranslateX;
+                        this.videoTranslateY = currentTranslateY;
+                        
+                        // 同步应用到所有格子的视频
+                        this.applyVideoTransformToAll();
+                    }
+                };
+                document.addEventListener('mousemove', this.mouseMoveHandler);
+                
+                // 鼠标释放结束拖动
+                this.mouseUpHandler = (e) => {
+                    if (this.isDragging) {
+                        this.isDragging = false;
+                        // 如果发生了拖动，阻止视频的点击播放/暂停事件
+                        if (this.hasMoved) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                    }
+                };
+                document.addEventListener('mouseup', this.mouseUpHandler);
+            }
+            
+            // 为单个视频附加缩放和拖动事件
+            attachVideoEvents(video) {
+                // 鼠标滚轮缩放视频（以鼠标位置为中心进行缩放）
+                video.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    
+                    // 获取格子容器和鼠标位置
+                    const cell = video.parentElement;
+                    const cellRect = cell.getBoundingClientRect();
+                    const cellCenterX = cellRect.width / 2;
+                    const cellCenterY = cellRect.height / 2;
+                    
+                    // 鼠标相对于格子中心的偏移量
+                    const mouseX = e.clientX - cellRect.left - cellCenterX;
+                    const mouseY = e.clientY - cellRect.top - cellCenterY;
+                    
+                    // 记录缩放前的状态
+                    const oldScale = this.videoScale;
+                    
+                    // 缩放系数设为0.1，即每次滚动改变10%
+                    const zoomFactor = 0.1;
+                    
+                    if (e.deltaY < 0) {
+                        // 向上滚动，放大
+                        this.videoScale += zoomFactor;
+                    } else {
+                        // 向下滚动，缩小
+                        this.videoScale -= zoomFactor;
+                    }
+                    
+                    // 限制最小缩放范围
+                    if (this.videoScale < 0.1) {
+                        this.videoScale = 0.1;
+                    }
+                    
+                    // 计算缩放比例的变化
+                    const scaleChange = this.videoScale / oldScale;
+                    
+                    // 调整平移量，使得鼠标指向的内容点保持不变
+                    this.videoTranslateX = this.videoTranslateX + (mouseX - this.videoTranslateX) * (1 - scaleChange);
+                    this.videoTranslateY = this.videoTranslateY + (mouseY - this.videoTranslateY) * (1 - scaleChange);
+                    
+                    // 同步应用到所有格子的视频
+                    this.applyVideoTransformToAll();
+                });
+                
+                // 鼠标按下开始拖动
+                video.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.hasMoved = false;
+                    this.dragStartX = e.clientX - this.videoTranslateX;
+                    this.dragStartY = e.clientY - this.videoTranslateY;
+                    e.preventDefault(); // 阻止视频默认行为
+                });
+                
+                // 阻止视频的click事件（如果发生了拖动）
+                video.addEventListener('click', (e) => {
+                    if (this.hasMoved) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+            }
+            
+            // 同步应用变换到所有格子的视频
+            applyVideoTransformToAll() {
+                const videos = document.querySelectorAll('.grid-item video');
+                videos.forEach(video => {
+                    video.style.transform = `translate(${this.videoTranslateX}px, ${this.videoTranslateY}px) scale(${this.videoScale})`;
+                });
             }
 
             // 更新网格时间点（只在页面切换时调用）
