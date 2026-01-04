@@ -715,6 +715,52 @@
             color: #ffffff;
             border-radius: 4px;
         }
+
+        /* 重置缩放和位置按钮样式 */
+        .btn-reset-transform {
+            background: #F7C137;
+            color: #2d2d2d;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            width: 100%;
+            font-weight: 500;
+        }
+
+        .btn-reset-transform:hover {
+            background: #E5B02E;
+            box-shadow: 0 2px 8px rgba(247, 193, 55, 0.4);
+        }
+
+        .btn-reset-transform:active {
+            box-shadow: 0 1px 4px rgba(247, 193, 55, 0.3);
+        }
+
+        /* 强制清理内存按钮样式 */
+        .btn-force-cleanup {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            width: 100%;
+            font-weight: 500;
+        }
+
+        .btn-force-cleanup:hover {
+            background: #ff5252;
+            box-shadow: 0 2px 8px rgba(255, 107, 107, 0.4);
+        }
+
+        .btn-force-cleanup:active {
+            box-shadow: 0 1px 4px rgba(255, 107, 107, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -853,7 +899,7 @@
         
         <div class="control-section is-hidden" id="resetTransformSection">
             <div class="control-group">
-                <button class="btn" onclick="app.resetVideoTransform()" style="background: #F7C137; color: #2d2d2d;">重置缩放和位置</button>
+                <button class="btn-reset-transform" onclick="app.resetVideoTransform()">重置缩放和位置</button>
                 <div class="hint-text" style="margin-top: 5px;">
                     将所有格子的缩放和位置恢复到初始状态
                 </div>
@@ -862,7 +908,7 @@
         
         <div class="control-section">
             <div class="control-group">
-                <button class="btn" onclick="app.forceCleanup()" style="background: #ff6b6b;">强制清理内存</button>
+                <button class="btn-force-cleanup" onclick="app.forceCleanup()">强制清理内存</button>
                 <div class="hint-text" style="margin-top: 5px;">
                     如果感觉内存占用过高，点击此按钮释放资源
                 </div>
