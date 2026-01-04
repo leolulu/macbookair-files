@@ -851,6 +851,15 @@
             </div>
         </div>
         
+        <div class="control-section is-hidden" id="resetTransformSection">
+            <div class="control-group">
+                <button class="btn" onclick="app.resetVideoTransform()" style="background: #F7C137; color: #2d2d2d;">重置缩放和位置</button>
+                <div class="hint-text" style="margin-top: 5px;">
+                    将所有格子的缩放和位置恢复到初始状态
+                </div>
+            </div>
+        </div>
+        
         <div class="control-section">
             <div class="control-group">
                 <button class="btn" onclick="app.forceCleanup()" style="background: #ff6b6b;">强制清理内存</button>
@@ -886,6 +895,7 @@
                 this.dragStartX = 0;
                 this.dragStartY = 0;
                 this.hasMoved = false;
+                this.hasTransformed = false; // 标记是否发生过缩放或拖动
                 
                 // 资源跟踪
                 this.createdURLs = new Set();
@@ -1807,6 +1817,9 @@
                         if (Math.abs(currentTranslateX - this.videoTranslateX) > 1 ||
                             Math.abs(currentTranslateY - this.videoTranslateY) > 1) {
                             this.hasMoved = true;
+                            // 标记发生过变换并显示重置按钮
+                            this.hasTransformed = true;
+                            this.showResetTransformButton();
                         }
                         
                         this.videoTranslateX = currentTranslateX;
@@ -1874,6 +1887,10 @@
                     this.videoTranslateX = this.videoTranslateX + (mouseX - this.videoTranslateX) * (1 - scaleChange);
                     this.videoTranslateY = this.videoTranslateY + (mouseY - this.videoTranslateY) * (1 - scaleChange);
                     
+                    // 标记发生过变换并显示重置按钮
+                    this.hasTransformed = true;
+                    this.showResetTransformButton();
+                    
                     // 同步应用到所有格子的视频
                     this.applyVideoTransformToAll();
                 };
@@ -1905,6 +1922,36 @@
                 videos.forEach(video => {
                     video.style.transform = `translate(${this.videoTranslateX}px, ${this.videoTranslateY}px) scale(${this.videoScale})`;
                 });
+            }
+            
+            // 显示重置缩放和位置按钮
+            showResetTransformButton() {
+                const resetSection = document.getElementById('resetTransformSection');
+                if (resetSection) {
+                    resetSection.classList.remove('is-hidden');
+                }
+            }
+            
+            // 重置视频缩放和位置
+            resetVideoTransform() {
+                // 重置缩放和拖动状态
+                this.videoScale = 1;
+                this.videoTranslateX = 0;
+                this.videoTranslateY = 0;
+                this.hasTransformed = false;
+                this.hasMoved = false;
+                
+                // 应用重置后的变换
+                this.applyVideoTransformToAll();
+                
+                // 隐藏重置按钮
+                const resetSection = document.getElementById('resetTransformSection');
+                if (resetSection) {
+                    resetSection.classList.add('is-hidden');
+                }
+                
+                // 显示提示
+                this.showNotification('缩放和位置已重置', false);
             }
 
             // 更新网格时间点（只在页面切换时调用）
