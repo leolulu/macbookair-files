@@ -1835,7 +1835,7 @@
             // 为单个视频附加缩放和拖动事件
             attachVideoEvents(video) {
                 // 鼠标滚轮缩放视频（以鼠标位置为中心进行缩放）
-                video.addEventListener('wheel', (e) => {
+                const wheelHandler = (e) => {
                     e.preventDefault();
                     
                     // 获取格子容器和鼠标位置
@@ -1876,24 +1876,27 @@
                     
                     // 同步应用到所有格子的视频
                     this.applyVideoTransformToAll();
-                });
+                };
+                this.addTrackedEventListener(video, 'wheel', wheelHandler);
                 
                 // 鼠标按下开始拖动
-                video.addEventListener('mousedown', (e) => {
+                const mousedownHandler = (e) => {
                     this.isDragging = true;
                     this.hasMoved = false;
                     this.dragStartX = e.clientX - this.videoTranslateX;
                     this.dragStartY = e.clientY - this.videoTranslateY;
                     e.preventDefault(); // 阻止视频默认行为
-                });
+                };
+                this.addTrackedEventListener(video, 'mousedown', mousedownHandler);
                 
                 // 阻止视频的click事件（如果发生了拖动）
-                video.addEventListener('click', (e) => {
+                const clickHandler = (e) => {
                     if (this.hasMoved) {
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                });
+                };
+                this.addTrackedEventListener(video, 'click', clickHandler);
             }
             
             // 同步应用变换到所有格子的视频
