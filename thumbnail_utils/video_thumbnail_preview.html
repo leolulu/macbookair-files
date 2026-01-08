@@ -129,6 +129,14 @@
             gap: 10px;
         }
 
+        .pagination-buttons-row {
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
         .pagination button {
             background: #007acc;
             color: white;
@@ -137,7 +145,8 @@
             border-radius: 6px;
             cursor: pointer;
             font-size: 13px;
-            width: 100%;
+            flex: 1;
+            /* Changed from width: 100% to flex: 1 */
             transition: all 0.2s ease;
             font-weight: 500;
             letter-spacing: 0.5px;
@@ -159,10 +168,6 @@
             cursor: not-allowed;
         }
 
-        .pagination button:nth-child(2) {
-            margin-top: 10px;
-            margin-bottom: 10px;
-        }
 
         .pagination-info {
             color: #cccccc;
@@ -838,8 +843,10 @@
         </div>
 
         <div class="pagination hidden" id="pagination">
-            <button onclick="app.previousPage()">上一页</button>
-            <button onclick="app.nextPage()">下一页</button>
+            <div class="pagination-buttons-row">
+                <button onclick="app.previousPage()">上一页</button>
+                <button onclick="app.nextPage()">下一页</button>
+            </div>
             <div class="pagination-info" id="pageInfo">1 / 1</div>
             <div class="hint-text">
                 ←↑上一页 | →↓下一页
