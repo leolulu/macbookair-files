@@ -810,6 +810,53 @@
         .btn-force-cleanup:active {
             box-shadow: 0 1px 4px rgba(255, 107, 107, 0.3);
         }
+
+        /* 漫画气泡提示框样式 */
+        #comicBubbleTooltip {
+            position: fixed;
+            /* display: none; */
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
+            /* 快速淡入淡出 */
+            background: white;
+            border: 3px solid black;
+            border-radius: 15px;
+            /* 恢复圆角 */
+            padding: 10px 15px;
+            color: black;
+            font-size: 13px;
+            font-family: 'Comic Sans MS', 'Segoe UI', cursive, sans-serif;
+            z-index: 10000;
+            pointer-events: none;
+            max-width: 300px;
+            word-break: break-all;
+            box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.2);
+            filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.2));
+        }
+
+        /* 气泡尖角 - 恢复到右侧 */
+        #comicBubbleTooltip::after {
+            content: '';
+            position: absolute;
+            right: -15px;
+            top: 50%;
+            transform: translateY(-50%);
+            border-width: 8px 0 8px 15px;
+            border-style: solid;
+            border-color: transparent transparent transparent black;
+        }
+
+        #comicBubbleTooltip::before {
+            content: '';
+            position: absolute;
+            right: -10px;
+            top: 50%;
+            transform: translateY(-50%);
+            border-width: 6px 0 6px 12px;
+            border-style: solid;
+            border-color: transparent transparent transparent white;
+            z-index: 1;
+        }
     </style>
 </head>
 
@@ -982,6 +1029,9 @@
             </div>
         </div>
     </div>
+
+    <!-- 漫画气泡工具提示 -->
+    <div id="comicBubbleTooltip"></div>
 
     <script>
         class VideoThumbnailPreview {
@@ -1464,11 +1514,27 @@
 
                 const nameEl = document.getElementById('videoName');
                 if (this.currentVideoUrl) {
-                    nameEl.textContent = `远程视频: ${this.currentVideoUrl}`;
+                    // 提取文件名：取路径末尾，剔除参数
+                    try {
+                        const urlObj = new URL(this.currentVideoUrl);
+                        const pathname = urlObj.pathname;
+                        const filename = pathname.split('/').pop() || '未知视频';
+                        nameEl.textContent = `远程视频: ${filename}`;
+
+                        // 设置悬停气泡逻辑
+                        nameEl.style.cursor = 'help';
+                        this.initComicBubbleEvents(nameEl, this.currentVideoUrl);
+                    } catch (e) {
+                        nameEl.textContent = `远程视频: ${this.currentVideoUrl}`;
+                    }
                 } else if (this.currentVideo) {
                     nameEl.textContent = this.currentVideo.name;
+                    nameEl.style.cursor = 'default';
+                    this.removeComicBubbleEvents(nameEl);
                 } else {
                     nameEl.textContent = '无视频';
+                    nameEl.style.cursor = 'default';
+                    this.removeComicBubbleEvents(nameEl);
                 }
 
                 document.getElementById('videoDuration').textContent = duration;
@@ -2924,6 +2990,63 @@
                         }
                     }, 500);
                 }, 3000);
+            }
+
+
+
+            // 初始化漫画气泡事件
+            initComicBubbleEvents(element, fullUrl) {
+                const tooltip = document.getElementById('comicBubbleTooltip');
+                if (!tooltip) return;
+
+                // 移除旧监听器以防重复
+                this.removeComicBubbleEvents(element);
+
+                const onMouseMove = (e) => {
+                    // 计算位置：鼠标左侧，并加上一定的偏移
+                    // 气泡宽度是动态的，我们需要在显示后获取
+                    const tooltipWidth = tooltip.offsetWidth;
+                    const tooltipHeight = tooltip.offsetHeight;
+
+                    // 尖角对准鼠标（右侧中间位置）
+                    // 气泡在鼠标的左侧
+                    // left: 鼠标位置 - 气泡宽度 - 15px (给尖角留出空间)
+                    // top: 鼠标位置 - 气泡高度一半 (垂直居中)
+                    tooltip.style.left = `${e.clientX - tooltipWidth - 15}px`;
+                    tooltip.style.top = `${e.clientY - (tooltipHeight / 2)}px`;
+                };
+
+                const onMouseEnter = (e) => {
+                    tooltip.textContent = fullUrl;
+                    // 先显示出来以便计算尺寸 (透明度变化)
+                    tooltip.style.opacity = '1';
+                    // 立即更新位置，避免在(0,0)闪烁
+                    onMouseMove(e);
+                };
+
+                const onMouseLeave = () => {
+                    tooltip.style.opacity = '0';
+                };
+
+                element.addEventListener('mouseenter', onMouseEnter);
+                element.addEventListener('mousemove', onMouseMove);
+                element.addEventListener('mouseleave', onMouseLeave);
+
+                // 保存引用以便后续移除
+                element._comicHandlers = { onMouseEnter, onMouseMove, onMouseLeave };
+            }
+
+            // 移除漫画气泡事件
+            removeComicBubbleEvents(element) {
+                if (element._comicHandlers) {
+                    const { onMouseEnter, onMouseMove, onMouseLeave } = element._comicHandlers;
+                    element.removeEventListener('mouseenter', onMouseEnter);
+                    element.removeEventListener('mousemove', onMouseMove);
+                    element.removeEventListener('mouseleave', onMouseLeave);
+                    delete element._comicHandlers;
+                }
+                const tooltip = document.getElementById('comicBubbleTooltip');
+                if (tooltip) tooltip.style.opacity = '0';
             }
 
             async loadRemoteVideo(url) {
