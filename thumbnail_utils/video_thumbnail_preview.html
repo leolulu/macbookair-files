@@ -1840,8 +1840,20 @@
                         video.currentTime = startTime;
                     }, { signal });
 
+                    let isVideoLoaded = false;
                     // 监听缓冲进度
                     video.addEventListener('canplay', () => {
+                        // 1. 防止重复计数
+                        if (isVideoLoaded) return;
+
+                        // 2. "错误事件" 防止: 验证是否到达目标时间
+                        // 允许小的时间容差 (0.5s)，因为跳转可能不是帧精确的
+                        if (Math.abs(video.currentTime - startTime) > 0.5) {
+                            // console.log(`Ignored canplay at ${video.currentTime} (target: ${startTime})`);
+                            return;
+                        }
+
+                        isVideoLoaded = true;
                         loadedPreloadCount++;
                         if (statusEl) {
                             if (loadedPreloadCount === plannedPreloadCount) {
