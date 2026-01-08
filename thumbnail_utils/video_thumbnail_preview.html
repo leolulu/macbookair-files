@@ -603,6 +603,32 @@
             box-shadow: none;
         }
 
+        /* Loading Shimmer Animation for status text */
+        @keyframes shimmer {
+            0% {
+                background-position: 200% center;
+            }
+
+            100% {
+                background-position: -200% center;
+            }
+        }
+
+        .shimmer-text {
+            background: linear-gradient(90deg,
+                    #F7C137 0%,
+                    #F7C137 40%,
+                    #ffffff 50%,
+                    #F7C137 60%,
+                    #F7C137 100%);
+            background-size: 200% auto;
+            color: transparent !important;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: shimmer 2s linear infinite;
+            display: inline-block;
+        }
+
         .progress-indicator-line {
             position: absolute;
             top: 0;
@@ -1195,6 +1221,7 @@
                 const statusEl = document.getElementById('preloadingStatus');
                 if (statusEl) {
                     statusEl.style.display = 'none';
+                    statusEl.classList.remove('shimmer-text');
                     statusEl.textContent = '';
                 }
 
@@ -1802,7 +1829,8 @@
                 const statusEl = document.getElementById('preloadingStatus');
                 if (statusEl) {
                     statusEl.style.display = 'block';
-                    statusEl.textContent = `⏳ 正在准备下一页... (0/0)`;
+                    statusEl.classList.remove('shimmer-text');
+                    statusEl.innerHTML = `<span>⏳</span> <span class="shimmer-text">正在准备下一页... (0/0)</span>`;
                 }
 
                 let plannedPreloadCount = 0;
@@ -1817,7 +1845,8 @@
                 }
 
                 if (statusEl) {
-                    statusEl.textContent = `⏳ 正在准备下一页... (0/${plannedPreloadCount})`;
+                    statusEl.classList.remove('shimmer-text');
+                    statusEl.innerHTML = `<span>⏳</span> <span class="shimmer-text">正在准备下一页... (0/${plannedPreloadCount})</span>`;
                 }
 
                 // 6. 创建预加载video元素
@@ -1856,11 +1885,12 @@
                         isVideoLoaded = true;
                         loadedPreloadCount++;
                         if (statusEl) {
+                            statusEl.classList.remove('shimmer-text');
                             if (loadedPreloadCount === plannedPreloadCount) {
-                                statusEl.textContent = `✅ 下一页准备就绪! (${loadedPreloadCount}/${plannedPreloadCount})`;
+                                statusEl.innerHTML = `<span>✅</span> 下一页准备就绪! (${loadedPreloadCount}/${plannedPreloadCount})`;
                                 statusEl.style.color = '#00ff00';
                             } else {
-                                statusEl.textContent = `🚀 正在缓冲... (${loadedPreloadCount}/${plannedPreloadCount})`;
+                                statusEl.innerHTML = `<span>🚀</span> <span class="shimmer-text">正在缓冲... (${loadedPreloadCount}/${plannedPreloadCount})</span>`;
                                 statusEl.style.color = '#F7C137';
                             }
                         }
@@ -1872,7 +1902,8 @@
                         console.error(`❌ 预加载视频错误 (格子 ${i}):`, errorMsg);
 
                         if (statusEl) {
-                            statusEl.textContent = `❌ 预加载出错: ${errorMsg}`;
+                            statusEl.classList.remove('shimmer-text');
+                            statusEl.innerHTML = `<span>❌</span> 预加载出错: ${errorMsg}`;
                             statusEl.style.color = '#ff6b6b';
                         }
 
