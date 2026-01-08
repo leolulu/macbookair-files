@@ -101,14 +101,20 @@
 
         .video-info strong {
             color: #00ff00;
-            display: block; /* 使文件名独占一行 */
+            display: block;
+            /* 使文件名独占一行 */
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: normal; /* 允许换行 */
-            word-wrap: break-word; /* 长单词可以换行 */
-            word-break: break-all; /* 强制换行 */
-            line-height: 1.3; /* 设置行高，使多行文本更美观 */
-            max-width: 100%; /* 确保不会超出容器 */
+            white-space: normal;
+            /* 允许换行 */
+            word-wrap: break-word;
+            /* 长单词可以换行 */
+            word-break: break-all;
+            /* 强制换行 */
+            line-height: 1.3;
+            /* 设置行高，使多行文本更美观 */
+            max-width: 100%;
+            /* 确保不会超出容器 */
         }
 
         .video-info-details {
@@ -229,8 +235,10 @@
         .grid-item video {
             width: 100%;
             height: 100%;
-            object-fit: contain; /* 改为contain，保持视频完整显示 */
-            background: #000; /* 添加黑色背景，填充可能的空白区域 */
+            object-fit: contain;
+            /* 改为contain，保持视频完整显示 */
+            background: #000;
+            /* 添加黑色背景，填充可能的空白区域 */
             transform-origin: center center;
             cursor: grab;
             user-select: none;
@@ -530,12 +538,17 @@
             flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: normal; /* 改为normal，允许换行 */
-            word-wrap: break-word; /* 长单词可以换行 */
-            word-break: break-all; /* 强制换行 */
+            white-space: normal;
+            /* 改为normal，允许换行 */
+            word-wrap: break-word;
+            /* 长单词可以换行 */
+            word-break: break-all;
+            /* 强制换行 */
             font-size: 13px;
-            min-width: 0; /* 确保flex子元素可以收缩 */
-            line-height: 1.3; /* 设置行高，使多行文本更美观 */
+            min-width: 0;
+            /* 确保flex子元素可以收缩 */
+            line-height: 1.3;
+            /* 设置行高，使多行文本更美观 */
         }
 
         .file-remove {
@@ -798,8 +811,10 @@
             <!-- 远程视频 Tab 内容 -->
             <div id="remoteTab" class="tab-content">
                 <div class="control-group">
-                    <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input" onkeypress="handleRemoteUrlKeyPress(event)" ondblclick="clearRemoteUrlInput()">
-                    <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
+                    <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input"
+                        onkeypress="handleRemoteUrlKeyPress(event)" ondblclick="clearRemoteUrlInput()">
+                    <button class="btn"
+                        onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
                 </div>
             </div>
         </div>
@@ -835,7 +850,8 @@
         <div class="control-section">
             <div class="control-group">
                 <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;">
-                    <input type="checkbox" id="autoCalculateCols" onchange="toggleAutoCalculateCols()" style="width: 16px; height: 16px;">
+                    <input type="checkbox" id="autoCalculateCols" onchange="toggleAutoCalculateCols()"
+                        style="width: 16px; height: 16px;">
                     <span style="font-size: 14px; color: #cccccc;">自动计算列数</span>
                 </label>
                 <div class="spacing-bottom-sm">
@@ -900,6 +916,18 @@
                     <input type="checkbox" id="remoteVideoOptimization" style="width: 16px; height: 16px;">
                     <span style="font-size: 14px; color: #cccccc;">远程视频翻页不重绘</span>
                 </label>
+            </div>
+            <div class="control-group" style="margin-bottom: 0; margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer;">
+                    <input type="checkbox" id="enablePreloading" onchange="app.togglePreloading()" checked
+                        style="width: 16px; height: 16px;">
+                    <span style="font-size: 14px; color: #cccccc;">启用远程视频预加载</span>
+                </label>
+                <!-- 预加载状态显示 -->
+                <div id="preloadingStatus"
+                    style="margin-top: 5px; margin-left: 24px; font-size: 12px; color: #F7C137; display: none;">
+                    ⏳ 等待预加载...
+                </div>
             </div>
         </div>
 
@@ -994,6 +1022,11 @@
 
                 // 启动视频播放状态检测器
                 this.startVideoPlayMonitor();
+
+                // 错误通知管理
+                this.lastErrorNotification = 0;
+                this.errorNotificationCount = 0;
+                this.lastErrorMessage = '';
             }
 
             // 防抖函数
@@ -1141,6 +1174,13 @@
 
             // 清理预加载的视频元素（防止内存泄漏）
             cleanupPreloadedVideos() {
+                // 隐藏预加载状态
+                const statusEl = document.getElementById('preloadingStatus');
+                if (statusEl) {
+                    statusEl.style.display = 'none';
+                    statusEl.textContent = '';
+                }
+
                 if (this.preloadedVideos.length > 0) {
                     this.preloadedVideos.forEach(video => {
                         try {
@@ -1712,6 +1752,13 @@
                     return;
                 }
 
+                // 1.1 检查预加载开关是否开启
+                const preloadingEnabled = document.getElementById('enablePreloading').checked;
+                if (!preloadingEnabled) {
+                    console.log('🔵 远程视频预加载已禁用');
+                    return;
+                }
+
                 // 2. 检查是否还有下一页
                 const { pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
@@ -1730,7 +1777,29 @@
                 // 4. 计算下一页的格子数和配置
                 const { totalCells, cellDuration } = this.getPageConfig();
 
-                // 5. 创建预加载video元素
+                // 更新状态UI
+                const statusEl = document.getElementById('preloadingStatus');
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    statusEl.textContent = `⏳ 正在准备下一页... (0/0)`;
+                }
+
+                let plannedPreloadCount = 0;
+                let loadedPreloadCount = 0;
+
+                // 5. 先计算实际需要预加载的数量
+                for (let i = 0; i < totalCells; i++) {
+                    const startTime = nextPageStartTime + i * cellDuration;
+                    if (startTime < videoDuration) {
+                        plannedPreloadCount++;
+                    }
+                }
+
+                if (statusEl) {
+                    statusEl.textContent = `⏳ 正在准备下一页... (0/${plannedPreloadCount})`;
+                }
+
+                // 6. 创建预加载video元素
                 for (let i = 0; i < totalCells; i++) {
                     const startTime = nextPageStartTime + i * cellDuration;
 
@@ -1749,10 +1818,52 @@
                         video.currentTime = startTime;
                     });
 
+                    // 监听缓冲进度
+                    video.addEventListener('canplay', () => {
+                        loadedPreloadCount++;
+                        if (statusEl) {
+                            if (loadedPreloadCount === plannedPreloadCount) {
+                                statusEl.textContent = `✅ 下一页准备就绪! (${loadedPreloadCount}/${plannedPreloadCount})`;
+                                statusEl.style.color = '#00ff00';
+                            } else {
+                                statusEl.textContent = `🚀 正在缓冲... (${loadedPreloadCount}/${plannedPreloadCount})`;
+                                statusEl.style.color = '#F7C137';
+                            }
+                        }
+                    });
+
+                    // 监听预加载错误
+                    video.addEventListener('error', (e) => {
+                        const errorMsg = video.error ? video.error.message || `Code ${video.error.code}` : 'Unknown error';
+                        console.error(`❌ 预加载视频错误 (格子 ${i}):`, errorMsg);
+
+                        if (statusEl) {
+                            statusEl.textContent = `❌ 预加载出错: ${errorMsg}`;
+                            statusEl.style.color = '#ff6b6b';
+                        }
+
+                        this.showNotification(`预加载异常: 视频无法加载 (${errorMsg})`, true);
+                    });
+
                     this.preloadedVideos.push(video);
                 }
 
-                console.log(`✅ 预加载完成！已预加载 ${this.preloadedVideos.length} 个格子`);
+                console.log(`✅ 预加载完成！已已开始预加载 ${this.preloadedVideos.length} 个格子`);
+            }
+
+            // 切换预加载状态
+            togglePreloading() {
+                const enabled = document.getElementById('enablePreloading').checked;
+                if (!enabled) {
+                    console.log('🚫 预加载已禁用，清理现有资源...');
+                    this.cleanupPreloadedVideos();
+                } else {
+                    console.log('✅ 预加载已启用');
+                    // 如果当前所有格子都在播放，尝试立即触发预加载
+                    if (this.cellPlayingCount === this.totalCellsInCurrentPage && this.currentVideoUrl) {
+                        this.preloadNextPage();
+                    }
+                }
             }
 
             // 计算单元格尺寸
@@ -1809,149 +1920,159 @@
             }
 
             renderGrid() {
-                // 判断是否需要重新创建网格
-                if (this.needToRecreateGrid()) {
-                    this.createGridElements();
-                } else {
-                    // 只更新时间点，不重新创建元素
-                    this.updateGridTimePoints();
+                try {
+                    // 判断是否需要重新创建网格
+                    if (this.needToRecreateGrid()) {
+                        this.createGridElements();
+                    } else {
+                        // 只更新时间点，不重新创建元素
+                        this.updateGridTimePoints();
+                    }
+                } catch (error) {
+                    console.error('渲染网格失败:', error);
+                    this.showNotification('渲染视频网格失败，请尝试刷新页面', true);
                 }
             }
 
             // 创建网格元素（只在需要时调用）
             createGridElements() {
-                const grid = document.getElementById('videoGrid');
-                grid.innerHTML = '';
+                try {
+                    const grid = document.getElementById('videoGrid');
+                    grid.innerHTML = '';
 
-                // 清理旧网格视频和事件，只保留 originalVideo (index=0)
-                this.cleanupEventListeners();
-                this.createdVideos.splice(1);
+                    // 清理旧网格视频和事件，只保留 originalVideo (index=0)
+                    this.cleanupEventListeners();
+                    this.createdVideos.splice(1);
 
-                // 清理预加载的视频元素
-                this.cleanupPreloadedVideos();
+                    // 清理预加载的视频元素
+                    this.cleanupPreloadedVideos();
 
-                const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
-                const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
-                const { width: finalCellWidth, height: finalCellHeight } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
+                    const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                    const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
+                    const { width: finalCellWidth, height: finalCellHeight } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
 
-                grid.classList.add('video-grid-dynamic');
-                this.updateGridStyles(cols, rows, finalCellHeight, finalCellWidth);
+                    grid.classList.add('video-grid-dynamic');
+                    this.updateGridStyles(cols, rows, finalCellHeight, finalCellWidth);
 
-                // 重置状态计数器
-                this.cellLoadedCount = 0;
-                this.cellPlayingCount = 0;
-                this.totalCellsInCurrentPage = totalCells;
+                    // 重置状态计数器
+                    this.cellLoadedCount = 0;
+                    this.cellPlayingCount = 0;
+                    this.totalCellsInCurrentPage = totalCells;
 
 
-                const videoDuration = this.originalVideo.duration;
-                const pageStartTime = this.currentStartTime;
+                    const videoDuration = this.originalVideo.duration;
+                    const pageStartTime = this.currentStartTime;
 
-                for (let i = 0; i < totalCells; i++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'grid-item';
-                    cell.dataset.gridIndex = i; // 添加网格索引标识
+                    for (let i = 0; i < totalCells; i++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'grid-item';
+                        cell.dataset.gridIndex = i; // 添加网格索引标识
 
-                    const thumbnailVideo = document.createElement('video');
-                    thumbnailVideo.src = this.originalVideo.src;
-                    thumbnailVideo.muted = true;
-                    thumbnailVideo.loop = false;
-                    thumbnailVideo.controls = false;
-                    thumbnailVideo.classList.add('video-element');
-                    thumbnailVideo.dataset.gridIndex = i; // 添加网格索引标识
+                        const thumbnailVideo = document.createElement('video');
+                        thumbnailVideo.src = this.originalVideo.src;
+                        thumbnailVideo.muted = true;
+                        thumbnailVideo.loop = false;
+                        thumbnailVideo.controls = false;
+                        thumbnailVideo.classList.add('video-element');
+                        thumbnailVideo.dataset.gridIndex = i; // 添加网格索引标识
 
-                    this.createdVideos.push(thumbnailVideo);
+                        this.createdVideos.push(thumbnailVideo);
 
-                    const startTime = pageStartTime + i * cellDuration;
-                    const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
+                        const startTime = pageStartTime + i * cellDuration;
+                        const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
 
-                    if (startTime >= videoDuration) {
-                        cell.classList.add('hidden');
-                        grid.appendChild(cell);
-                        continue;
-                    }
-
-                    const loadedMetadataHandler = () => {
-                        thumbnailVideo.currentTime = startTime;
-                    };
-                    this.addTrackedEventListener(thumbnailVideo, 'loadedmetadata', loadedMetadataHandler);
-
-                    // 状态监听: 加载中 - 视频数据加载完成并显示图像
-                    const loadedDataHandler = () => {
-
-                        // 增加计数器
-                        this.cellLoadedCount++;
-
-                        // 检查是否是最后一个进入"加载中"状态的格子
-                        if (this.cellLoadedCount === this.totalCellsInCurrentPage) {
-                            console.log(`✅ 所有格子已完成加载! (共 ${this.totalCellsInCurrentPage} 个格子)`);
+                        if (startTime >= videoDuration) {
+                            cell.classList.add('hidden');
+                            grid.appendChild(cell);
+                            continue;
                         }
-                    };
-                    this.addTrackedEventListener(thumbnailVideo, 'loadeddata', loadedDataHandler);
 
-                    const seekedHandler = () => {
-                        thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
+                        const loadedMetadataHandler = () => {
+                            thumbnailVideo.currentTime = startTime;
+                        };
+                        this.addTrackedEventListener(thumbnailVideo, 'loadedmetadata', loadedMetadataHandler);
 
-                        const loopHandler = () => {
-                            if (thumbnailVideo.currentTime >= endTime) {
-                                thumbnailVideo.currentTime = startTime;
+                        // 状态监听: 加载中 - 视频数据加载完成并显示图像
+                        const loadedDataHandler = () => {
+
+                            // 增加计数器
+                            this.cellLoadedCount++;
+
+                            // 检查是否是最后一个进入"加载中"状态的格子
+                            if (this.cellLoadedCount === this.totalCellsInCurrentPage) {
+                                console.log(`✅ 所有格子已完成加载! (共 ${this.totalCellsInCurrentPage} 个格子)`);
                             }
                         };
-                        this.addTrackedEventListener(thumbnailVideo, 'timeupdate', loopHandler);
-                    };
-                    this.addTrackedEventListener(thumbnailVideo, 'seeked', seekedHandler);
+                        this.addTrackedEventListener(thumbnailVideo, 'loadeddata', loadedDataHandler);
 
-                    // 状态监听: 播放中 - 视频开始播放
-                    const playHandler = () => {
+                        const seekedHandler = () => {
+                            thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
 
-                        // 增加计数器
-                        this.cellPlayingCount++;
+                            const loopHandler = () => {
+                                if (thumbnailVideo.currentTime >= endTime) {
+                                    thumbnailVideo.currentTime = startTime;
+                                }
+                            };
+                            this.addTrackedEventListener(thumbnailVideo, 'timeupdate', loopHandler);
+                        };
+                        this.addTrackedEventListener(thumbnailVideo, 'seeked', seekedHandler);
 
-                        // 检查是否是最后一个进入"播放中"状态的格子
-                        if (this.cellPlayingCount === this.totalCellsInCurrentPage) {
-                            console.log(`✅ 所有格子已开始播放! (共 ${this.totalCellsInCurrentPage} 个格子)`);
+                        // 状态监听: 播放中 - 视频开始播放
+                        const playHandler = () => {
 
-                            // 触发预加载下一页
-                            this.preloadNextPage();
-                        }
-                    };
-                    this.addTrackedEventListener(thumbnailVideo, 'play', playHandler);
+                            // 增加计数器
+                            this.cellPlayingCount++;
 
-                    const currentTimeOverlay = document.createElement('div');
-                    currentTimeOverlay.className = 'current-time-overlay';
-                    currentTimeOverlay.textContent = this.formatTime(startTime);
+                            // 检查是否是最后一个进入"播放中"状态的格子
+                            if (this.cellPlayingCount === this.totalCellsInCurrentPage) {
+                                console.log(`✅ 所有格子已开始播放! (共 ${this.totalCellsInCurrentPage} 个格子)`);
 
-                    const timeUpdateHandler = () => {
-                        currentTimeOverlay.textContent = this.formatTime(thumbnailVideo.currentTime);
-                    };
-                    this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
+                                // 触发预加载下一页
+                                this.preloadNextPage();
+                            }
+                        };
+                        this.addTrackedEventListener(thumbnailVideo, 'play', playHandler);
 
-                    const timeRangeOverlay = document.createElement('div');
-                    timeRangeOverlay.className = 'time-range-overlay';
-                    timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
+                        const currentTimeOverlay = document.createElement('div');
+                        currentTimeOverlay.className = 'current-time-overlay';
+                        currentTimeOverlay.textContent = this.formatTime(startTime);
 
-                    cell.appendChild(thumbnailVideo);
-                    cell.appendChild(currentTimeOverlay);
-                    cell.appendChild(timeRangeOverlay);
+                        const timeUpdateHandler = () => {
+                            currentTimeOverlay.textContent = this.formatTime(thumbnailVideo.currentTime);
+                        };
+                        this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
 
-                    // 新增功能：单击格子将该格子时间设为页面起始时间
-                    cell.style.cursor = 'pointer';
-                    cell.onclick = (e) => {
-                        e.stopPropagation();
-                        const gridIndex = parseInt(cell.dataset.gridIndex);
-                        if (isNaN(gridIndex)) return;
-                        const { cellDuration } = this.getPageConfig();
-                        const newStartTime = this.currentStartTime + gridIndex * cellDuration;
-                        this.setPageStartTime(newStartTime);
-                    };
+                        const timeRangeOverlay = document.createElement('div');
+                        timeRangeOverlay.className = 'time-range-overlay';
+                        timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
 
-                    grid.appendChild(cell);
+                        cell.appendChild(thumbnailVideo);
+                        cell.appendChild(currentTimeOverlay);
+                        cell.appendChild(timeRangeOverlay);
+
+                        // 新增功能：单击格子将该格子时间设为页面起始时间
+                        cell.style.cursor = 'pointer';
+                        cell.onclick = (e) => {
+                            e.stopPropagation();
+                            const gridIndex = parseInt(cell.dataset.gridIndex);
+                            if (isNaN(gridIndex)) return;
+                            const { cellDuration } = this.getPageConfig();
+                            const newStartTime = this.currentStartTime + gridIndex * cellDuration;
+                            this.setPageStartTime(newStartTime);
+                        };
+
+                        grid.appendChild(cell);
+                    }
+
+                    // 更新网格状态
+                    this.updateGridState();
+
+                    // 初始化视频缩放和拖动事件
+                    this.initVideoDragAndZoom();
+                } catch (error) {
+                    console.error('创建网格元素失败:', error);
+                    this.showNotification('创建预览格子失败，请减少行列数后重试', true);
                 }
-
-                // 更新网格状态
-                this.updateGridState();
-
-                // 初始化视频缩放和拖动事件
-                this.initVideoDragAndZoom();
             }
 
             // 初始化视频缩放和拖动事件
@@ -2133,98 +2254,71 @@
 
             // 更新网格时间点（只在页面切换时调用）
             updateGridTimePoints() {
-                // 边界检查：确保原始视频存在且已加载
-                if (!this.originalVideo || !this.originalVideo.duration || this.originalVideo.duration <= 0) {
-                    console.warn('无法更新时间点：原始视频未准备好');
-                    return;
-                }
-
-                const { cellDuration, totalCells, pageDuration } = this.getPageConfig();
-                const videoDuration = this.originalVideo.duration;
-                const pageStartTime = this.currentStartTime;
-
-                // 边界检查：确保时间参数有效
-                if (cellDuration <= 0 || totalCells <= 0 || pageDuration <= 0) {
-                    console.warn('无效的网格配置参数');
-                    return;
-                }
-
-                // 遍历现有的视频元素，只更新时间相关属性
-                this.createdVideos.forEach((video, index) => {
-                    if (index === 0) return; // 跳过originalVideo
-
-                    const gridIndex = parseInt(video.dataset.gridIndex);
-                    if (isNaN(gridIndex)) return; // 跳过没有网格索引的视频
-
-                    // 计算格子在整个视频中的实际开始时间
-                    const startTime = pageStartTime + gridIndex * cellDuration;
-                    const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
-
-                    // 获取对应的单元格和覆盖层元素
-                    const cell = video.parentElement;
-                    if (!cell) {
-                        console.warn(`找不到网格索引 ${gridIndex} 的单元格`);
+                try {
+                    // 边界检查：确保原始视频存在且已加载
+                    if (!this.originalVideo || !this.originalVideo.duration || this.originalVideo.duration <= 0) {
+                        console.warn('无法更新时间点：原始视频未准备好');
                         return;
                     }
 
-                    const currentTimeOverlay = cell.querySelector('.current-time-overlay');
-                    const timeRangeOverlay = cell.querySelector('.time-range-overlay');
+                    const { cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                    const videoDuration = this.originalVideo.duration;
+                    const pageStartTime = this.currentStartTime;
 
-                    // 根据当前页面和格子索引，判断是否应该显示该格子
-                    const shouldShowCell = startTime < videoDuration;
+                    // 边界检查：确保时间参数有效
+                    if (cellDuration <= 0 || totalCells <= 0 || pageDuration <= 0) {
+                        console.warn('无效的网格配置参数');
+                        return;
+                    }
 
-                    if (shouldShowCell) {
-                        // 显示有效的格子
-                        cell.classList.remove('hidden');
+                    // 遍历现有的视频元素，只更新时间相关属性
+                    this.createdVideos.forEach((video, index) => {
+                        if (index === 0) return; // 跳过originalVideo
 
-                        try {
-                            // 移除旧的时间更新事件监听器
-                            this.removeVideoTimeUpdateListeners(video);
+                        const gridIndex = parseInt(video.dataset.gridIndex);
+                        if (isNaN(gridIndex)) return; // 跳过没有网格索引的视频
 
-                            // 更新时间显示覆盖层 - 显示在整个视频中的实际时间
-                            if (currentTimeOverlay) {
-                                currentTimeOverlay.textContent = this.formatTime(startTime);
-                            }
+                        // 计算格子在整个视频中的实际开始时间
+                        const startTime = pageStartTime + gridIndex * cellDuration;
+                        const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
 
-                            if (timeRangeOverlay) {
-                                timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
-                            }
+                        // 获取对应的单元格和覆盖层元素
+                        const cell = video.parentElement;
+                        if (!cell) {
+                            console.warn(`找不到网格索引 ${gridIndex} 的单元格`);
+                            return;
+                        }
 
-                            // 重新绑定循环播放逻辑和时间更新
-                            const seekedHandler = () => {
-                                // 确保时间显示正确
+                        const currentTimeOverlay = cell.querySelector('.current-time-overlay');
+                        const timeRangeOverlay = cell.querySelector('.time-range-overlay');
+
+                        // 根据当前页面和格子索引，判断是否应该显示该格子
+                        const shouldShowCell = startTime < videoDuration;
+
+                        if (shouldShowCell) {
+                            // 显示有效的格子
+                            cell.classList.remove('hidden');
+
+                            try {
+                                // 移除旧的时间更新事件监听器
+                                this.removeVideoTimeUpdateListeners(video);
+
+                                // 更新时间显示覆盖层 - 显示在整个视频中的实际时间
                                 if (currentTimeOverlay) {
-                                    currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                    currentTimeOverlay.textContent = this.formatTime(startTime);
                                 }
 
-                                video.play().catch(e => console.log('自动播放被阻止:', e));
-
-                                const loopHandler = () => {
-                                    if (video.currentTime >= endTime) {
-                                        video.currentTime = startTime;
-                                    }
-                                };
-                                this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-
-                                // 添加时间更新处理器
-                                if (currentTimeOverlay) {
-                                    const timeUpdateHandler = () => {
-                                        currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                    };
-                                    this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
+                                if (timeRangeOverlay) {
+                                    timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
                                 }
-                            };
 
-                            // 设置视频时间点并等待seeked事件
-                            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-                                // 如果视频已经准备好，直接设置时间点
-                                video.currentTime = startTime;
-
-                                // 等待一小段时间确保seek完成，然后播放
-                                setTimeout(() => {
+                                // 重新绑定循环播放逻辑和时间更新
+                                const seekedHandler = () => {
+                                    // 确保时间显示正确
                                     if (currentTimeOverlay) {
                                         currentTimeOverlay.textContent = this.formatTime(video.currentTime);
                                     }
+
                                     video.play().catch(e => console.log('自动播放被阻止:', e));
 
                                     const loopHandler = () => {
@@ -2241,27 +2335,59 @@
                                         };
                                         this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
                                     }
-                                }, 50);
-                            } else {
-                                // 如果视频还没准备好，等待seeked事件
-                                this.addTrackedEventListener(video, 'seeked', seekedHandler);
-                                video.currentTime = startTime;
-                            }
-                        } catch (e) {
-                            console.error(`更新网格索引 ${gridIndex} 的时间点失败:`, e);
-                        }
-                    } else {
-                        // 隐藏超出视频长度的格子
-                        cell.classList.add('hidden');
-                        try {
-                            video.pause();
-                        } catch (e) {
-                            console.warn('暂停视频失败:', e);
-                        }
-                        return;
-                    }
+                                };
 
-                });
+                                // 设置视频时间点并等待seeked事件
+                                if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+                                    // 如果视频已经准备好，直接设置时间点
+                                    video.currentTime = startTime;
+
+                                    // 等待一小段时间确保seek完成，然后播放
+                                    setTimeout(() => {
+                                        if (currentTimeOverlay) {
+                                            currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                        }
+                                        video.play().catch(e => console.log('自动播放被阻止:', e));
+
+                                        const loopHandler = () => {
+                                            if (video.currentTime >= endTime) {
+                                                video.currentTime = startTime;
+                                            }
+                                        };
+                                        this.addTrackedEventListener(video, 'timeupdate', loopHandler);
+
+                                        // 添加时间更新处理器
+                                        if (currentTimeOverlay) {
+                                            const timeUpdateHandler = () => {
+                                                currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                                            };
+                                            this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
+                                        }
+                                    }, 50);
+                                } else {
+                                    // 如果视频还没准备好，等待seeked事件
+                                    this.addTrackedEventListener(video, 'seeked', seekedHandler);
+                                    video.currentTime = startTime;
+                                }
+                            } catch (e) {
+                                console.error(`更新网格索引 ${gridIndex} 的时间点失败:`, e);
+                            }
+                        } else {
+                            // 隐藏超出视频长度的格子
+                            cell.classList.add('hidden');
+                            try {
+                                video.pause();
+                            } catch (e) {
+                                console.warn('暂停视频失败:', e);
+                            }
+                            return;
+                        }
+
+                    });
+                } catch (error) {
+                    console.error('更新网格时间点失败:', error);
+                    this.showNotification('更新视频预览点失败，请稍后重试', true);
+                }
             }
 
             // 移除特定视频的时间更新事件监听器
@@ -2669,8 +2795,44 @@
                 return (clampedProgress / cellDuration) * 100;
             }
 
-            // 显示通知
+            // 显示通知 (带防抖和合并功能)
             showNotification(message, isError = false) {
+                // 如果不是错误通知，直接显示
+                if (!isError) {
+                    this._renderNotification(message, false);
+                    return;
+                }
+
+                // 错误通知防抖逻辑
+                const now = Date.now();
+
+                // 如果是相同的错误消息，且距离上次显示不足2秒，则忽略
+                if (message === this.lastErrorMessage && now - this.lastErrorNotification < 2000) {
+                    return;
+                }
+
+                // 如果距离上次错误通知不足1秒，合并显示
+                if (now - this.lastErrorNotification < 1000) {
+                    this.errorNotificationCount++;
+                    // 如果错误数量过多，显示泛化消息
+                    if (this.errorNotificationCount > 3) {
+                        // 移除上一个通知（如果还在）- 这里简单处理，直接显示新通知
+                        this._renderNotification(`⚠️ 检测到多个错误 (${this.errorNotificationCount}个)，请检查控制台`, true);
+                        this.lastErrorNotification = now;
+                        return; // 不再显示具体消息
+                    }
+                } else {
+                    // 重置计数
+                    this.errorNotificationCount = 1;
+                }
+
+                this.lastErrorMessage = message;
+                this.lastErrorNotification = now;
+                this._renderNotification(message, true);
+            }
+
+            // 内部渲染通知方法
+            _renderNotification(message, isError) {
                 const notification = document.createElement('div');
                 notification.style.cssText = `
                     position: fixed;
@@ -2683,14 +2845,19 @@
                     z-index: 1000;
                     font-size: 14px;
                     box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                    animation: slideIn 0.3s ease-out;
                 `;
                 notification.textContent = message;
                 document.body.appendChild(notification);
 
                 setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
+                    notification.style.opacity = '0';
+                    notification.style.transition = 'opacity 0.5s';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 500);
                 }, 3000);
             }
 
@@ -2755,33 +2922,20 @@
 
             // 初始化全局错误处理
             initGlobalErrorHandling() {
-                // 捕获 JavaScript 运行时错误
-                window.onerror = (message, source, lineno, colno, error) => {
-                    console.error('全局错误捕获:', message, source, lineno, colno, error);
-                    // 显示错误提示，但不显示给用户过多的技术细节
-                    this.showNotification('发生未知错误，请查看控制台了解详情', true);
-                    // 阻止默认的错误处理
-                    return true;
-                };
-
-                // 捕获未处理的 Promise 拒绝
+                // 捕获未处理的Promise拒绝
                 window.addEventListener('unhandledrejection', (event) => {
-                    console.error('未处理的 Promise 拒绝:', event.reason);
-                    // 显示错误提示，但不显示给用户过多的技术细节
-                    this.showNotification('发生未知错误，请查看控制台了解详情', true);
-                    // 阻止默认的 Promise 拒绝处理
-                    event.preventDefault();
+                    console.error('Unhandled Rejection:', event.reason);
+                    this.showNotification('发生未知错误，请检查控制台', true);
                 });
 
-                // 捕获资源加载错误
+                // 捕获常规运行时错误
                 window.addEventListener('error', (event) => {
-                    // 过滤掉一些不重要的资源错误
-                    if (event.target !== window) {
-                        console.warn('资源加载错误:', event.target);
-                        // 对于视频资源加载错误，我们已经在具体方法中处理了，这里不再重复提示
-                        // 其他资源错误可以考虑提示，但为了避免过多提示，这里暂不处理
+                    console.error('Runtime Error:', event.error);
+                    // 过滤掉无关的错误
+                    if (event.filename && event.filename.includes('video_thumbnail_preview.html')) {
+                        this.showNotification('系统运行异常，请刷新重试', true);
                     }
-                }, true);
+                });
             }
 
             // 移除剪贴板监听功能，避免用户困惑
