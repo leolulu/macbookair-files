@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -151,6 +152,7 @@
             color: #cccccc;
             cursor: not-allowed;
         }
+
         .pagination button:nth-child(2) {
             margin-top: 10px;
             margin-bottom: 10px;
@@ -237,6 +239,7 @@
             backface-visibility: hidden;
             -webkit-backface-visibility: hidden;
         }
+
         .grid-item video:active {
             cursor: grabbing;
         }
@@ -292,7 +295,7 @@
             gap: 5px;
             position: relative;
         }
-        
+
         .grid-input-row input {
             width: auto;
             flex: 1;
@@ -300,14 +303,14 @@
             -moz-appearance: textfield;
             appearance: textfield;
         }
-        
+
         /* 隐藏Webkit浏览器的箭头 */
         .grid-input-row input[type="number"]::-webkit-inner-spin-button,
         .grid-input-row input[type="number"]::-webkit-outer-spin-button {
             -webkit-appearance: none;
             margin: 0;
         }
-        
+
         /* 自定义增减按钮容器 */
         .number-controls {
             display: flex;
@@ -318,20 +321,20 @@
             position: relative;
             top: 1px;
         }
-        
+
         /* 垂直按钮组 - 垂直排列，固定高度60px */
         .number-controls.vertical {
             flex-direction: column;
             justify-content: center;
             height: 60px;
         }
-        
+
         /* 水平按钮组 - 水平排列，固定高度30px */
         .number-controls.horizontal {
             flex-direction: row;
             height: 30px;
         }
-        
+
         /* 自定义增减按钮 */
         .number-btn {
             width: 28px;
@@ -350,16 +353,16 @@
             /* 确保按钮内容垂直居中 */
             line-height: 1;
         }
-        
+
         .number-btn:hover:not(:disabled) {
             background: #5a5a5a;
             border-color: #007acc;
         }
-        
+
         .number-btn:active:not(:disabled) {
             transform: scale(0.95);
         }
-        
+
         .number-btn:disabled {
             opacity: 0.3;
             cursor: not-allowed;
@@ -380,17 +383,17 @@
             gap: 4px;
             flex: 1;
         }
-        
+
         .number-controls:not(.both-controls) {
             flex-shrink: 0;
             margin-left: 8px;
         }
-        
+
         .number-controls.both-controls {
             margin-left: auto;
             flex-shrink: 0;
         }
-        
+
         /* 网格输入行标签优化 */
         .grid-label {
             font-size: 12px;
@@ -398,14 +401,15 @@
             margin-right: 8px;
             min-width: 30px;
         }
-        
+
         /* 宫格数输入框 */
-        #gridSize, #gridSize2 {
+        #gridSize,
+        #gridSize2 {
             padding: 6px;
             text-align: center;
             font-size: 14px;
         }
-        
+
         /* 行数输入框 - 调整宽度以实现对齐 */
         #gridSize {
             width: 40px;
@@ -415,7 +419,7 @@
             align-items: center;
             justify-content: center;
         }
-        
+
         /* 列数输入框 - 调整宽度 */
         #gridSize2 {
             width: 40px;
@@ -424,14 +428,14 @@
             align-items: center;
             justify-content: center;
         }
-        
+
         /* 行列数控制区域 */
         .grid-control-row {
             display: flex;
             align-items: center;
             margin-bottom: 8px;
         }
-        
+
         .grid-control-row:last-child {
             margin-bottom: 0;
         }
@@ -603,7 +607,7 @@
             grid-template-columns: repeat(var(--grid-columns), 1fr);
             grid-template-rows: repeat(var(--grid-rows), var(--row-height));
         }
-        
+
         /* 固定的网格样式类，将通过JavaScript动态修改 */
         #videoGrid {
             display: grid;
@@ -612,6 +616,7 @@
             gap: 2px;
             background: #000000;
         }
+
         /* 通用工具类 */
         .is-hidden {
             display: none;
@@ -763,6 +768,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- 左侧预览区域 -->
     <div class="preview-area">
@@ -780,7 +786,7 @@
                 <button class="tab-button active" onclick="switchTab('local')">本地视频</button>
                 <button class="tab-button" onclick="switchTab('remote')">远程视频</button>
             </div>
-            
+
             <!-- 本地视频 Tab 内容 -->
             <div id="localTab" class="tab-content active">
                 <div class="control-group">
@@ -788,16 +794,16 @@
                     <input type="file" id="videoFile" accept="video/*" multiple class="video-file-input">
                 </div>
             </div>
-            
+
             <!-- 远程视频 Tab 内容 -->
-                        <div id="remoteTab" class="tab-content">
-                            <div class="control-group">
-                                <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input" onkeypress="handleRemoteUrlKeyPress(event)" ondblclick="clearRemoteUrlInput()">
-                                <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
-                            </div>
-                        </div>
+            <div id="remoteTab" class="tab-content">
+                <div class="control-group">
+                    <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input" onkeypress="handleRemoteUrlKeyPress(event)" ondblclick="clearRemoteUrlInput()">
+                    <button class="btn" onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
+                </div>
+            </div>
         </div>
-        
+
         <!-- 文件列表区域 -->
         <div class="control-section is-hidden file-list-section" id="fileListSection">
             <div class="control-group">
@@ -821,7 +827,7 @@
             <button onclick="app.nextPage()">下一页</button>
             <div class="pagination-info" id="pageInfo">1 / 1</div>
             <div class="hint-text">
-                ←↑上一页  |  →↓下一页
+                ←↑上一页 | →↓下一页
             </div>
             <div class="page-indicator" id="pageIndicator"></div>
         </div>
@@ -887,7 +893,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="control-section" style="padding: 8px 12px;">
             <div class="control-group" style="margin-bottom: 0;">
                 <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer;">
@@ -896,7 +902,7 @@
                 </label>
             </div>
         </div>
-        
+
         <div class="control-section is-hidden" id="resetTransformSection">
             <div class="control-group">
                 <button class="btn-reset-transform" onclick="app.resetVideoTransform()">重置缩放和位置</button>
@@ -905,7 +911,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="control-section">
             <div class="control-group">
                 <button class="btn-force-cleanup" onclick="app.forceCleanup()">强制清理内存</button>
@@ -925,14 +931,14 @@
                 this.isLoading = false;
                 this.currentPage = 0;
                 this.totalPages = 0;
-                
+
                 // 记录当前页面左上角第一个格子的起始时间
                 this.currentStartTime = 0;
-                
+
                 // 多文件支持状态
                 this.videoFiles = [];
                 this.currentVideoIndex = 0;
-                
+
                 // 全局视频缩放和拖动状态（所有格子共享）
                 this.videoScale = 1;
                 this.videoTranslateX = 0;
@@ -942,12 +948,20 @@
                 this.dragStartY = 0;
                 this.hasMoved = false;
                 this.hasTransformed = false; // 标记是否发生过缩放或拖动
-                
+
                 // 资源跟踪
                 this.createdURLs = new Set();
                 this.createdVideos = [];
                 this.eventListeners = [];
-                
+
+                // 格子状态跟踪
+                this.cellLoadedCount = 0;  // 已进入"加载中"状态的格子数量
+                this.cellPlayingCount = 0; // 已进入"播放中"状态的格子数量
+                this.totalCellsInCurrentPage = 0; // 当前页面的格子总数
+
+                // 预加载机制 - 仅用于远程视频
+                this.preloadedVideos = [];  // 存储预加载的video元素（不插入DOM）
+
                 // 网格状态跟踪 - 用于优化页面切换
                 this.gridState = {
                     isInitialized: false,
@@ -957,31 +971,31 @@
                     cellDuration: 0,
                     videoFile: null
                 };
-                
+
                 // 防抖机制
                 this.updatePreviewDebounced = this.debounce(this.updatePreview.bind(this), 300);
                 this.loadVideoDebounced = this.debounce(this.loadVideo.bind(this), 500);
-                
+
                 // 内存监控
                 this.memoryMonitorInterval = null;
                 this.startMemoryMonitoring();
-                
+
                 this.updateGridDisplay();
                 this.initDragAndDrop();
                 this.initKeyboardEvents();
                 this.initWindowResizeListener();
                 // 移除剪贴板监听功能
-                
+
                 // 页面卸载时清理资源
                 window.addEventListener('beforeunload', () => this.cleanupAllResources());
-                
+
                 // 全局错误捕获
                 this.initGlobalErrorHandling();
-                
+
                 // 启动视频播放状态检测器
                 this.startVideoPlayMonitor();
             }
-            
+
             // 防抖函数
             debounce(func, wait) {
                 let timeout;
@@ -994,7 +1008,7 @@
                     timeout = setTimeout(later, wait);
                 };
             }
-            
+
             // 开始内存监控
             startMemoryMonitoring() {
                 const logMemoryUsage = () => {
@@ -1006,11 +1020,11 @@
                         }
                     }
                 };
-                
+
                 // 每5秒记录一次
                 this.memoryMonitorInterval = setInterval(logMemoryUsage, 5000);
             }
-            
+
             // 停止内存监控
             stopMemoryMonitoring() {
                 if (this.memoryMonitorInterval) {
@@ -1018,7 +1032,7 @@
                     this.memoryMonitorInterval = null;
                 }
             }
-            
+
             // 启动视频播放状态检测器
             startVideoPlayMonitor() {
                 // 每10秒检查一次所有视频的播放状态
@@ -1026,7 +1040,7 @@
                     this.checkVideosPlayState();
                 }, 10000);
             }
-            
+
             // 停止视频播放状态检测器
             stopVideoPlayMonitor() {
                 if (this.playMonitorInterval) {
@@ -1034,20 +1048,20 @@
                     this.playMonitorInterval = null;
                 }
             }
-            
+
             // 检查所有视频的播放状态
             checkVideosPlayState() {
                 // 跳过originalVideo (index=0)，只检查缩略图视频
                 this.createdVideos.forEach((video, index) => {
                     if (index === 0) return; // 跳过originalVideo
-                    
+
                     try {
                         // 检查视频是否暂停或卡住
                         if (!video || !video.readyState || video.readyState < 2) {
                             // 视频未准备好，跳过
                             return;
                         }
-                        
+
                         // 检查视频是否暂停
                         if (video.paused || video.ended) {
                             console.log(`检测到视频暂停，尝试恢复播放: 格子${index - 1}`);
@@ -1058,7 +1072,7 @@
                             });
                             return;
                         }
-                        
+
                         // 检查视频是否卡住（当前时间没有变化）
                         const currentTime = video.currentTime;
                         if (typeof video._lastCheckTime !== 'undefined' &&
@@ -1070,16 +1084,16 @@
                                 this.requestPlayPermission(video);
                             });
                         }
-                        
+
                         // 更新上次检查的时间
                         video._lastCheckTime = currentTime;
-                        
+
                     } catch (e) {
                         console.error(`检查视频播放状态失败:`, e);
                     }
                 });
             }
-            
+
             // 请求播放权限（通过模拟用户交互）
             requestPlayPermission(video) {
                 // 尝试通过静音来获得播放权限
@@ -1093,22 +1107,23 @@
                     });
                 }
             }
-            
+
             // 清理所有资源
             cleanupAllResources() {
                 this.stopMemoryMonitoring();
                 this.stopVideoPlayMonitor();
                 this.cleanupVideos();
+                this.cleanupPreloadedVideos();  // 清理预加载视频
                 this.cleanupURLs();
                 this.cleanupEventListeners();
                 this.cleanupCaches();
             }
-            
+
             // 清理视频元素
             cleanupVideos() {
                 // 停止进度标识线更新
                 this.stopProgressIndicator();
-                
+
                 this.createdVideos.forEach(video => {
                     try {
                         video.pause();
@@ -1123,7 +1138,24 @@
                 });
                 this.createdVideos = [];
             }
-            
+
+            // 清理预加载的视频元素（防止内存泄漏）
+            cleanupPreloadedVideos() {
+                if (this.preloadedVideos.length > 0) {
+                    this.preloadedVideos.forEach(video => {
+                        try {
+                            video.pause();
+                            video.src = '';
+                            video.load();
+                            video.remove();
+                        } catch (e) {
+                            console.error('清理预加载视频元素失败:', e);
+                        }
+                    });
+                    this.preloadedVideos = [];
+                }
+            }
+
             // 清理URL对象
             cleanupURLs() {
                 this.createdURLs.forEach(url => {
@@ -1135,13 +1167,13 @@
                 });
                 this.createdURLs.clear();
             }
-            
+
             // 清理事件监听器
             cleanupEventListeners() {
                 // 清理 document 级别事件监听器
                 this.removeDocumentLevelEventListeners();
-                
-                this.eventListeners.forEach(({element, event, handler}) => {
+
+                this.eventListeners.forEach(({ element, event, handler }) => {
                     try {
                         element.removeEventListener(event, handler);
                     } catch (e) {
@@ -1150,35 +1182,35 @@
                 });
                 this.eventListeners = [];
             }
-            
+
             // 清理缓存
             cleanupCaches() {
                 // 清理时间格式化缓存
                 if (this._timeFormatCache) {
                     this._timeFormatCache.clear();
                 }
-                
+
                 // 清理页面配置缓存
                 this._cachedPageConfig = null;
             }
-            
+
             // 添加事件监听器并跟踪
             addTrackedEventListener(element, event, handler) {
                 element.addEventListener(event, handler);
-                this.eventListeners.push({element, event, handler});
+                this.eventListeners.push({ element, event, handler });
             }
-            
+
             // 初始化键盘事件
             initKeyboardEvents() {
                 document.addEventListener('keydown', (e) => {
                     // 检查是否有输入框获得了焦点
                     if (document.activeElement &&
                         (document.activeElement.tagName === 'INPUT' ||
-                         document.activeElement.tagName === 'TEXTAREA')) {
+                            document.activeElement.tagName === 'TEXTAREA')) {
                         return; // 如果正在输入，跳过键盘事件
                     }
-                    
-                    switch(e.key) {
+
+                    switch (e.key) {
                         case 'ArrowLeft':
                         case 'ArrowUp':
                             e.preventDefault();
@@ -1214,7 +1246,7 @@
             initDragAndDrop() {
                 const dropZone = document.getElementById('videoFile');
                 const button = document.querySelector('.btn');
-                
+
                 [dropZone, button].forEach(element => {
                     element.addEventListener('dragover', (e) => {
                         e.preventDefault();
@@ -1222,26 +1254,26 @@
                         button.classList.remove('drag-leave');
                         e.dataTransfer.dropEffect = 'copy';
                     });
-                    
+
                     element.addEventListener('dragleave', (e) => {
                         e.preventDefault();
                         button.classList.remove('drag-over');
                         button.classList.add('drag-leave');
                         setTimeout(() => button.classList.remove('drag-leave'), 200);
                     });
-                    
+
                     element.addEventListener('drop', async (e) => {
                         e.preventDefault();
                         button.classList.remove('drag-over');
                         button.classList.remove('drag-leave');
-                        
+
                         const files = Array.from(e.dataTransfer.files);
                         if (files.length > 0) {
                             // 处理多文件拖放
                             this.videoFiles = files;
                             this.currentVideoIndex = 0;
                             this.currentVideo = this.videoFiles[0];
-                            
+
                             this.updateFileList();
                             await this.loadVideo();
                         }
@@ -1253,7 +1285,7 @@
                 try {
                     const input = document.getElementById('videoFile');
                     input.click();
-                    
+
                     return new Promise((resolve, reject) => {
                         input.onchange = async (e) => {
                             if (e.target.files.length > 0) {
@@ -1261,10 +1293,10 @@
                                 this.videoFiles = Array.from(e.target.files);
                                 this.currentVideoIndex = 0;
                                 this.currentVideo = this.videoFiles[0];
-                                
+
                                 // 更新文件列表UI
                                 this.updateFileList();
-                                
+
                                 // 加载第一个视频
                                 await this.loadVideo();
                                 resolve();
@@ -1291,7 +1323,7 @@
 
                 // 重置网格状态，强制重新创建网格
                 this.resetGridState();
-                
+
                 // 清理缓存，避免旧数据影响新视频
                 this.cleanupCaches();
 
@@ -1301,15 +1333,16 @@
 
                 // 清理之前的资源
                 this.cleanupVideos();
+                this.cleanupPreloadedVideos();  // 清理预加载视频
                 this.cleanupURLs();
 
                 try {
                     const videoURL = URL.createObjectURL(this.currentVideo);
                     this.createdURLs.add(videoURL);
-                    
+
                     const video = document.createElement('video');
                     this.createdVideos.push(video);
-                    
+
                     await new Promise((resolve, reject) => {
                         video.onloadedmetadata = resolve;
                         video.onerror = reject;
@@ -1322,7 +1355,7 @@
                     setTimeout(() => {
                         this.updatePreview();
                     }, 0);
-                    
+
                     // 启动垂直进度标识线更新
                     this.startProgressIndicator();
                 } catch (error) {
@@ -1334,7 +1367,7 @@
                     this.showLoading(false);
                 }
             }
-            
+
             // 防抖版本的视频加载
             loadVideoDebouncedWrapper() {
                 this.loadVideoDebounced();
@@ -1344,7 +1377,7 @@
                 const video = this.originalVideo;
                 const duration = this.formatTime(video.duration);
                 const resolution = `${video.videoWidth}×${video.videoHeight}`;
-    
+
                 const nameEl = document.getElementById('videoName');
                 if (this.currentVideoUrl) {
                     nameEl.textContent = `远程视频: ${this.currentVideoUrl}`;
@@ -1358,13 +1391,13 @@
                 document.getElementById('videoResolution').textContent = resolution;
                 document.getElementById('videoInfo').classList.remove('hidden');
                 document.getElementById('videoInfo').classList.add('visible');
-                
+
                 // 为当前视频（本地或远程）创建或更新进度条
                 this.createOrUpdateProgressBar();
-                
+
                 // 立即更新进度条显示
                 this.updateFileProgress();
-                
+
                 // 如果启用了自动计算列数，在视频加载后重新计算
                 const checkbox = document.getElementById('autoCalculateCols');
                 if (checkbox && checkbox.checked) {
@@ -1374,19 +1407,19 @@
 
             async updatePreview() {
                 if (!this.originalVideo) return;
-            
+
                 this.isLoading = true;
                 this.showLoading(true);
 
                 try {
                     updateQuickButtons(); // 更新快捷按钮状态
-                    
+
                     // 保存当前的起始时间（如果还没有设置的话）
                     if (this.currentStartTime === 0 && this.currentPage > 0) {
                         const { pageDuration } = this.getPageConfig();
                         this.currentStartTime = this.currentPage * pageDuration;
                     }
-                    
+
                     this.calculatePages();
                     this.updatePaginationUI();
                     this.renderGrid();
@@ -1400,7 +1433,7 @@
                     this.showLoading(false);
                 }
             }
-            
+
             // 防抖版本的预览更新
             updatePreviewDebouncedWrapper() {
                 this.updatePreviewDebounced();
@@ -1419,27 +1452,27 @@
             // 判断是否需要重新创建网格
             needToRecreateGrid() {
                 const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
-                
+
                 // 检查是否启用了远程视频翻页优化
                 const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
                 const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-                
+
                 // 如果启用了远程视频优化，且只是远程视频，则不强制重建
                 const shouldForceRebuildForRemote = this.currentVideoUrl && !remoteOptimizationEnabled;
-                
+
                 return !this.gridState.isInitialized ||
-                       this.gridState.rows !== rows ||
-                       this.gridState.cols !== cols ||
-                       this.gridState.cellDuration !== cellDuration ||
-                       this.gridState.totalCells !== totalCells ||
-                       this.gridState.videoFile !== this.currentVideo ||
-                       shouldForceRebuildForRemote;  // 远程视频根据优化设置决定是否重建
+                    this.gridState.rows !== rows ||
+                    this.gridState.cols !== cols ||
+                    this.gridState.cellDuration !== cellDuration ||
+                    this.gridState.totalCells !== totalCells ||
+                    this.gridState.videoFile !== this.currentVideo ||
+                    shouldForceRebuildForRemote;  // 远程视频根据优化设置决定是否重建
             }
 
             // 更新网格状态
             updateGridState() {
                 const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
-                
+
                 this.gridState = {
                     isInitialized: true,
                     rows,
@@ -1469,7 +1502,7 @@
             calculatePages() {
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
-                
+
                 // 确保数值有效性
                 if (!videoDuration || videoDuration <= 0 || pageDuration <= 0) {
                     this.totalPages = 1;
@@ -1477,15 +1510,15 @@
                     this.currentStartTime = 0;
                     return;
                 }
-                
+
                 this.totalPages = Math.ceil(videoDuration / pageDuration);
-                
+
                 // 保底防止起始时间变成负数，确保第一页的第一个格子从0秒开始
                 this.currentStartTime = Math.max(0, this.currentStartTime);
-                
+
                 // 确保页码计算的一致性，使用浮点数精度处理
                 this.currentPage = Math.max(0, Math.min(Math.floor(this.currentStartTime / pageDuration), this.totalPages - 1));
-                
+
                 // 如果当前页面内容覆盖到视频末尾（浮点容差），强制设为最后一页
                 if (this.currentStartTime + pageDuration >= videoDuration - 0.1) {
                     this.currentPage = this.totalPages - 1;
@@ -1500,7 +1533,7 @@
                 if (this.totalPages > 1) {
                     pagination.classList.remove('hidden');
                     pagination.classList.add('visible');
-                    
+
                     // 只在页数变化时重新创建页面指示器
                     if (pageIndicator.children.length !== this.totalPages) {
                         pageIndicator.innerHTML = '';
@@ -1511,13 +1544,13 @@
                             pageIndicator.appendChild(dot);
                         }
                     }
-                    
+
                     // 更新页面指示器的激活状态
                     const dots = pageIndicator.querySelectorAll('.page-dot');
                     dots.forEach((dot, index) => {
                         dot.classList.toggle('active', index === this.currentPage);
                     });
-                    
+
                     // 更新按钮disabled状态
                     const prevBtn = pagination.querySelector('button:nth-child(1)');
                     const nextBtn = pagination.querySelector('button:nth-child(2)');
@@ -1525,17 +1558,17 @@
                     const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
                     if (prevBtn) prevBtn.disabled = this.currentStartTime <= 0;
                     if (nextBtn) nextBtn.disabled = (this.currentStartTime + pageDuration >= videoDuration - 0.1);
-                    
+
                     // 缓存计算结果，避免重复计算
                     if (!this._cachedPageConfig ||
                         this._cachedPageConfig.pageDuration !== this.getPageConfig().pageDuration ||
                         this._cachedPageConfig.videoDuration !== this.originalVideo.duration ||
                         this._cachedPageConfig.currentStartTime !== this.currentStartTime) {
-                        
+
                         const { pageDuration } = this.getPageConfig();
                         const videoDuration = this.originalVideo.duration;
                         const endTime = Math.min(this.currentStartTime + pageDuration, videoDuration);
-                        
+
                         this._cachedPageConfig = {
                             pageDuration,
                             videoDuration,
@@ -1545,7 +1578,7 @@
                             totalMin: (videoDuration / 60).toFixed(1)
                         };
                     }
-                    
+
                     // 同时显示时间范围和页码信息
                     const timeRangeText = `${this._cachedPageConfig.startMin}~${this._cachedPageConfig.endMin} / ${this._cachedPageConfig.totalMin}`;
                     const pageText = `${this.currentPage + 1} / ${this.totalPages}`;
@@ -1561,15 +1594,18 @@
 
             goToPage(pageIndex) {
                 if (pageIndex >= 0 && pageIndex < this.totalPages) {
+                    // 清理预加载的视频元素
+                    this.cleanupPreloadedVideos();
+
                     this.currentPage = pageIndex;
                     // 更新起始时间为新页面的起始时间
                     const { pageDuration } = this.getPageConfig();
                     this.currentStartTime = this.currentPage * pageDuration;
-                    
+
                     // 检查是否启用了远程视频翻页优化
                     const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
                     const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-                    
+
                     // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
                     if (this.currentVideoUrl && !remoteOptimizationEnabled) {
                         // 远程视频且未启用优化：强制重绘
@@ -1587,14 +1623,17 @@
             }
 
             previousPage() {
+                // 清理预加载的视频元素
+                this.cleanupPreloadedVideos();
+
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
-                
+
                 // 检查是否启用了远程视频翻页优化
                 const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
                 const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-                
+
                 // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
                 if (this.currentVideoUrl && !remoteOptimizationEnabled) {
                     // 远程视频且未启用优化：强制重绘
@@ -1611,14 +1650,17 @@
             }
 
             nextPage() {
+                // 清理预加载的视频元素
+                this.cleanupPreloadedVideos();
+
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = this.currentStartTime + pageDuration;
                 this.setPageStartTime(newStartTime);
-                
+
                 // 检查是否启用了远程视频翻页优化
                 const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
                 const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-                
+
                 // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
                 if (this.currentVideoUrl && !remoteOptimizationEnabled) {
                     // 远程视频且未启用优化：强制重绘
@@ -1640,16 +1682,16 @@
                     console.warn('setPageStartTime: 无效的时间值', newStartTime);
                     return;
                 }
-                
+
                 this.currentStartTime = Math.max(0, newStartTime);
-                
+
                 this.calculatePages();
                 this.updatePaginationUI();
-                
+
                 // 检查是否启用了远程视频翻页优化
                 const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
                 const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-                
+
                 // 在线视频根据优化设置决定是否重绘，本地保持非重绘优化
                 if (this.currentVideoUrl && !remoteOptimizationEnabled) {
                     // 远程视频且未启用优化：强制重绘
@@ -1662,6 +1704,57 @@
                 }
             }
 
+            // 预加载下一页（仅用于远程视频）
+            preloadNextPage() {
+                // 1. 只对远程视频进行预加载
+                if (!this.currentVideoUrl) {
+                    console.log('🔵 本地视频不需要预加载');
+                    return;
+                }
+
+                // 2. 检查是否还有下一页
+                const { pageDuration } = this.getPageConfig();
+                const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
+                const nextPageStartTime = this.currentStartTime + pageDuration;
+
+                if (nextPageStartTime >= videoDuration) {
+                    console.log('🔵 已是最后一页，无需预加载');
+                    return;
+                }
+
+                console.log('🔄 开始预加载下一页...');
+
+                // 3. 清理旧的预加载数据
+                this.cleanupPreloadedVideos();
+
+                // 4. 计算下一页的格子数和配置
+                const { totalCells, cellDuration } = this.getPageConfig();
+
+                // 5. 创建预加载video元素
+                for (let i = 0; i < totalCells; i++) {
+                    const startTime = nextPageStartTime + i * cellDuration;
+
+                    // 如果超出视频时长，停止创建
+                    if (startTime >= videoDuration) {
+                        break;
+                    }
+
+                    const video = document.createElement('video');
+                    video.src = this.currentVideoUrl;
+                    video.preload = 'auto';
+                    video.muted = true;
+
+                    // 设置起始时间（让浏览器缓冲该时间段的数据）
+                    video.addEventListener('loadedmetadata', () => {
+                        video.currentTime = startTime;
+                    });
+
+                    this.preloadedVideos.push(video);
+                }
+
+                console.log(`✅ 预加载完成！已预加载 ${this.preloadedVideos.length} 个格子`);
+            }
+
             // 计算单元格尺寸
             calculateCellDimensions(rows, cols, videoAspectRatio) {
                 const container = document.getElementById('previewContainer');
@@ -1669,27 +1762,27 @@
                     console.error('previewContainer 元素未找到');
                     return { width: 0, height: 0 };
                 }
-                
+
                 const containerHeight = container.clientHeight || 600;
                 const containerWidth = container.clientWidth || 800;
                 const gapSize = 2;
-                
+
                 const totalGapHeight = (rows - 1) * gapSize;
                 const totalGapWidth = (cols - 1) * gapSize;
-                
+
                 const availableHeight = containerHeight - totalGapHeight;
                 const availableWidth = containerWidth - totalGapWidth;
-                
+
                 const cellHeightBasedOnHeight = availableHeight / rows;
                 const cellWidthBasedOnHeight = cellHeightBasedOnHeight * videoAspectRatio;
                 const totalWidthBasedOnHeight = cellWidthBasedOnHeight * cols + totalGapWidth;
-                
+
                 const cellWidthBasedOnWidth = availableWidth / cols;
                 const cellHeightBasedOnWidth = cellWidthBasedOnWidth / videoAspectRatio;
                 const totalHeightBasedOnWidth = cellHeightBasedOnWidth * rows + totalGapHeight;
-                
+
                 let finalCellWidth, finalCellHeight;
-                
+
                 if (totalWidthBasedOnHeight <= availableWidth) {
                     finalCellHeight = cellHeightBasedOnHeight;
                     finalCellWidth = cellWidthBasedOnHeight;
@@ -1699,7 +1792,7 @@
                 } else {
                     const areaBasedOnHeight = cellWidthBasedOnHeight * cellHeightBasedOnHeight * rows * cols;
                     const areaBasedOnWidth = cellWidthBasedOnWidth * cellHeightBasedOnWidth * rows * cols;
-                    
+
                     if (areaBasedOnHeight > areaBasedOnWidth) {
                         finalCellHeight = cellHeightBasedOnHeight;
                         finalCellWidth = cellWidthBasedOnHeight;
@@ -1708,10 +1801,10 @@
                         finalCellWidth = cellWidthBasedOnWidth;
                     }
                 }
-                
+
                 finalCellHeight = Math.max(120, finalCellHeight);
                 finalCellWidth = Math.max(120 * videoAspectRatio, finalCellWidth);
-                
+
                 return { width: finalCellWidth, height: finalCellHeight };
             }
 
@@ -1729,11 +1822,14 @@
             createGridElements() {
                 const grid = document.getElementById('videoGrid');
                 grid.innerHTML = '';
-                
+
                 // 清理旧网格视频和事件，只保留 originalVideo (index=0)
                 this.cleanupEventListeners();
                 this.createdVideos.splice(1);
-                
+
+                // 清理预加载的视频元素
+                this.cleanupPreloadedVideos();
+
                 const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
                 const { width: finalCellWidth, height: finalCellHeight } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
@@ -1741,14 +1837,20 @@
                 grid.classList.add('video-grid-dynamic');
                 this.updateGridStyles(cols, rows, finalCellHeight, finalCellWidth);
 
+                // 重置状态计数器
+                this.cellLoadedCount = 0;
+                this.cellPlayingCount = 0;
+                this.totalCellsInCurrentPage = totalCells;
+
+
                 const videoDuration = this.originalVideo.duration;
                 const pageStartTime = this.currentStartTime;
-                
+
                 for (let i = 0; i < totalCells; i++) {
                     const cell = document.createElement('div');
                     cell.className = 'grid-item';
                     cell.dataset.gridIndex = i; // 添加网格索引标识
-                    
+
                     const thumbnailVideo = document.createElement('video');
                     thumbnailVideo.src = this.originalVideo.src;
                     thumbnailVideo.muted = true;
@@ -1756,26 +1858,39 @@
                     thumbnailVideo.controls = false;
                     thumbnailVideo.classList.add('video-element');
                     thumbnailVideo.dataset.gridIndex = i; // 添加网格索引标识
-                    
+
                     this.createdVideos.push(thumbnailVideo);
-                    
+
                     const startTime = pageStartTime + i * cellDuration;
                     const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
-                    
+
                     if (startTime >= videoDuration) {
                         cell.classList.add('hidden');
                         grid.appendChild(cell);
                         continue;
                     }
-                    
+
                     const loadedMetadataHandler = () => {
                         thumbnailVideo.currentTime = startTime;
                     };
                     this.addTrackedEventListener(thumbnailVideo, 'loadedmetadata', loadedMetadataHandler);
-                    
+
+                    // 状态监听: 加载中 - 视频数据加载完成并显示图像
+                    const loadedDataHandler = () => {
+
+                        // 增加计数器
+                        this.cellLoadedCount++;
+
+                        // 检查是否是最后一个进入"加载中"状态的格子
+                        if (this.cellLoadedCount === this.totalCellsInCurrentPage) {
+                            console.log(`✅ 所有格子已完成加载! (共 ${this.totalCellsInCurrentPage} 个格子)`);
+                        }
+                    };
+                    this.addTrackedEventListener(thumbnailVideo, 'loadeddata', loadedDataHandler);
+
                     const seekedHandler = () => {
                         thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
-                        
+
                         const loopHandler = () => {
                             if (thumbnailVideo.currentTime >= endTime) {
                                 thumbnailVideo.currentTime = startTime;
@@ -1784,24 +1899,40 @@
                         this.addTrackedEventListener(thumbnailVideo, 'timeupdate', loopHandler);
                     };
                     this.addTrackedEventListener(thumbnailVideo, 'seeked', seekedHandler);
-                    
+
+                    // 状态监听: 播放中 - 视频开始播放
+                    const playHandler = () => {
+
+                        // 增加计数器
+                        this.cellPlayingCount++;
+
+                        // 检查是否是最后一个进入"播放中"状态的格子
+                        if (this.cellPlayingCount === this.totalCellsInCurrentPage) {
+                            console.log(`✅ 所有格子已开始播放! (共 ${this.totalCellsInCurrentPage} 个格子)`);
+
+                            // 触发预加载下一页
+                            this.preloadNextPage();
+                        }
+                    };
+                    this.addTrackedEventListener(thumbnailVideo, 'play', playHandler);
+
                     const currentTimeOverlay = document.createElement('div');
                     currentTimeOverlay.className = 'current-time-overlay';
                     currentTimeOverlay.textContent = this.formatTime(startTime);
-                    
+
                     const timeUpdateHandler = () => {
                         currentTimeOverlay.textContent = this.formatTime(thumbnailVideo.currentTime);
                     };
                     this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
-                    
+
                     const timeRangeOverlay = document.createElement('div');
                     timeRangeOverlay.className = 'time-range-overlay';
                     timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
-                    
+
                     cell.appendChild(thumbnailVideo);
                     cell.appendChild(currentTimeOverlay);
                     cell.appendChild(timeRangeOverlay);
-                    
+
                     // 新增功能：单击格子将该格子时间设为页面起始时间
                     cell.style.cursor = 'pointer';
                     cell.onclick = (e) => {
@@ -1812,32 +1943,32 @@
                         const newStartTime = this.currentStartTime + gridIndex * cellDuration;
                         this.setPageStartTime(newStartTime);
                     };
-                    
+
                     grid.appendChild(cell);
                 }
-                
+
                 // 更新网格状态
                 this.updateGridState();
-                
+
                 // 初始化视频缩放和拖动事件
                 this.initVideoDragAndZoom();
             }
-            
+
             // 初始化视频缩放和拖动事件
             initVideoDragAndZoom() {
                 // 移除旧的 document 级别事件监听器
                 this.removeDocumentLevelEventListeners();
-                
+
                 // 添加 document 级别事件监听器（只添加一次）
                 this.addDocumentLevelEventListeners();
-                
+
                 // 为每个视频附加事件
                 const videos = document.querySelectorAll('.grid-item video');
                 videos.forEach(video => {
                     this.attachVideoEvents(video);
                 });
             }
-            
+
             // 移除 document 级别事件监听器
             removeDocumentLevelEventListeners() {
                 if (this.mouseMoveHandler) {
@@ -1849,7 +1980,7 @@
                     this.mouseUpHandler = null;
                 }
             }
-            
+
             // 添加 document 级别事件监听器
             addDocumentLevelEventListeners() {
                 // 鼠标移动拖动视频
@@ -1858,7 +1989,7 @@
                         // 检测是否发生了实际移动
                         const currentTranslateX = e.clientX - this.dragStartX;
                         const currentTranslateY = e.clientY - this.dragStartY;
-                        
+
                         // 如果位置有变化，标记为已移动
                         if (Math.abs(currentTranslateX - this.videoTranslateX) > 1 ||
                             Math.abs(currentTranslateY - this.videoTranslateY) > 1) {
@@ -1867,16 +1998,16 @@
                             this.hasTransformed = true;
                             this.showResetTransformButton();
                         }
-                        
+
                         this.videoTranslateX = currentTranslateX;
                         this.videoTranslateY = currentTranslateY;
-                        
+
                         // 同步应用到所有格子的视频
                         this.applyVideoTransformToAll();
                     }
                 };
                 document.addEventListener('mousemove', this.mouseMoveHandler);
-                
+
                 // 鼠标释放结束拖动
                 this.mouseUpHandler = (e) => {
                     if (this.isDragging) {
@@ -1890,29 +2021,29 @@
                 };
                 document.addEventListener('mouseup', this.mouseUpHandler);
             }
-            
+
             // 为单个视频附加缩放和拖动事件
             attachVideoEvents(video) {
                 // 鼠标滚轮缩放视频（以鼠标位置为中心进行缩放）
                 const wheelHandler = (e) => {
                     e.preventDefault();
-                    
+
                     // 获取格子容器和鼠标位置
                     const cell = video.parentElement;
                     const cellRect = cell.getBoundingClientRect();
                     const cellCenterX = cellRect.width / 2;
                     const cellCenterY = cellRect.height / 2;
-                    
+
                     // 鼠标相对于格子中心的偏移量
                     const mouseX = e.clientX - cellRect.left - cellCenterX;
                     const mouseY = e.clientY - cellRect.top - cellCenterY;
-                    
+
                     // 记录缩放前的状态
                     const oldScale = this.videoScale;
-                    
+
                     // 缩放系数设为0.1，即每次滚动改变10%
                     const zoomFactor = 0.1;
-                    
+
                     if (e.deltaY < 0) {
                         // 向上滚动，放大
                         this.videoScale += zoomFactor;
@@ -1920,28 +2051,28 @@
                         // 向下滚动，缩小
                         this.videoScale -= zoomFactor;
                     }
-                    
+
                     // 限制最小缩放范围
                     if (this.videoScale < 0.1) {
                         this.videoScale = 0.1;
                     }
-                    
+
                     // 计算缩放比例的变化
                     const scaleChange = this.videoScale / oldScale;
-                    
+
                     // 调整平移量，使得鼠标指向的内容点保持不变
                     this.videoTranslateX = this.videoTranslateX + (mouseX - this.videoTranslateX) * (1 - scaleChange);
                     this.videoTranslateY = this.videoTranslateY + (mouseY - this.videoTranslateY) * (1 - scaleChange);
-                    
+
                     // 标记发生过变换并显示重置按钮
                     this.hasTransformed = true;
                     this.showResetTransformButton();
-                    
+
                     // 同步应用到所有格子的视频
                     this.applyVideoTransformToAll();
                 };
                 this.addTrackedEventListener(video, 'wheel', wheelHandler);
-                
+
                 // 鼠标按下开始拖动
                 const mousedownHandler = (e) => {
                     this.isDragging = true;
@@ -1951,7 +2082,7 @@
                     e.preventDefault(); // 阻止视频默认行为
                 };
                 this.addTrackedEventListener(video, 'mousedown', mousedownHandler);
-                
+
                 // 阻止视频的click事件（如果发生了拖动）
                 const clickHandler = (e) => {
                     if (this.hasMoved) {
@@ -1961,7 +2092,7 @@
                 };
                 this.addTrackedEventListener(video, 'click', clickHandler);
             }
-            
+
             // 同步应用变换到所有格子的视频
             applyVideoTransformToAll() {
                 const videos = document.querySelectorAll('.grid-item video');
@@ -1969,7 +2100,7 @@
                     video.style.transform = `translate(${this.videoTranslateX}px, ${this.videoTranslateY}px) scale(${this.videoScale})`;
                 });
             }
-            
+
             // 显示重置缩放和位置按钮
             showResetTransformButton() {
                 const resetSection = document.getElementById('resetTransformSection');
@@ -1977,7 +2108,7 @@
                     resetSection.classList.remove('is-hidden');
                 }
             }
-            
+
             // 重置视频缩放和位置
             resetVideoTransform() {
                 // 重置缩放和拖动状态
@@ -1986,16 +2117,16 @@
                 this.videoTranslateY = 0;
                 this.hasTransformed = false;
                 this.hasMoved = false;
-                
+
                 // 应用重置后的变换
                 this.applyVideoTransformToAll();
-                
+
                 // 隐藏重置按钮
                 const resetSection = document.getElementById('resetTransformSection');
                 if (resetSection) {
                     resetSection.classList.add('is-hidden');
                 }
-                
+
                 // 显示提示
                 this.showNotification('缩放和位置已重置', false);
             }
@@ -2007,74 +2138,74 @@
                     console.warn('无法更新时间点：原始视频未准备好');
                     return;
                 }
-                
+
                 const { cellDuration, totalCells, pageDuration } = this.getPageConfig();
                 const videoDuration = this.originalVideo.duration;
                 const pageStartTime = this.currentStartTime;
-                
+
                 // 边界检查：确保时间参数有效
                 if (cellDuration <= 0 || totalCells <= 0 || pageDuration <= 0) {
                     console.warn('无效的网格配置参数');
                     return;
                 }
-                
+
                 // 遍历现有的视频元素，只更新时间相关属性
                 this.createdVideos.forEach((video, index) => {
                     if (index === 0) return; // 跳过originalVideo
-                    
+
                     const gridIndex = parseInt(video.dataset.gridIndex);
                     if (isNaN(gridIndex)) return; // 跳过没有网格索引的视频
-                    
+
                     // 计算格子在整个视频中的实际开始时间
                     const startTime = pageStartTime + gridIndex * cellDuration;
                     const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
-                    
+
                     // 获取对应的单元格和覆盖层元素
                     const cell = video.parentElement;
                     if (!cell) {
                         console.warn(`找不到网格索引 ${gridIndex} 的单元格`);
                         return;
                     }
-                    
+
                     const currentTimeOverlay = cell.querySelector('.current-time-overlay');
                     const timeRangeOverlay = cell.querySelector('.time-range-overlay');
-                    
+
                     // 根据当前页面和格子索引，判断是否应该显示该格子
                     const shouldShowCell = startTime < videoDuration;
-                    
+
                     if (shouldShowCell) {
                         // 显示有效的格子
                         cell.classList.remove('hidden');
-                        
+
                         try {
                             // 移除旧的时间更新事件监听器
                             this.removeVideoTimeUpdateListeners(video);
-                            
+
                             // 更新时间显示覆盖层 - 显示在整个视频中的实际时间
                             if (currentTimeOverlay) {
                                 currentTimeOverlay.textContent = this.formatTime(startTime);
                             }
-                            
+
                             if (timeRangeOverlay) {
                                 timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
                             }
-                            
+
                             // 重新绑定循环播放逻辑和时间更新
                             const seekedHandler = () => {
                                 // 确保时间显示正确
                                 if (currentTimeOverlay) {
                                     currentTimeOverlay.textContent = this.formatTime(video.currentTime);
                                 }
-                                
+
                                 video.play().catch(e => console.log('自动播放被阻止:', e));
-                                
+
                                 const loopHandler = () => {
                                     if (video.currentTime >= endTime) {
                                         video.currentTime = startTime;
                                     }
                                 };
                                 this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-                                
+
                                 // 添加时间更新处理器
                                 if (currentTimeOverlay) {
                                     const timeUpdateHandler = () => {
@@ -2083,26 +2214,26 @@
                                     this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
                                 }
                             };
-                            
+
                             // 设置视频时间点并等待seeked事件
                             if (video.readyState >= 2) { // HAVE_CURRENT_DATA
                                 // 如果视频已经准备好，直接设置时间点
                                 video.currentTime = startTime;
-                                
+
                                 // 等待一小段时间确保seek完成，然后播放
                                 setTimeout(() => {
                                     if (currentTimeOverlay) {
                                         currentTimeOverlay.textContent = this.formatTime(video.currentTime);
                                     }
                                     video.play().catch(e => console.log('自动播放被阻止:', e));
-                                    
+
                                     const loopHandler = () => {
                                         if (video.currentTime >= endTime) {
                                             video.currentTime = startTime;
                                         }
                                     };
                                     this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-                                    
+
                                     // 添加时间更新处理器
                                     if (currentTimeOverlay) {
                                         const timeUpdateHandler = () => {
@@ -2129,7 +2260,7 @@
                         }
                         return;
                     }
-                    
+
                 });
             }
 
@@ -2139,22 +2270,22 @@
                     console.warn('尝试移除空视频的事件监听器');
                     return;
                 }
-                
+
                 try {
                     // 找到并移除与该视频相关的所有事件监听器（不仅仅是timeupdate）
-                    const listenersToRemove = this.eventListeners.filter(({element}) => element === video);
-                    
-                    listenersToRemove.forEach(({element, event, handler}) => {
+                    const listenersToRemove = this.eventListeners.filter(({ element }) => element === video);
+
+                    listenersToRemove.forEach(({ element, event, handler }) => {
                         try {
                             element.removeEventListener(event, handler);
                         } catch (e) {
                             console.warn(`移除事件监听器失败 (${event}):`, e);
                         }
                     });
-                    
+
                     // 从数组中移除所有相关的事件监听器
-                    this.eventListeners = this.eventListeners.filter(({element}) => element !== video);
-                    
+                    this.eventListeners = this.eventListeners.filter(({ element }) => element !== video);
+
                 } catch (e) {
                     console.error('移除视频事件监听器失败:', e);
                 }
@@ -2166,25 +2297,25 @@
                 if (this._timeFormatCache && this._timeFormatCache.has(cacheKey)) {
                     return this._timeFormatCache.get(cacheKey);
                 }
-                
+
                 // 初始化缓存
                 if (!this._timeFormatCache) {
                     this._timeFormatCache = new Map();
                     // 限制缓存大小，避免内存泄漏
                     this._timeFormatCache.maxSize = 100;
                 }
-                
+
                 const hours = Math.floor(seconds / 3600);
                 const mins = Math.floor((seconds % 3600) / 60);
                 const secs = Math.floor(seconds % 60);
                 let formattedTime;
-                
+
                 if (hours > 0) {
                     formattedTime = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 } else {
                     formattedTime = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 }
-                
+
                 // 缓存结果
                 if (this._timeFormatCache.size >= this._timeFormatCache.maxSize) {
                     // 清理最旧的缓存项
@@ -2192,7 +2323,7 @@
                     this._timeFormatCache.delete(firstKey);
                 }
                 this._timeFormatCache.set(cacheKey, formattedTime);
-                
+
                 return formattedTime;
             }
 
@@ -2237,18 +2368,18 @@
                 return new Promise((resolve, reject) => {
                     const videoURL = URL.createObjectURL(file);
                     const video = document.createElement('video');
-                    
+
                     video.onloadedmetadata = () => {
                         const duration = this.formatTime(video.duration);
                         URL.revokeObjectURL(videoURL);
                         resolve(duration);
                     };
-                    
+
                     video.onerror = () => {
                         URL.revokeObjectURL(videoURL);
                         reject(new Error('无法加载视频文件'));
                     };
-                    
+
                     video.src = videoURL;
                 });
             }
@@ -2257,28 +2388,28 @@
             updateFileList() {
                 const fileListSection = document.getElementById('fileListSection');
                 const fileList = document.getElementById('fileList');
-                
+
                 if (this.videoFiles.length === 0) {
                     fileListSection.classList.add('is-hidden');
                     return;
                 }
-                
+
                 fileListSection.classList.remove('is-hidden');
                 fileList.innerHTML = '';
-                
+
                 this.videoFiles.forEach((file, index) => {
                     const fileItem = document.createElement('div');
                     fileItem.className = 'file-item' + (index === this.currentVideoIndex ? ' active' : '');
-                    
+
                     const fileNameDiv = document.createElement('div');
                     fileNameDiv.className = 'file-name';
                     fileNameDiv.textContent = file.name;
-                    
+
                     const fileInfoDiv = document.createElement('div');
                     fileInfoDiv.className = 'file-info';
                     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
                     fileInfoDiv.innerHTML = `<span class="duration-info">加载中...</span> | ${sizeMB} MB`;
-                    
+
                     const removeBtn = document.createElement('button');
                     removeBtn.className = 'file-remove';
                     removeBtn.textContent = '×';
@@ -2286,7 +2417,7 @@
                         e.stopPropagation();
                         this.removeFile(index);
                     };
-                    
+
                     const contentDiv = document.createElement('div');
                     contentDiv.className = 'content-flex';
                     contentDiv.appendChild(fileNameDiv);
@@ -2297,13 +2428,13 @@
                     topRow.className = 'file-item-top';
                     topRow.appendChild(contentDiv);
                     topRow.appendChild(removeBtn);
-                    
+
                     fileItem.appendChild(topRow);
-                    
+
                     fileItem.onclick = () => this.switchToFile(index);
-                    
+
                     fileList.appendChild(fileItem);
-                    
+
                     // 异步获取视频时长
                     this.getVideoDuration(file).then(duration => {
                         const durationSpan = fileInfoDiv.querySelector('.duration-info');
@@ -2319,43 +2450,43 @@
                     });
                 });
             }
-            
+
             // 切换到指定文件
             // 在 switchToFile 时也重置 URL
             async switchToFile(index) {
                 this.currentVideoUrl = null;
                 if (index < 0 || index >= this.videoFiles.length) return;
-                
+
                 // 设置当前文件索引和视频对象
                 this.currentVideoIndex = index;
                 this.currentVideo = this.videoFiles[index];
-                
+
                 // 更新文件列表的选中状态
                 this.updateFileList();
-                
+
                 // 重置分页状态
                 this.currentPage = 0;
                 this.totalPages = 0;
                 this.currentStartTime = 0; // 重置起始时间
-                
+
                 // 重置网格状态，强制重新创建网格
                 this.resetGridState();
-                
+
                 // 使用防抖版本加载新视频
                 this.loadVideoDebouncedWrapper();
             }
-            
+
             // 移除文件
             removeFile(index) {
                 if (index < 0 || index >= this.videoFiles.length) return;
-                
+
                 this.videoFiles.splice(index, 1);
-                
+
                 // 调整当前文件索引
                 if (this.currentVideoIndex >= this.videoFiles.length) {
                     this.currentVideoIndex = this.videoFiles.length - 1;
                 }
-                
+
                 // 更新当前视频
                 if (this.videoFiles.length > 0) {
                     this.currentVideo = this.videoFiles[this.currentVideoIndex];
@@ -2364,15 +2495,15 @@
                     this.originalVideo = null;
                     this.clearVideoDisplay();
                 }
-                
+
                 this.updateFileList();
-                
+
                 // 如果还有文件，加载当前文件
                 if (this.videoFiles.length > 0) {
                     this.loadVideoDebouncedWrapper();
                 }
             }
-            
+
             // 清空视频显示
             clearVideoDisplay() {
                 document.getElementById('videoGrid').innerHTML = '';
@@ -2381,7 +2512,7 @@
                 document.getElementById('pagination').classList.add('hidden');
                 document.getElementById('pagination').classList.remove('visible');
             }
-            
+
             // 更新文件列表中的进度条
             updateFileProgress() {
                 if (!this.originalVideo || !this.originalVideo.duration) return;
@@ -2392,7 +2523,7 @@
 
                 const startTime = this.currentStartTime;
                 const endTime = Math.min(startTime + pageDuration, videoDuration);
-                
+
                 const startPercent = (startTime / videoDuration) * 100;
                 const widthPercent = ((endTime - startTime) / videoDuration) * 100;
 
@@ -2429,7 +2560,7 @@
                     dynamicStyle.id = 'dynamic-grid-styles';
                     document.head.appendChild(dynamicStyle);
                 }
-                
+
                 // 根据是否提供宽度决定使用哪种布局
                 if (cellWidth) {
                     // 使用固定宽度的格子
@@ -2460,15 +2591,15 @@
                     `;
                 }
             }
-            
+
             // 强制清理资源
             forceCleanup() {
                 // 停止进度标识线更新
                 this.stopProgressIndicator();
-                
+
                 // 停止视频播放状态检测器
                 this.stopVideoPlayMonitor();
-                
+
                 // 暂停所有视频
                 this.createdVideos.forEach(video => {
                     try {
@@ -2477,30 +2608,31 @@
                         console.error('暂停视频失败:', e);
                     }
                 });
-                
+
                 // 清理网格中的视频元素
                 const grid = document.getElementById('videoGrid');
                 if (grid) {
                     grid.innerHTML = '';
                 }
-                
+
                 // 清理所有资源
                 this.cleanupVideos();
+                this.cleanupPreloadedVideos();  // 清理预加载视频
                 this.cleanupURLs();
                 this.cleanupEventListeners();
-                
+
                 // 重置网格状态
                 this.resetGridState();
-                
+
                 // 强制垃圾回收（如果浏览器支持）
                 if (window.gc) {
                     window.gc();
                 }
-                
+
                 // 显示清理完成提示
                 this.showNotification('内存清理完成', false);
             }
-            
+
             // 启动垂直进度标识线更新
             startProgressIndicator() {
                 // 每100ms更新一次垂直线位置
@@ -2508,7 +2640,7 @@
                     this.updateFileProgress();
                 }, 100);
             }
-            
+
             // 停止垂直进度标识线更新
             stopProgressIndicator() {
                 if (this.progressIndicatorInterval) {
@@ -2516,27 +2648,27 @@
                     this.progressIndicatorInterval = null;
                 }
             }
-            
+
             // 计算第一个格子的播放进度百分比
             getFirstCellProgress() {
                 if (!this.originalVideo || this.createdVideos.length <= 1) {
                     return 0;
                 }
-                
+
                 const cellDuration = parseInt(document.getElementById('duration').value);
                 // 注意：createdVideos[0]是originalVideo，createdVideos[1]才是第一个格子的视频
                 const firstGridVideo = this.createdVideos[1];
-                
+
                 if (!firstGridVideo || isNaN(firstGridVideo.currentTime)) {
                     return 0;
                 }
-                
+
                 const progressInCell = firstGridVideo.currentTime - this.currentStartTime;
                 const clampedProgress = Math.max(0, Math.min(progressInCell, cellDuration));
-                
+
                 return (clampedProgress / cellDuration) * 100;
             }
-            
+
             // 显示通知
             showNotification(message, isError = false) {
                 const notification = document.createElement('div');
@@ -2554,7 +2686,7 @@
                 `;
                 notification.textContent = message;
                 document.body.appendChild(notification);
-                
+
                 setTimeout(() => {
                     if (notification.parentNode) {
                         notification.parentNode.removeChild(notification);
@@ -2563,98 +2695,98 @@
             }
 
             async loadRemoteVideo(url) {
-        if (!url || typeof url !== 'string') {
-            this.showError('无效的视频 URL');
-            return;
-        }
+                if (!url || typeof url !== 'string') {
+                    this.showError('无效的视频 URL');
+                    return;
+                }
 
-        // 重置本地视频状态
-        this.currentVideo = null;
-        this.currentVideoUrl = url;
-        
-        // 重置分页和网格状态
-        this.currentPage = 0;
-        this.totalPages = 0;
-        this.currentStartTime = 0;
-        this.resetGridState();
+                // 重置本地视频状态
+                this.currentVideo = null;
+                this.currentVideoUrl = url;
 
-        this.isLoading = true;
-        this.showLoading(true);
-        this.clearError();
+                // 重置分页和网格状态
+                this.currentPage = 0;
+                this.totalPages = 0;
+                this.currentStartTime = 0;
+                this.resetGridState();
 
-        try {
-            const video = document.createElement('video');
+                this.isLoading = true;
+                this.showLoading(true);
+                this.clearError();
 
-            await new Promise((resolve, reject) => {
-                video.onloadedmetadata = () => {
-                    video.onerror = null; // 成功加载元数据后，移除错误处理器
-                    // 清理旧资源
-                    this.cleanupVideos();
-                    this.cleanupURLs();
-                    
-                    this.originalVideo = video;
-                    this.createdVideos.push(video);
-                    resolve();
-                };
-                video.onerror = () => {
-                    reject(new Error('无法加载视频，请检查 URL 和 CORS'));
-                };
-                video.src = url;
-            });
+                try {
+                    const video = document.createElement('video');
 
-            this.updateVideoInfo();
-            this.updatePreview();
-            
-            // 启动进度指示器
-            this.startProgressIndicator();
-            
-            // 立即更新一次进度条
-            this.updateFileProgress();
-            
-        } catch (error) {
-            console.error('远程视频加载失败:', error);
-            this.showError(`远程视频加载失败: ${error.message}`);
-            this.showNotification(`远程视频加载失败: ${error.message}`, true);
-        } finally {
-            this.isLoading = false;
-            this.showLoading(false);
-        }
-    }
-    
-    // 初始化全局错误处理
-    initGlobalErrorHandling() {
-        // 捕获 JavaScript 运行时错误
-        window.onerror = (message, source, lineno, colno, error) => {
-            console.error('全局错误捕获:', message, source, lineno, colno, error);
-            // 显示错误提示，但不显示给用户过多的技术细节
-            this.showNotification('发生未知错误，请查看控制台了解详情', true);
-            // 阻止默认的错误处理
-            return true;
-        };
-        
-        // 捕获未处理的 Promise 拒绝
-        window.addEventListener('unhandledrejection', (event) => {
-            console.error('未处理的 Promise 拒绝:', event.reason);
-            // 显示错误提示，但不显示给用户过多的技术细节
-            this.showNotification('发生未知错误，请查看控制台了解详情', true);
-            // 阻止默认的 Promise 拒绝处理
-            event.preventDefault();
-        });
-        
-        // 捕获资源加载错误
-        window.addEventListener('error', (event) => {
-            // 过滤掉一些不重要的资源错误
-            if (event.target !== window) {
-                console.warn('资源加载错误:', event.target);
-                // 对于视频资源加载错误，我们已经在具体方法中处理了，这里不再重复提示
-                // 其他资源错误可以考虑提示，但为了避免过多提示，这里暂不处理
+                    await new Promise((resolve, reject) => {
+                        video.onloadedmetadata = () => {
+                            video.onerror = null; // 成功加载元数据后，移除错误处理器
+                            // 清理旧资源
+                            this.cleanupVideos();
+                            this.cleanupURLs();
+
+                            this.originalVideo = video;
+                            this.createdVideos.push(video);
+                            resolve();
+                        };
+                        video.onerror = () => {
+                            reject(new Error('无法加载视频，请检查 URL 和 CORS'));
+                        };
+                        video.src = url;
+                    });
+
+                    this.updateVideoInfo();
+                    this.updatePreview();
+
+                    // 启动进度指示器
+                    this.startProgressIndicator();
+
+                    // 立即更新一次进度条
+                    this.updateFileProgress();
+
+                } catch (error) {
+                    console.error('远程视频加载失败:', error);
+                    this.showError(`远程视频加载失败: ${error.message}`);
+                    this.showNotification(`远程视频加载失败: ${error.message}`, true);
+                } finally {
+                    this.isLoading = false;
+                    this.showLoading(false);
+                }
             }
-        }, true);
-    }
-    
-    // 移除剪贴板监听功能，避免用户困惑
-    // 用户需要手动粘贴URL到输入框，然后点击确认按钮加载
-    
+
+            // 初始化全局错误处理
+            initGlobalErrorHandling() {
+                // 捕获 JavaScript 运行时错误
+                window.onerror = (message, source, lineno, colno, error) => {
+                    console.error('全局错误捕获:', message, source, lineno, colno, error);
+                    // 显示错误提示，但不显示给用户过多的技术细节
+                    this.showNotification('发生未知错误，请查看控制台了解详情', true);
+                    // 阻止默认的错误处理
+                    return true;
+                };
+
+                // 捕获未处理的 Promise 拒绝
+                window.addEventListener('unhandledrejection', (event) => {
+                    console.error('未处理的 Promise 拒绝:', event.reason);
+                    // 显示错误提示，但不显示给用户过多的技术细节
+                    this.showNotification('发生未知错误，请查看控制台了解详情', true);
+                    // 阻止默认的 Promise 拒绝处理
+                    event.preventDefault();
+                });
+
+                // 捕获资源加载错误
+                window.addEventListener('error', (event) => {
+                    // 过滤掉一些不重要的资源错误
+                    if (event.target !== window) {
+                        console.warn('资源加载错误:', event.target);
+                        // 对于视频资源加载错误，我们已经在具体方法中处理了，这里不再重复提示
+                        // 其他资源错误可以考虑提示，但为了避免过多提示，这里暂不处理
+                    }
+                }, true);
+            }
+
+            // 移除剪贴板监听功能，避免用户困惑
+            // 用户需要手动粘贴URL到输入框，然后点击确认按钮加载
+
             // 创建或更新统一的进度条
             createOrUpdateProgressBar() {
                 const container = document.getElementById('unifiedProgressBarContainer');
@@ -2671,7 +2803,7 @@
                 progressFill.className = 'file-progress-fill';
                 progressFill.style.left = '0%';
                 progressFill.style.width = '0%';
-                        
+
                 const progressIndicator = document.createElement('div');
                 progressIndicator.className = 'progress-indicator-line';
                 progressIndicator.style.left = '0%';
@@ -2680,240 +2812,241 @@
                 progressWrapper.appendChild(progressIndicator);
                 container.appendChild(progressWrapper);
             }
-}
-
-// 实例化应用
-const app = new VideoThumbnailPreview();
-
-function selectVideo() {
-    app.selectVideo();
-}
-
-function toggleAutoCalculateCols() {
-    const checkbox = document.getElementById('autoCalculateCols');
-    const colsInput = document.getElementById('gridSize2');
-    const allButtons = document.querySelectorAll('.number-btn');
-    const rowButtons = document.querySelectorAll('.grid-control-row:first-child .number-btn:not(.both-btn)');
-    
-    if (checkbox.checked) {
-        // 禁用列数输入框
-        colsInput.disabled = true;
-        colsInput.style.opacity = '0.5';
-        
-        // 禁用所有按钮
-        allButtons.forEach(btn => {
-            btn.disabled = true;
-            btn.style.opacity = '0.3';
-            btn.style.cursor = 'not-allowed';
-        });
-        
-        // 单独启用行数的 ▲、▼ 按钮
-        rowButtons.forEach(btn => {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.cursor = 'pointer';
-        });
-        
-        calculateAndSetCols();
-    } else {
-        // 启用列数输入框
-        colsInput.disabled = false;
-        colsInput.style.opacity = '1';
-        
-        // 启用所有按钮
-        allButtons.forEach(btn => {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.cursor = 'pointer';
-        });
-    }
-    updateGrid();
-}
-
-function calculateAndSetCols() {
-    const checkbox = document.getElementById('autoCalculateCols');
-    if (!checkbox.checked || !app.originalVideo) return;
-    
-    const rows = parseInt(document.getElementById('gridSize').value);
-    const videoWidth = app.originalVideo.videoWidth;
-    const videoHeight = app.originalVideo.videoHeight;
-    const container = document.getElementById('previewContainer');
-    
-    if (!videoWidth || !videoHeight || !container) return;
-    
-    // 获取容器尺寸
-    const containerWidth = container.clientWidth || 800;
-    const containerHeight = container.clientHeight || 600;
-    
-    // 计算视频宽高比
-    const videoAspectRatio = videoWidth / videoHeight;
-    
-    // 计算能够最大化显示面积的列数
-    const optimalCols = calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight);
-    
-    // 设置列数
-    const colsInput = document.getElementById('gridSize2');
-    colsInput.value = optimalCols;
-    
-    console.log(`自动计算列数: 行数=${rows}, 视频宽高比=${videoAspectRatio.toFixed(2)}, 最优列数=${optimalCols}`);
-}
-
-function calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight) {
-    // 计算容器宽高比（默认 16:9）
-    const screenRatio = containerWidth / containerHeight;
-    
-    // 计算精确列数（参考 Python 脚本的算法）
-    // cols_precise = screen_ratio * height * rows / width
-    // videoAspectRatio = width / height，所以 height / width = 1 / videoAspectRatio
-    const colsPrecise = screenRatio * rows / videoAspectRatio;
-    
-    console.log(`计算精确列数: screenRatio=${screenRatio.toFixed(2)}, rows=${rows}, videoAspectRatio=${videoAspectRatio.toFixed(2)}, colsPrecise=${colsPrecise.toFixed(2)}`);
-    
-    // 以精确列数为基准，生成候选列数（±2）
-    const baseCols = Math.round(colsPrecise);
-    const candidateCols = [baseCols - 2, baseCols - 1, baseCols, baseCols + 1, baseCols + 2]
-        .filter(cols => cols > 0); // 过滤掉小于等于0的值
-    
-    console.log(`候选列数: ${candidateCols.join(', ')}`);
-    
-    // 计算每个候选列数的屏占比
-    const candidateColsRatio = candidateCols.map(cols => (videoAspectRatio * cols) / rows);
-    const candidateColsScreenToBodyRatio = candidateColsRatio.map(ratio =>
-        ratio <= screenRatio ? ratio / screenRatio : screenRatio / ratio
-    );
-    
-    const results = candidateCols.map((cols, index) => ({
-        cols,
-        ratio: candidateColsRatio[index],
-        screenToBodyRatio: candidateColsScreenToBodyRatio[index]
-    }));
-    
-    console.log(`计算结果: ${results.map(r => `列数${r.cols}: ${Math.round(r.screenToBodyRatio * 100)}%`).join(', ')}`);
-    
-    // 找到屏占比最高的列数
-    const maxResult = results.reduce((max, current) =>
-        current.screenToBodyRatio > max.screenToBodyRatio ? current : max
-    );
-    
-    console.log(`最大屏占比列数结果：列数【${maxResult.cols}】，屏占比【${Math.round(maxResult.screenToBodyRatio * 100)}%】`);
-    
-    return maxResult.cols;
-}
-
-function updateGrid() {
-    // 如果启用了自动计算，先计算列数
-    const checkbox = document.getElementById('autoCalculateCols');
-    if (checkbox.checked) {
-        calculateAndSetCols();
-    }
-    
-    app.updateGridDisplay();
-    // 网格大小改变时重置网格状态，强制重新创建
-    app.resetGridState();
-    app.updatePreviewDebouncedWrapper();
-}
-
-function updatePreview() {
-    app.updatePreviewDebouncedWrapper();
-}
-
-function setDuration(seconds) {
-    document.getElementById('duration').value = seconds;
-    updateQuickButtons();
-    // 时长改变时重置网格状态，强制重新创建
-    app.resetGridState();
-    app.updatePreviewDebouncedWrapper();
-}
-        
-// 同时调整行列数
-function changeBothGridSize(direction) {
-    changeGridSize(1, direction);
-    changeGridSize(2, direction);
-    updateGrid();
-}
-
-// 宫格数增减函数
-function changeGridSize(inputId, direction) {
-    const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
-    const currentValue = parseInt(input.value);
-    const minValue = parseInt(input.min);
-    const maxValue = parseInt(input.max);
-    const newValue = currentValue + direction;
-            
-    // 确保值在有效范围内
-    if (newValue >= minValue && newValue <= maxValue) {
-        input.value = newValue;
-        updateGrid();
-    }
-}
-        
-// Tab 切换函数
-function switchTab(tabName) {
-    // 移除所有 Tab 按钮的 active 类
-    document.querySelectorAll('.tab-button').forEach(btn => {
-        btn.classList.remove('active');
-    });
-            
-    // 隐藏所有 Tab 内容
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-            
-    // 获取文件列表区域元素
-    const fileListSection = document.getElementById('fileListSection');
-            
-    // 激活选中的 Tab
-    if (tabName === 'local') {
-        document.querySelector('.tab-button:nth-child(1)').classList.add('active');
-        document.getElementById('localTab').classList.add('active');
-        // 如果有本地文件，则显示文件列表
-        if (app.videoFiles.length > 0) {
-            fileListSection.classList.remove('is-hidden');
         }
-    } else if (tabName === 'remote') {
-        document.querySelector('.tab-button:nth-child(2)').classList.add('active');
-        document.getElementById('remoteTab').classList.add('active');
-        // 远程模式下，隐藏文件列表
-        fileListSection.classList.add('is-hidden');
-    }
-}
 
-// 更新快捷按钮的选中状态
-function updateQuickButtons() {
-    const currentDuration = parseInt(document.getElementById('duration').value);
-    const buttons = document.querySelectorAll('.quick-btn');
-    buttons.forEach(btn => {
-        const btnText = btn.textContent;
-        let btnValue;
-        if (btnText.includes('分钟')) {
-            btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
-        } else {
-            btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
+        // 实例化应用
+        const app = new VideoThumbnailPreview();
+
+        function selectVideo() {
+            app.selectVideo();
         }
-                
-        if (btnValue === currentDuration) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
+
+        function toggleAutoCalculateCols() {
+            const checkbox = document.getElementById('autoCalculateCols');
+            const colsInput = document.getElementById('gridSize2');
+            const allButtons = document.querySelectorAll('.number-btn');
+            const rowButtons = document.querySelectorAll('.grid-control-row:first-child .number-btn:not(.both-btn)');
+
+            if (checkbox.checked) {
+                // 禁用列数输入框
+                colsInput.disabled = true;
+                colsInput.style.opacity = '0.5';
+
+                // 禁用所有按钮
+                allButtons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.3';
+                    btn.style.cursor = 'not-allowed';
+                });
+
+                // 单独启用行数的 ▲、▼ 按钮
+                rowButtons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                });
+
+                calculateAndSetCols();
+            } else {
+                // 启用列数输入框
+                colsInput.disabled = false;
+                colsInput.style.opacity = '1';
+
+                // 启用所有按钮
+                allButtons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                });
+            }
+            updateGrid();
         }
-    });
-}
 
-// 处理远程URL输入框的回车键事件
-function handleRemoteUrlKeyPress(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        const url = document.getElementById('remoteUrlInput').value;
-        app.loadRemoteVideo(url);
-    }
-}
+        function calculateAndSetCols() {
+            const checkbox = document.getElementById('autoCalculateCols');
+            if (!checkbox.checked || !app.originalVideo) return;
 
-// 清空远程URL输入框
-function clearRemoteUrlInput() {
-    const input = document.getElementById('remoteUrlInput');
-    input.value = '';
-    input.focus();
-}
-     </script>
+            const rows = parseInt(document.getElementById('gridSize').value);
+            const videoWidth = app.originalVideo.videoWidth;
+            const videoHeight = app.originalVideo.videoHeight;
+            const container = document.getElementById('previewContainer');
+
+            if (!videoWidth || !videoHeight || !container) return;
+
+            // 获取容器尺寸
+            const containerWidth = container.clientWidth || 800;
+            const containerHeight = container.clientHeight || 600;
+
+            // 计算视频宽高比
+            const videoAspectRatio = videoWidth / videoHeight;
+
+            // 计算能够最大化显示面积的列数
+            const optimalCols = calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight);
+
+            // 设置列数
+            const colsInput = document.getElementById('gridSize2');
+            colsInput.value = optimalCols;
+
+            console.log(`自动计算列数: 行数=${rows}, 视频宽高比=${videoAspectRatio.toFixed(2)}, 最优列数=${optimalCols}`);
+        }
+
+        function calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight) {
+            // 计算容器宽高比（默认 16:9）
+            const screenRatio = containerWidth / containerHeight;
+
+            // 计算精确列数（参考 Python 脚本的算法）
+            // cols_precise = screen_ratio * height * rows / width
+            // videoAspectRatio = width / height，所以 height / width = 1 / videoAspectRatio
+            const colsPrecise = screenRatio * rows / videoAspectRatio;
+
+            console.log(`计算精确列数: screenRatio=${screenRatio.toFixed(2)}, rows=${rows}, videoAspectRatio=${videoAspectRatio.toFixed(2)}, colsPrecise=${colsPrecise.toFixed(2)}`);
+
+            // 以精确列数为基准，生成候选列数（±2）
+            const baseCols = Math.round(colsPrecise);
+            const candidateCols = [baseCols - 2, baseCols - 1, baseCols, baseCols + 1, baseCols + 2]
+                .filter(cols => cols > 0); // 过滤掉小于等于0的值
+
+            console.log(`候选列数: ${candidateCols.join(', ')}`);
+
+            // 计算每个候选列数的屏占比
+            const candidateColsRatio = candidateCols.map(cols => (videoAspectRatio * cols) / rows);
+            const candidateColsScreenToBodyRatio = candidateColsRatio.map(ratio =>
+                ratio <= screenRatio ? ratio / screenRatio : screenRatio / ratio
+            );
+
+            const results = candidateCols.map((cols, index) => ({
+                cols,
+                ratio: candidateColsRatio[index],
+                screenToBodyRatio: candidateColsScreenToBodyRatio[index]
+            }));
+
+            console.log(`计算结果: ${results.map(r => `列数${r.cols}: ${Math.round(r.screenToBodyRatio * 100)}%`).join(', ')}`);
+
+            // 找到屏占比最高的列数
+            const maxResult = results.reduce((max, current) =>
+                current.screenToBodyRatio > max.screenToBodyRatio ? current : max
+            );
+
+            console.log(`最大屏占比列数结果：列数【${maxResult.cols}】，屏占比【${Math.round(maxResult.screenToBodyRatio * 100)}%】`);
+
+            return maxResult.cols;
+        }
+
+        function updateGrid() {
+            // 如果启用了自动计算，先计算列数
+            const checkbox = document.getElementById('autoCalculateCols');
+            if (checkbox.checked) {
+                calculateAndSetCols();
+            }
+
+            app.updateGridDisplay();
+            // 网格大小改变时重置网格状态，强制重新创建
+            app.resetGridState();
+            app.updatePreviewDebouncedWrapper();
+        }
+
+        function updatePreview() {
+            app.updatePreviewDebouncedWrapper();
+        }
+
+        function setDuration(seconds) {
+            document.getElementById('duration').value = seconds;
+            updateQuickButtons();
+            // 时长改变时重置网格状态，强制重新创建
+            app.resetGridState();
+            app.updatePreviewDebouncedWrapper();
+        }
+
+        // 同时调整行列数
+        function changeBothGridSize(direction) {
+            changeGridSize(1, direction);
+            changeGridSize(2, direction);
+            updateGrid();
+        }
+
+        // 宫格数增减函数
+        function changeGridSize(inputId, direction) {
+            const input = document.getElementById(inputId === 1 ? 'gridSize' : 'gridSize2');
+            const currentValue = parseInt(input.value);
+            const minValue = parseInt(input.min);
+            const maxValue = parseInt(input.max);
+            const newValue = currentValue + direction;
+
+            // 确保值在有效范围内
+            if (newValue >= minValue && newValue <= maxValue) {
+                input.value = newValue;
+                updateGrid();
+            }
+        }
+
+        // Tab 切换函数
+        function switchTab(tabName) {
+            // 移除所有 Tab 按钮的 active 类
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // 隐藏所有 Tab 内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // 获取文件列表区域元素
+            const fileListSection = document.getElementById('fileListSection');
+
+            // 激活选中的 Tab
+            if (tabName === 'local') {
+                document.querySelector('.tab-button:nth-child(1)').classList.add('active');
+                document.getElementById('localTab').classList.add('active');
+                // 如果有本地文件，则显示文件列表
+                if (app.videoFiles.length > 0) {
+                    fileListSection.classList.remove('is-hidden');
+                }
+            } else if (tabName === 'remote') {
+                document.querySelector('.tab-button:nth-child(2)').classList.add('active');
+                document.getElementById('remoteTab').classList.add('active');
+                // 远程模式下，隐藏文件列表
+                fileListSection.classList.add('is-hidden');
+            }
+        }
+
+        // 更新快捷按钮的选中状态
+        function updateQuickButtons() {
+            const currentDuration = parseInt(document.getElementById('duration').value);
+            const buttons = document.querySelectorAll('.quick-btn');
+            buttons.forEach(btn => {
+                const btnText = btn.textContent;
+                let btnValue;
+                if (btnText.includes('分钟')) {
+                    btnValue = parseInt(btnText.replace(/[^0-9]/g, '')) * 60;
+                } else {
+                    btnValue = parseInt(btnText.replace(/[^0-9]/g, ''));
+                }
+
+                if (btnValue === currentDuration) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // 处理远程URL输入框的回车键事件
+        function handleRemoteUrlKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const url = document.getElementById('remoteUrlInput').value;
+                app.loadRemoteVideo(url);
+            }
+        }
+
+        // 清空远程URL输入框
+        function clearRemoteUrlInput() {
+            const input = document.getElementById('remoteUrlInput');
+            input.value = '';
+            input.focus();
+        }
+    </script>
 </body>
+
 </html>
