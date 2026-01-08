@@ -1000,6 +1000,9 @@
                     videoFile: null
                 };
 
+                // 预加载控制器
+                this.preloadAbortController = null;
+
                 // 防抖机制
                 this.updatePreviewDebounced = this.debounce(this.updatePreview.bind(this), 300);
                 this.loadVideoDebounced = this.debounce(this.loadVideo.bind(this), 500);
@@ -1174,6 +1177,13 @@
 
             // 清理预加载的视频元素（防止内存泄漏）
             cleanupPreloadedVideos() {
+                // 1. 取消所有挂起的事件监听器
+                if (this.preloadAbortController) {
+                    console.log('🛑 Aborting preloading...');
+                    this.preloadAbortController.abort();
+                    this.preloadAbortController = null;
+                }
+
                 // 隐藏预加载状态
                 const statusEl = document.getElementById('preloadingStatus');
                 if (statusEl) {
@@ -1774,6 +1784,10 @@
                 // 3. 清理旧的预加载数据
                 this.cleanupPreloadedVideos();
 
+                // 初始化新的 AbortController
+                this.preloadAbortController = new AbortController();
+                const signal = this.preloadAbortController.signal;
+
                 // 4. 计算下一页的格子数和配置
                 const { totalCells, cellDuration } = this.getPageConfig();
 
@@ -1814,9 +1828,10 @@
                     video.muted = true;
 
                     // 设置起始时间（让浏览器缓冲该时间段的数据）
+                    // 使用 signal 自动清理事件监听器
                     video.addEventListener('loadedmetadata', () => {
                         video.currentTime = startTime;
-                    });
+                    }, { signal });
 
                     // 监听缓冲进度
                     video.addEventListener('canplay', () => {
@@ -1830,7 +1845,7 @@
                                 statusEl.style.color = '#F7C137';
                             }
                         }
-                    });
+                    }, { signal });
 
                     // 监听预加载错误
                     video.addEventListener('error', (e) => {
@@ -1843,7 +1858,7 @@
                         }
 
                         this.showNotification(`预加载异常: 视频无法加载 (${errorMsg})`, true);
-                    });
+                    }, { signal });
 
                     this.preloadedVideos.push(video);
                 }
