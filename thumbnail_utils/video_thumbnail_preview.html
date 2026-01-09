@@ -3437,6 +3437,8 @@
         function handleRemoteUrlKeyPress(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
+                // 失去焦点，以便方向键可以立即控制翻页
+                event.target.blur();
                 const url = document.getElementById('remoteUrlInput').value;
                 app.loadRemoteVideo(url);
             }
