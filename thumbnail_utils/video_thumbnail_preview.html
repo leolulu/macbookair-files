@@ -1879,7 +1879,7 @@
                     return;
                 }
 
-                console.log('🔄 开始预加载下一页...');
+                console.log('🔄 开始预加载下一页 (串行流式加载)...');
 
                 // 3. 清理旧的预加载数据
                 this.cleanupPreloadedVideos();
@@ -1891,18 +1891,8 @@
                 // 4. 计算下一页的格子数和配置
                 const { totalCells, cellDuration } = this.getPageConfig();
 
-                // 更新状态UI
-                const statusEl = document.getElementById('preloadingStatus');
-                if (statusEl) {
-                    statusEl.style.display = 'block';
-                    statusEl.classList.remove('shimmer-text');
-                    statusEl.innerHTML = `<span>⏳</span> <span class="shimmer-text">正在准备下一页... (0/0)</span>`;
-                }
-
+                // 5. 计算计划预加载的总数
                 let plannedPreloadCount = 0;
-                let loadedPreloadCount = 0;
-
-                // 5. 先计算实际需要预加载的数量
                 for (let i = 0; i < totalCells; i++) {
                     const startTime = nextPageStartTime + i * cellDuration;
                     if (startTime < videoDuration) {
@@ -1910,76 +1900,146 @@
                     }
                 }
 
+                // 更新状态UI
+                const statusEl = document.getElementById('preloadingStatus');
                 if (statusEl) {
+                    statusEl.style.display = 'block';
                     statusEl.classList.remove('shimmer-text');
                     statusEl.innerHTML = `<span>⏳</span> <span class="shimmer-text">正在准备下一页... (0/${plannedPreloadCount})</span>`;
+                    statusEl.style.color = '#F7C137';
                 }
 
-                // 6. 创建预加载video元素
-                for (let i = 0; i < totalCells; i++) {
-                    const startTime = nextPageStartTime + i * cellDuration;
+                // ---------------------------------------------------------
+                // 核心重构：递归串行处理单个格子
+                // ---------------------------------------------------------
+                let loadedPreloadCount = 0;
 
-                    // 如果超出视频时长，停止创建
-                    if (startTime >= videoDuration) {
-                        break;
+                const updateStatus = () => {
+                    if (statusEl && !signal.aborted) {
+                        if (loadedPreloadCount === plannedPreloadCount) {
+                            statusEl.innerHTML = `<span>✅</span> 下一页准备就绪! (${loadedPreloadCount}/${plannedPreloadCount})`;
+                            statusEl.style.color = '#00ff00';
+                        } else {
+                            statusEl.innerHTML = `<span>🚀</span> <span class="shimmer-text">正在缓冲... (${loadedPreloadCount}/${plannedPreloadCount})</span>`;
+                            statusEl.style.color = '#F7C137';
+                        }
+                    }
+                };
+
+                const processNextCell = async (index) => {
+                    // 基本终止条件检查
+                    if (signal.aborted) {
+                        console.log('🛑 预加载序列已被中止');
+                        return;
                     }
 
+                    if (index >= totalCells) {
+                        console.log(`✅ 预加载序列队列处理完成`);
+                        // 注意：这里可能 count 还没满（因为有超时的），所以状态条可能显示 "Buffering... (5/8)"
+                        // 这是正常的，我们只更新为"准备就绪"当且仅当 loadedPreloadCount === plannedPreloadCount
+                        // 这一步只是说明 Queue 跑完了，不用做特殊的 UI 更新
+                        return;
+                    }
+
+                    const startTime = nextPageStartTime + index * cellDuration;
+
+                    // 如果超出视频时长，停止递归
+                    if (startTime >= videoDuration) {
+                        console.log('🔵 预加载遇到视频末尾，停止序列');
+                        return;
+                    }
+
+                    // 创建 Video 元素
                     const video = document.createElement('video');
                     video.src = this.currentVideoUrl;
                     video.preload = 'auto';
                     video.muted = true;
-
-                    // 设置起始时间（让浏览器缓冲该时间段的数据）
-                    // 使用 signal 自动清理事件监听器
-                    video.addEventListener('loadedmetadata', () => {
-                        video.currentTime = startTime;
-                    }, { signal });
-
-                    let isVideoLoaded = false;
-                    // 监听缓冲进度
-                    video.addEventListener('canplay', () => {
-                        // 1. 防止重复计数
-                        if (isVideoLoaded) return;
-
-                        // 2. "错误事件" 防止: 验证是否到达目标时间
-                        // 允许小的时间容差 (0.5s)，因为跳转可能不是帧精确的
-                        if (Math.abs(video.currentTime - startTime) > 0.5) {
-                            // console.log(`Ignored canplay at ${video.currentTime} (target: ${startTime})`);
-                            return;
-                        }
-
-                        isVideoLoaded = true;
-                        loadedPreloadCount++;
-                        if (statusEl) {
-                            statusEl.classList.remove('shimmer-text');
-                            if (loadedPreloadCount === plannedPreloadCount) {
-                                statusEl.innerHTML = `<span>✅</span> 下一页准备就绪! (${loadedPreloadCount}/${plannedPreloadCount})`;
-                                statusEl.style.color = '#00ff00';
-                            } else {
-                                statusEl.innerHTML = `<span>🚀</span> <span class="shimmer-text">正在缓冲... (${loadedPreloadCount}/${plannedPreloadCount})</span>`;
-                                statusEl.style.color = '#F7C137';
-                            }
-                        }
-                    }, { signal });
-
-                    // 监听预加载错误
-                    video.addEventListener('error', (e) => {
-                        const errorMsg = video.error ? video.error.message || `Code ${video.error.code}` : 'Unknown error';
-                        console.error(`❌ 预加载视频错误 (格子 ${i}):`, errorMsg);
-
-                        if (statusEl) {
-                            statusEl.classList.remove('shimmer-text');
-                            statusEl.innerHTML = `<span>❌</span> 预加载出错: ${errorMsg}`;
-                            statusEl.style.color = '#ff6b6b';
-                        }
-
-                        this.showNotification(`预加载异常: 视频无法加载 (${errorMsg})`, true);
-                    }, { signal });
-
+                    // 保存引用
                     this.preloadedVideos.push(video);
-                }
 
-                console.log(`✅ 预加载完成！已已开始预加载 ${this.preloadedVideos.length} 个格子`);
+                    try {
+                        // 使用 Promise 控制"队列推进"，但"计数逻辑"独立于队列
+                        await new Promise((resolve, reject) => {
+                            let isQueueBlocked = true;
+
+                            // 定义事件处理器
+                            const onCanPlay = () => {
+                                // 1. 计数器逻辑（严格依据 canplay）
+                                loadedPreloadCount++;
+                                updateStatus();
+
+                                // 2. 队列逻辑（如果还在等待中，解除阻塞）
+                                if (isQueueBlocked) {
+                                    isQueueBlocked = false;
+                                    clearTimeout(timeoutId);
+                                    resolve('success');
+                                }
+
+                                // 清理其他互斥监听器
+                                video.removeEventListener('error', onError);
+                                // 不需要移除 signal 监听器，因为它是一次性的且会在 signal 触发时清理 video 上的此监听器
+                            };
+
+                            const onError = () => {
+                                const errorMsg = video.error ? video.error.message || `Code ${video.error.code}` : 'Unknown error';
+                                console.error(`❌ 预加载视频错误 (格子 ${index}):`, errorMsg);
+
+                                // 错误不增加计数
+
+                                // 队列逻辑：错误也视为当前步结束，继续下一步
+                                if (isQueueBlocked) {
+                                    isQueueBlocked = false;
+                                    clearTimeout(timeoutId);
+                                    resolve('error');
+                                }
+                                video.removeEventListener('canplay', onCanPlay);
+                            };
+
+                            // 设置 2000ms 超时
+                            const timeoutId = setTimeout(() => {
+                                if (isQueueBlocked) {
+                                    console.warn(`⚠️ 预加载格子 ${index} 超时 (2s)，跳过等待，后台继续加载...`);
+                                    isQueueBlocked = false;
+                                    // 关键：超时 resolve 队列，但不移除 onCanPlay 监听器！
+                                    // 这样如果之后加载成功了，计数器依然会增加
+                                    resolve('timeout');
+                                }
+                            }, 2000);
+
+                            // 绑定事件
+                            video.addEventListener('canplay', onCanPlay, { once: true });
+                            video.addEventListener('error', onError, { once: true });
+
+                            // 监听 abort 信号：全局大清理
+                            signal.addEventListener('abort', () => {
+                                isQueueBlocked = false;
+                                clearTimeout(timeoutId);
+                                video.removeEventListener('canplay', onCanPlay);
+                                video.removeEventListener('error', onError);
+                                reject(new Error('Aborted'));
+                            }, { once: true });
+
+                            // 触发加载
+                            video.currentTime = startTime;
+                        });
+
+                        // 递归调用下一个（除非 Abort）
+                        if (!signal.aborted) {
+                            await processNextCell(index + 1);
+                        }
+
+                    } catch (err) {
+                        if (err.message === 'Aborted' || signal.aborted) {
+                            console.log('🛑 捕获中断信号，停止递归');
+                            // 在这里可以做一个最终的状态更新（可选）
+                        } else {
+                            console.error('预加载未知异常:', err);
+                        }
+                    }
+                };
+
+                // 启动递归链
+                processNextCell(0);
             }
 
             // 切换预加载状态
