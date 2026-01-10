@@ -1344,16 +1344,29 @@
                         return; // 如果正在输入，跳过键盘事件
                     }
 
+                    // 如果没有加载视频，不响应键盘事件
+                    if (!this.originalVideo) return;
+
+                    const { pageDuration } = this.getPageConfig();
+                    const videoDuration = this.originalVideo.duration;
+
                     switch (e.key) {
                         case 'ArrowLeft':
                         case 'ArrowUp':
                             e.preventDefault();
-                            this.previousPage();
+                            // 逻辑限制：如果已经在第一页（起始时间<=0），不允许翻到上一页
+                            if (this.currentStartTime > 0) {
+                                this.previousPage();
+                            }
                             break;
                         case 'ArrowRight':
                         case 'ArrowDown':
                             e.preventDefault();
-                            this.nextPage();
+                            // 逻辑限制：如果当前页已经是最后一页（内容覆盖到视频末尾），不允许翻到下一页
+                            // 逻辑与 updatePaginationUI 中的按钮禁用逻辑保持一致
+                            if (this.currentStartTime + pageDuration < videoDuration - 0.1) {
+                                this.nextPage();
+                            }
                             break;
                     }
                 });
