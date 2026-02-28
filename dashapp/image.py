@@ -51,6 +51,46 @@ def get_txt_title_for_image(img_path):
         print(f"读取txt文件时出错: {e}")
         return None
 
+def clean_empty_folders(folder_paths):
+    """
+    清理空文件夹，从最深层向上递归删除
+    跳过特殊文件夹和顶层 static/img/
+    """
+    # 规范化路径用于比较
+    static_img_root = os.path.abspath("./static/img")
+    special_folders = {"jpg_from_webp", ".trash"}
+    
+    # 去重并按深度降序排列（深层优先）
+    unique_paths = set(os.path.abspath(p) for p in folder_paths)
+    sorted_paths = sorted(unique_paths, key=lambda x: x.count(os.sep), reverse=True)
+    
+    for folder_path in sorted_paths:
+        current_path = folder_path
+        while True:
+            # 到达顶层，停止
+            if os.path.abspath(current_path) == static_img_root:
+                break
+            
+            # 特殊文件夹，跳过
+            if os.path.basename(current_path) in special_folders:
+                break
+            
+            # 非空文件夹，停止向上
+            try:
+                if os.listdir(current_path):
+                    break
+            except OSError:
+                break
+            
+            # 空文件夹，删除并继续向上
+            try:
+                os.rmdir(current_path)
+            except OSError:
+                break
+            
+            current_path = os.path.dirname(current_path)
+
+
 
 def get_img_path_list(img_path_list: List):
     global browsed_img_list
@@ -451,17 +491,26 @@ def delete_button_click(n_clicks):
     if not os.path.exists(TRASH_FOLDER_PATH):
         os.makedirs(TRASH_FOLDER_PATH)
     count = 0
+    parent_folders = []  # 收集被删文件的父文件夹路径
     for file_ in browsed_img_list:
         try:
-            shutil.move(file_.replace("%23", "#"), TRASH_FOLDER_PATH)
+            file_path = file_.replace("%23", "#")
+            shutil.move(file_path, TRASH_FOLDER_PATH)
+            parent_folders.append(os.path.dirname(file_path))
             count += 1
         except Exception as e:
             try:
                 if "already exists" in str(e):
-                    os.remove(file_.replace("%23", "#"))
+                    file_path = file_.replace("%23", "#")
+                    os.remove(file_path)
+                    parent_folders.append(os.path.dirname(file_path))
                     count += 1
             except Exception as e:
                 print(f"删除失败: {e}")
+    
+    # 清理空文件夹
+    clean_empty_folders(parent_folders)
+    
     return "删除成功{}张".format(count)
 
 
