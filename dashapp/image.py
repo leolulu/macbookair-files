@@ -64,6 +64,8 @@ def clean_empty_folders(folder_paths):
     unique_paths = set(os.path.abspath(p) for p in folder_paths)
     sorted_paths = sorted(unique_paths, key=lambda x: x.count(os.sep), reverse=True)
     
+    removed_dir_count = 0
+
     for folder_path in sorted_paths:
         current_path = folder_path
         while True:
@@ -85,14 +87,17 @@ def clean_empty_folders(folder_paths):
             # 空文件夹，删除并继续向上
             try:
                 os.rmdir(current_path)
+                removed_dir_count += 1
             except OSError:
                 break
             
             current_path = os.path.dirname(current_path)
 
+    return removed_dir_count
 
 
-def get_img_path_list(img_path_list: List):
+
+def get_img_path_list(img_path_list: List[str]):
     global browsed_img_list
     browsed_img_list = [path for path in browsed_img_list if os.path.exists(path.replace("%23", "#"))]
 
@@ -308,7 +313,7 @@ def popup_100_pics(n_clicks):
                 loop=True,
                 style={"max-height": "380px", "vertical-align": "middle"},
                 id={"type": "mp4" if (file_ext in [".mp4", ".m4v"]) else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
-                **{"data-true-src": img_path},
+                className=img_path,
             )
             if is_video
             else html.A(
@@ -318,7 +323,6 @@ def popup_100_pics(n_clicks):
                     style={"max-height": "380px", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
                     title=get_txt_title_for_image(img_path),
-                    **{"data-true-src": img_path},
                 ),
                 href=os.path.join(
                     os.path.dirname(img_path),
@@ -342,6 +346,7 @@ def popup_100_pics(n_clicks):
                         src=VIDEO_WARNING_IMG_URL,
                         style={"max-height": pic_max_height, "vertical-align": "middle"},
                         id={"type": "pic", "index": idx + 1},
+                        className="",
                     ),
                 )
                 consecutive_pic_count = 0
@@ -361,6 +366,7 @@ def popup_100_pics(n_clicks):
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
 def set_page_capacity(s_value):
     def _value_mapping(in_value):
+        out_value = float(in_value)
         if in_value <= 48:
             out_value = in_value / 2
         elif 48 < in_value <= 90:
@@ -411,7 +417,7 @@ def apply_option_to_tbnl_control(option_list_hide_control, children):
     Input("option_not_display_mp4", "value"),
     Input("option_not_display_pic", "value"),
     Input("path_filter", "value"),
-    State({"type": ALL, "index": ALL}, "data-true-src"),
+    State({"type": ALL, "index": ALL}, "className"),
     State({"type": ALL, "index": ALL}, "id"),
     prevent_initial_call="initial_duplicate",
 )
@@ -509,9 +515,9 @@ def delete_button_click(n_clicks):
                 print(f"删除失败: {e}")
     
     # 清理空文件夹
-    clean_empty_folders(parent_folders)
+    removed_dir_count = clean_empty_folders(parent_folders)
     
-    return "删除成功{}张".format(count)
+    return "删除成功{}张，清理空目录{}个".format(count, removed_dir_count)
 
 
 @callback(
