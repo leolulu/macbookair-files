@@ -51,47 +51,31 @@ def get_txt_title_for_image(img_path):
         print(f"读取txt文件时出错: {e}")
         return None
 
-def clean_empty_folders(folder_paths):
+def clean_empty_folders(folder_paths=None):
     """
     清理空文件夹，从最深层向上递归删除
     跳过特殊文件夹和顶层 static/img/
     """
-    # 规范化路径用于比较
     static_img_root = os.path.abspath("./static/img")
     special_folders = {"jpg_from_webp", ".trash"}
-    
-    # 去重并按深度降序排列（深层优先）
-    unique_paths = set(os.path.abspath(p) for p in folder_paths)
-    sorted_paths = sorted(unique_paths, key=lambda x: x.count(os.sep), reverse=True)
-    
     removed_dir_count = 0
 
-    for folder_path in sorted_paths:
-        current_path = folder_path
-        while True:
-            # 到达顶层，停止
-            if os.path.abspath(current_path) == static_img_root:
-                break
+    for root, dirs, files in os.walk(static_img_root, topdown=False):
+        # 跳过顶层
+        if os.path.abspath(root) == static_img_root:
+            continue
             
-            # 特殊文件夹，跳过
-            if os.path.basename(current_path) in special_folders:
-                break
+        # 跳过特殊文件夹
+        if os.path.basename(root) in special_folders:
+            continue
             
-            # 非空文件夹，停止向上
-            try:
-                if os.listdir(current_path):
-                    break
-            except OSError:
-                break
-            
-            # 空文件夹，删除并继续向上
-            try:
-                os.rmdir(current_path)
+        # 尝试删除空文件夹
+        try:
+            if not os.listdir(root):
+                os.rmdir(root)
                 removed_dir_count += 1
-            except OSError:
-                break
-            
-            current_path = os.path.dirname(current_path)
+        except OSError:
+            pass
 
     return removed_dir_count
 
