@@ -51,8 +51,37 @@ def get_txt_title_for_image(img_path):
         print(f"读取txt文件时出错: {e}")
         return None
 
+def clean_empty_folders(folder_paths=None):
+    """
+    清理空文件夹，从最深层向上递归删除
+    跳过特殊文件夹和顶层 static/img/
+    """
+    static_img_root = os.path.abspath("./static/img")
+    special_folders = {"jpg_from_webp", ".trash"}
+    removed_dir_count = 0
 
-def get_img_path_list(img_path_list: List):
+    for root, dirs, files in os.walk(static_img_root, topdown=False):
+        # 跳过顶层
+        if os.path.abspath(root) == static_img_root:
+            continue
+            
+        # 跳过特殊文件夹
+        if os.path.basename(root) in special_folders:
+            continue
+            
+        # 尝试删除空文件夹
+        try:
+            if not os.listdir(root):
+                os.rmdir(root)
+                removed_dir_count += 1
+        except OSError:
+            pass
+
+    return removed_dir_count
+
+
+
+def get_img_path_list(img_path_list: List[str]):
     global browsed_img_list
     browsed_img_list = [path for path in browsed_img_list if os.path.exists(path.replace("%23", "#"))]
 
@@ -268,7 +297,7 @@ def popup_100_pics(n_clicks):
                 loop=True,
                 style={"max-height": "380px", "vertical-align": "middle"},
                 id={"type": "mp4" if (file_ext in [".mp4", ".m4v"]) else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
-                **{"data-true-src": img_path},
+                className=img_path,
             )
             if is_video
             else html.A(
@@ -278,7 +307,6 @@ def popup_100_pics(n_clicks):
                     style={"max-height": "380px", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
                     title=get_txt_title_for_image(img_path),
-                    **{"data-true-src": img_path},
                 ),
                 href=os.path.join(
                     os.path.dirname(img_path),
@@ -302,6 +330,7 @@ def popup_100_pics(n_clicks):
                         src=VIDEO_WARNING_IMG_URL,
                         style={"max-height": pic_max_height, "vertical-align": "middle"},
                         id={"type": "pic", "index": idx + 1},
+                        className="",
                     ),
                 )
                 consecutive_pic_count = 0
@@ -321,6 +350,7 @@ def popup_100_pics(n_clicks):
 @app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
 def set_page_capacity(s_value):
     def _value_mapping(in_value):
+        out_value = float(in_value)
         if in_value <= 48:
             out_value = in_value / 2
         elif 48 < in_value <= 90:
@@ -371,7 +401,7 @@ def apply_option_to_tbnl_control(option_list_hide_control, children):
     Input("option_not_display_mp4", "value"),
     Input("option_not_display_pic", "value"),
     Input("path_filter", "value"),
-    State({"type": ALL, "index": ALL}, "data-true-src"),
+    State({"type": ALL, "index": ALL}, "className"),
     State({"type": ALL, "index": ALL}, "id"),
     prevent_initial_call="initial_duplicate",
 )
@@ -451,18 +481,27 @@ def delete_button_click(n_clicks):
     if not os.path.exists(TRASH_FOLDER_PATH):
         os.makedirs(TRASH_FOLDER_PATH)
     count = 0
+    parent_folders = []  # 收集被删文件的父文件夹路径
     for file_ in browsed_img_list:
         try:
-            shutil.move(file_.replace("%23", "#"), TRASH_FOLDER_PATH)
+            file_path = file_.replace("%23", "#")
+            shutil.move(file_path, TRASH_FOLDER_PATH)
+            parent_folders.append(os.path.dirname(file_path))
             count += 1
         except Exception as e:
             try:
                 if "already exists" in str(e):
-                    os.remove(file_.replace("%23", "#"))
+                    file_path = file_.replace("%23", "#")
+                    os.remove(file_path)
+                    parent_folders.append(os.path.dirname(file_path))
                     count += 1
             except Exception as e:
                 print(f"删除失败: {e}")
-    return "删除成功{}张".format(count)
+    
+    # 清理空文件夹
+    removed_dir_count = clean_empty_folders(parent_folders)
+    
+    return "删除成功{}张，清理空目录{}个".format(count, removed_dir_count)
 
 
 @callback(
