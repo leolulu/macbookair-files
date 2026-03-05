@@ -1015,11 +1015,17 @@
 
             function callLoadSubtitlesFromJSONImpl() {
                 var regex = /^[+]?\d+(\.\d+)?$/;
-                if (regex.test($('#timeConcat').val())) {
-                    clearAllSub()
-                    loadSubtitlesFromJSONImpl()
-                } else {
+                var timeConcatEnabled = $('#enableTimeConcat').prop('checked');
+                if (timeConcatEnabled && !regex.test($('#timeConcat').val())) {
                     console.error('说话人间隔数值不合法...')
+                    return;
+                }
+
+                clearAllSub()
+                if (srtLoaded) {
+                    loadSubtitlesImpl()
+                } else {
+                    loadSubtitlesFromJSONImpl()
                 }
             }
 
@@ -1029,9 +1035,9 @@
             function reloadSubtitleBySentenceLength() {
                 clearAllSub()
                 if (srtLoaded) {
-                    loadSubtitlesImpl()
+                    loadSubtitlesImpl(true)
                 } else {
-                    loadSubtitlesFromJSONImpl(triggeredFromSentenceLength = true)
+                    loadSubtitlesFromJSONImpl(true)
                 }
             }
 
@@ -1496,7 +1502,7 @@
 
 
 
-            function loadSubtitlesImpl() {
+            function loadSubtitlesImpl(triggeredFromSentenceLength = false) {
                 subtitles = [];
                 // Combine short subtitles
                 let minLength = parseInt(document.getElementById("textLength").value, 10);
@@ -1505,7 +1511,26 @@
                     var text = tempSubtitles[i].text;
                     var start = tempSubtitles[i].start;
                     var end = tempSubtitles[i].end;
-                    while (i + 1 < tempSubtitles.length && text.length < minLength) {
+
+                    function whileCondition(i) {
+                        if (triggeredFromSentenceLength) {
+                            return text.length < minLength;
+                        }
+
+                        var checked = $('#enableTimeConcat').prop('checked');
+                        if (checked) {
+                            var timeConcat = parseFloat(document.getElementById('timeConcat').value);
+                            if (isNaN(timeConcat)) {
+                                return false;
+                            }
+                            var adjacent = tempSubtitles[i + 1].start - end < timeConcat;
+                            return adjacent;
+                        }
+
+                        return text.length < minLength;
+                    }
+
+                    while (i + 1 < tempSubtitles.length && whileCondition(i)) {
                         i++;
                         text += "，" + tempSubtitles[i].text;
                         end = tempSubtitles[i].end;
