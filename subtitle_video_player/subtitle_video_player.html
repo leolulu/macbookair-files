@@ -3,7 +3,8 @@
 
 <head>
     <title>Video Player with Subtitles</title>
-    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="assets/vendor/jquery/jquery-ui-1.13.2.css">
     <style>
         body {
             margin: 0;
@@ -328,6 +329,12 @@
             max-width: 100%;
         }
 
+        #subtitles .sup-subtitle-pending {
+            color: #6B7280;
+            font-style: italic;
+            font-weight: 500;
+        }
+
         .inline-block-element {
             display: inline-block;
         }
@@ -335,6 +342,49 @@
         #videoPlaybackRate {
             color: #3F51B5;
             font-weight: bold;
+        }
+
+        #toastContainer {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 3000;
+            pointer-events: none;
+            max-width: min(360px, calc(100vw - 32px));
+        }
+
+        .floating-toast {
+            background: rgba(28, 32, 40, 0.94);
+            color: #F7F9FC;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 10px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+            padding: 10px 14px;
+            font-size: 14px;
+            line-height: 1.45;
+            transform: translateY(-6px);
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .floating-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .floating-toast.toast-success {
+            border-left: 4px solid #00B578;
+        }
+
+        .floating-toast.toast-info {
+            border-left: 4px solid #4D8DFF;
+        }
+
+        .floating-toast.toast-warning {
+            border-left: 4px solid #FFB020;
         }
     </style>
 </head>
@@ -352,7 +402,7 @@
             </div>
             <div id="horizontal-divider"></div>
             <div class="options-container">
-                <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html" multiple />
+                <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html, .sup" multiple />
                 <span id="videoPlaybackRate" class="inline-block-element">x1.0</span>
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
                 <span id='videoCanPlayStatus'>🔴</span>
@@ -405,7 +455,7 @@
                     <input type="text" id="videoUrl" placeholder="粘贴视频url,弹框选字幕">
                     <button id="loadVideoUrl">加载</button>
                 </div>
-                <input type="file" id="VideoUrlWithFile" accept=".srt, .json, .ass" multiple style="display:none;" />
+                <input type="file" id="VideoUrlWithFile" accept=".srt, .json, .ass, .sup, .html" multiple style="display:none;" />
                 <div class="inline-options-container">
                     <label for="toggleCaptionDisplay">显示字幕</label>
                     <input type="checkbox" id="toggleCaptionDisplay" />
@@ -461,9 +511,16 @@
         </div>
     </div>
 
+    <div id="toastContainer"></div>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+
+    <script src="assets/vendor/jquery/jquery-3.6.0.min.js"></script>
+    <script src="assets/vendor/jquery/jquery-ui-1.13.2.min.js"></script>
+    <script src="assets/vendor/ort/ort.min.js"></script>
+    <script src="assets/vendor/opencv/opencv.js"></script>
+    <script src="js/cache/sup_ocr_cache.js"></script>
+    <script src="js/sup/pgs_parser.js"></script>
+    <script src="js/ocr/paddle_ocr.js"></script>
     <script>
         // ASS to SRT 转换 - 使用动态 Format 解析
         // 辅助函数：解析 Format 行，获取字段索引
@@ -814,6 +871,206 @@
             var subtitles = [];
             var tempSubtitles = [];
             var srtLoaded = false
+            var currentMovieCacheId = 'no-movie';
+            var toastTimers = {};
+            var supRunSeq = 0;
+
+            function svpSupLog(event, details) {
+                try {
+                    var msg = '[SVP_SUP] ' + event;
+                    if (details !== undefined) {
+                        console.log(msg, details);
+                    } else {
+                        console.log(msg);
+                    }
+                } catch {
+                }
+            }
+
+            function setCurrentMovieCacheIdFromFile(file, sourceIdOverride) {
+                currentMovieCacheId = window.SupOcrCache.makeMovieId(file, sourceIdOverride);
+                svpSupLog('setCurrentMovieCacheId', { currentMovieCacheId: currentMovieCacheId });
+            }
+
+            function getCurrentMovieCacheId() {
+                return currentMovieCacheId || 'no-movie';
+            }
+
+            function buildSupPendingText(index, total) {
+                return '[SUP OCR 待处理 ' + (index + 1) + '/' + total + ']';
+            }
+
+            function buildSupFailedText(index, total, attemptsUsed) {
+                const attemptText = attemptsUsed && attemptsUsed > 0 ? ('，已重试 ' + attemptsUsed + ' 次') : '';
+                return '[SUP OCR 本轮未识别 ' + (index + 1) + '/' + total + attemptText + '，刷新可重试]';
+            }
+
+            function waitForVideoReadyForOcr(timeoutMs) {
+                timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 15000;
+                const video = document.getElementById('video');
+                if (!video || !video.currentSrc) {
+                    return Promise.resolve({ reason: 'no-video', readyState: video ? video.readyState : null });
+                }
+                if (video.readyState >= 1) {
+                    return Promise.resolve({ reason: 'already-ready', readyState: video.readyState });
+                }
+
+                return new Promise((resolve) => {
+                    let done = false;
+                    let timer = null;
+
+                    function finish(reason) {
+                        if (done) {
+                            return;
+                        }
+                        done = true;
+                        if (timer) {
+                            clearTimeout(timer);
+                        }
+                        video.removeEventListener('loadedmetadata', onLoadedMetadata);
+                        video.removeEventListener('canplay', onCanPlay);
+                        video.removeEventListener('error', onError);
+                        resolve({ reason: reason, readyState: video.readyState });
+                    }
+
+                    function onLoadedMetadata() {
+                        finish('loadedmetadata');
+                    }
+
+                    function onCanPlay() {
+                        finish('canplay');
+                    }
+
+                    function onError() {
+                        finish('video-error');
+                    }
+
+                    timer = setTimeout(function () {
+                        finish('timeout');
+                    }, timeoutMs);
+
+                    video.addEventListener('loadedmetadata', onLoadedMetadata);
+                    video.addEventListener('canplay', onCanPlay);
+                    video.addEventListener('error', onError);
+                });
+            }
+
+            function yieldToMainThread(timeoutMs) {
+                timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 16;
+                return new Promise(function (resolve) {
+                    var done = false;
+                    function finish() {
+                        if (done) {
+                            return;
+                        }
+                        done = true;
+                        resolve();
+                    }
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(finish);
+                    }
+                    setTimeout(finish, timeoutMs);
+                });
+            }
+
+            function flushSupSubtitleDomBatch(queue, limit) {
+                limit = typeof limit === 'number' ? limit : 100;
+                for (var i = 0; i < limit && queue.length > 0; i++) {
+                    var update = queue.shift();
+                    var subtitleDiv = document.querySelector('.subtitle[data-index="' + update.index + '"]');
+                    if (subtitleDiv) {
+                        subtitleDiv.textContent = update.text;
+                    }
+                }
+            }
+
+            function bindSupSubtitleClickHandler() {
+                var container = document.getElementById('subtitles');
+                if (!container || container.getAttribute('data-sup-click-bound') === '1') {
+                    return;
+                }
+                container.setAttribute('data-sup-click-bound', '1');
+                container.addEventListener('click', function (event) {
+                    var subtitleDiv = event.target && event.target.closest ? event.target.closest('.subtitle') : null;
+                    if (!subtitleDiv || !container.contains(subtitleDiv)) {
+                        return;
+                    }
+                    var index = parseInt(subtitleDiv.getAttribute('data-index'), 10);
+                    if (!Number.isFinite(index) || !subtitles[index]) {
+                        return;
+                    }
+                    playerState.skipCalibrationBySubClick = true;
+                    $('#video')[0].currentTime = subtitles[index].start;
+                    if ($('#clickToPlay').prop('checked')) {
+                        $('#video')[0].play();
+                    }
+                    $('#video')[0].focus();
+                });
+            }
+
+            function removeFloatingToastByKey(key) {
+                var toast = document.querySelector('#toastContainer .floating-toast[data-toast-key="' + key + '"]');
+                if (!toast) {
+                    return;
+                }
+                toast.classList.remove('show');
+                setTimeout(function () {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 220);
+                if (toastTimers[key]) {
+                    clearTimeout(toastTimers[key]);
+                    delete toastTimers[key];
+                }
+            }
+
+            function upsertFloatingToast(key, message, type, durationMs) {
+                var container = document.getElementById('toastContainer');
+                if (!container) {
+                    return;
+                }
+                var toast = document.querySelector('#toastContainer .floating-toast[data-toast-key="' + key + '"]');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.className = 'floating-toast';
+                    toast.setAttribute('data-toast-key', key);
+                    container.appendChild(toast);
+                }
+                toast.className = 'floating-toast toast-' + (type || 'info');
+                toast.textContent = message;
+
+                requestAnimationFrame(function () {
+                    toast.classList.add('show');
+                });
+
+                if (toastTimers[key]) {
+                    clearTimeout(toastTimers[key]);
+                    delete toastTimers[key];
+                }
+
+                if (durationMs !== 0) {
+                    var stay = typeof durationMs === 'number' ? durationMs : 2600;
+                    toastTimers[key] = setTimeout(function () {
+                        removeFloatingToastByKey(key);
+                    }, stay);
+                }
+            }
+
+            function showFloatingToast(message, type, durationMs) {
+                upsertFloatingToast('toast-' + Date.now() + '-' + Math.random().toString(16).slice(2), message, type, durationMs);
+            }
+
+            function showStatusToast(message, type, durationMs) {
+                upsertFloatingToast('ocr-status', message, type, durationMs);
+                svpSupLog('statusToast', { message: message, type: type, durationMs: durationMs });
+            }
+
+            window.showFloatingToast = showFloatingToast;
+            window.showStatusToast = showStatusToast;
+            if (window.PaddleSubtitleOcr && typeof window.PaddleSubtitleOcr.setStatusNotifier === 'function') {
+                window.PaddleSubtitleOcr.setStatusNotifier(showStatusToast);
+            }
 
             function clearAllSub() {
                 var bigDiv = $('#subtitles')[0]
@@ -826,27 +1083,48 @@
                 return parseFloat(num.toFixed(3));
             }
 
+            function isVideoLikeName(name) {
+                var lower = String(name || '').toLowerCase();
+                return lower.endsWith('.mp4') || lower.endsWith('.webm');
+            }
+
+            function sortFilesVideoFirst(files) {
+                return Array.from(files).sort(function (a, b) {
+                    var av = isVideoLikeName(a && a.name ? a.name : a);
+                    var bv = isVideoLikeName(b && b.name ? b.name : b);
+                    if (av === bv) {
+                        return 0;
+                    }
+                    return av ? -1 : 1;
+                });
+            }
+
             async function processFilesImpl(files) {
-                for (var i = 0; i < files.length; i++) {
-                    if (files[i].name.toLowerCase().endsWith('.mp4') || files[i].name.toLowerCase().endsWith('.webm')) {
-                        var url = URL.createObjectURL(files[i]);
+                var orderedFiles = sortFilesVideoFirst(files);
+                svpSupLog('processFilesImpl ordered', { names: orderedFiles.map(function (f) { return f.name; }) });
+                for (var i = 0; i < orderedFiles.length; i++) {
+                    if (orderedFiles[i].name.toLowerCase().endsWith('.mp4') || orderedFiles[i].name.toLowerCase().endsWith('.webm')) {
+                        var url = URL.createObjectURL(orderedFiles[i]);
                         $('#video').attr('src', url);
-                        document.title = files[i].name;
+                        document.title = orderedFiles[i].name;
+                        setCurrentMovieCacheIdFromFile(orderedFiles[i], orderedFiles[i].name);
                         // 更新视频文件名
-                        $('#videoFileName').text(files[i].name);
-                    } else if (files[i].name.toLowerCase().endsWith('.ass')) {
+                        $('#videoFileName').text(orderedFiles[i].name);
+                    } else if (orderedFiles[i].name.toLowerCase().endsWith('.ass')) {
                         srtLoaded = true
-                        await loadSubtitles(files[i], formatIsAss = true);
-                    } else if (files[i].name.toLowerCase().endsWith('.srt')) {
+                        await loadSubtitles(orderedFiles[i], formatIsAss = true);
+                    } else if (orderedFiles[i].name.toLowerCase().endsWith('.srt')) {
                         srtLoaded = true
-                        await loadSubtitles(files[i]);
-                    } else if (files[i].name.toLowerCase().endsWith('.json')) {
+                        await loadSubtitles(orderedFiles[i]);
+                    } else if (orderedFiles[i].name.toLowerCase().endsWith('.json')) {
                         if (!srtLoaded) {
-                            await loadSubtitlesFromJSON(files[i]);
+                            await loadSubtitlesFromJSON(orderedFiles[i]);
                         }
-                        loadDiarizationInfo(files[i]);
-                    } else if (files[i].name.toLowerCase().endsWith('.html')) {
-                        await loadSupFromHtml(files[i])
+                        loadDiarizationInfo(orderedFiles[i]);
+                    } else if (orderedFiles[i].name.toLowerCase().endsWith('.html')) {
+                        await loadSupFromHtml(orderedFiles[i])
+                    } else if (orderedFiles[i].name.toLowerCase().endsWith('.sup')) {
+                        await loadSupFromSup(orderedFiles[i], orderedFiles[i].name)
                     }
                 }
             }
@@ -900,6 +1178,333 @@
                     reader.onerror = reject;
                     reader.readAsText(file);
                 });
+            }
+
+            function loadSupFromSup(file, sourceIdOverride) {
+                return new Promise((resolve, reject) => {
+                    clearAllSub();
+
+                    var runId = ++supRunSeq;
+                    svpSupLog('loadSupFromSup start', {
+                        runId: runId,
+                        sourceIdOverride: sourceIdOverride,
+                        fileName: file && file.name ? file.name : null,
+                        fileSize: file && typeof file.size === 'number' ? file.size : null,
+                        fileLastModified: file && typeof file.lastModified === 'number' ? file.lastModified : null,
+                        movieId: getCurrentMovieCacheId(),
+                    });
+
+                    const supId = window.SupOcrCache.makeSupId(file, sourceIdOverride);
+                    const movieId = getCurrentMovieCacheId();
+                    const cacheKey = window.SupOcrCache.makeCacheKey(movieId, supId);
+
+                    svpSupLog('loadSupFromSup cacheKey', { runId: runId, supId: supId, movieId: movieId, cacheKey: cacheKey });
+
+                    // Fast path: fully converted result exists.
+                    window.SupOcrCache.get(cacheKey).then(async (cached) => {
+                        svpSupLog('loadSupFromSup cache lookup result', {
+                            runId: runId,
+                            hasCached: !!cached,
+                            status: cached ? cached.status : null,
+                            cues: cached && cached.cues ? cached.cues.length : null,
+                            doneCount: cached && typeof cached.doneCount === 'number' ? cached.doneCount : null,
+                        });
+                        if (cached && cached.status === 'complete' && Array.isArray(cached.cues) && cached.cues.length > 0) {
+                            showFloatingToast('已从缓存恢复 SUP 转换结果', 'success');
+                            tempSubtitles = cached.cues.map((c) => ({
+                                start: c.start,
+                                end: c.end,
+                                text: c.text,
+                            }));
+                            await loadSupSubtitlesImpl();
+                            svpSupLog('loadSupFromSup cache hit complete - restored', { runId: runId, count: tempSubtitles.length });
+                            resolve();
+                            return;
+                        }
+
+                        // Partial/no cache: parse SUP to get timing + bitmaps for missing OCR.
+                        const reader = new FileReader();
+                        reader.onload = async function (e) {
+                            try {
+                                const tParse0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                                const arrayBuffer = e.target.result;
+                                const cues = await window.SupPgsParser.parseSupPgsToCues(arrayBuffer);
+                                const tParse1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                                svpSupLog('loadSupFromSup parsed cues', { runId: runId, cueCount: cues.length, elapsedMs: (tParse1 - tParse0) });
+
+                                // Initialize or validate cache shape.
+                                let cacheEntry = cached;
+                                if (!window.SupOcrCache.isUsableEntry(cacheEntry, cues.length)) {
+                                    svpSupLog('loadSupFromSup initializing new cache entry', { runId: runId });
+                                    cacheEntry = window.SupOcrCache.createEntry({
+                                        key: cacheKey,
+                                        supId,
+                                        movieId,
+                                        cues: cues.map((c) => ({ start: c.start, end: c.end, text: '' })),
+                                    });
+                                    await window.SupOcrCache.put(cacheEntry);
+                                    svpSupLog('loadSupFromSup cache entry created', { runId: runId, cueCount: cacheEntry.cues.length });
+                                }
+
+                                // Build subtitles; use cached text when available, otherwise keep DOM lightweight.
+                                tempSubtitles = cues.map((cue, idx) => {
+                                    const cachedText = (cacheEntry.cues[idx] && cacheEntry.cues[idx].text) ? String(cacheEntry.cues[idx].text) : '';
+                                    if (cachedText) {
+                                        return {
+                                            start: cue.start,
+                                            end: cue.end,
+                                            text: cachedText,
+                                            listText: cachedText,
+                                            __ocrSkip: true,
+                                            __ocrResolved: true,
+                                        };
+                                    }
+                                    return {
+                                        start: cue.start,
+                                        end: cue.end,
+                                        text: '',
+                                        listText: buildSupPendingText(idx, cues.length),
+                                        imageRawData: cue.imageRawData,
+                                        __ocrResolved: false,
+                                    };
+                                });
+
+                                let cachedCount = 0;
+                                for (let i = 0; i < tempSubtitles.length; i++) {
+                                    if (tempSubtitles[i].__ocrSkip === true) {
+                                        cachedCount++;
+                                    }
+                                }
+
+                                if (cachedCount > 0) {
+                                    if (cachedCount >= tempSubtitles.length) {
+                                        showFloatingToast('字幕结果已全部从缓存恢复', 'success');
+                                    } else {
+                                        showFloatingToast('已恢复 ' + cachedCount + '/' + tempSubtitles.length + ' 条缓存，继续补全 OCR', 'info', 3200);
+                                    }
+                                } else {
+                                    showFloatingToast('开始转换 SUP 字幕，请稍候', 'info');
+                                }
+
+                                svpSupLog('loadSupFromSup prepared subtitles list', { runId: runId, total: tempSubtitles.length, cachedCount: cachedCount });
+
+                                await loadSupSubtitlesImpl();
+
+                                // Persist progress immediately so partial runs can resume next time.
+                                let persistTimer = null;
+                                let persistInFlight = false;
+                                let persistRequested = false;
+
+                                function persistCacheEntry(force) {
+                                    if (force === true) {
+                                        persistRequested = false;
+                                        schedulePersist(0);
+                                        return;
+                                    }
+                                    persistRequested = true;
+                                    schedulePersist(400);
+                                }
+
+                                function schedulePersist(delayMs) {
+                                    if (persistTimer) {
+                                        clearTimeout(persistTimer);
+                                    }
+                                    persistTimer = setTimeout(function () {
+                                        persistTimer = null;
+                                        if (persistInFlight) {
+                                            persistRequested = true;
+                                            schedulePersist(250);
+                                            return;
+                                        }
+                                        if (!persistRequested && delayMs !== 0) {
+                                            return;
+                                        }
+                                        persistInFlight = true;
+                                        persistRequested = false;
+                                        window.SupOcrCache.put(cacheEntry).catch(function (err) {
+                                            console.warn('SUP OCR cache save failed:', err);
+                                        }).finally(function () {
+                                            persistInFlight = false;
+                                            if (persistRequested) {
+                                                schedulePersist(250);
+                                            }
+                                        });
+                                        svpSupLog('loadSupFromSup persist cache', { runId: runId, status: cacheEntry.status, doneCount: cacheEntry.doneCount, total: cacheEntry.cues.length });
+                                    }, delayMs);
+                                }
+
+                                // Ensure doneCount is accurate.
+                                let doneCount = 0;
+                                let resolvedCount = 0;
+                                let failedCount = 0;
+                                for (let i = 0; i < cacheEntry.cues.length; i++) {
+                                    if (cacheEntry.cues[i] && cacheEntry.cues[i].text) {
+                                        doneCount++;
+                                        resolvedCount++;
+                                    }
+                                }
+
+                                setTimeout(async function () {
+                                    const waitResult = await waitForVideoReadyForOcr(15000);
+                                    svpSupLog('loadSupFromSup video ready gate', { runId: runId, waitResult: waitResult });
+                                    if (waitResult.reason !== 'already-ready') {
+                                        showFloatingToast('视频已准备，开始 OCR 初始化', 'info', 2200);
+                                    }
+
+                                    var pendingDomUpdates = [];
+                                    var domFlushScheduled = false;
+                                    var ocrFinalized = false;
+
+                                    function scheduleDomFlush(force) {
+                                        if (force === true) {
+                                            flushSupSubtitleDomBatch(pendingDomUpdates, pendingDomUpdates.length || 1);
+                                            domFlushScheduled = false;
+                                            return;
+                                        }
+                                        if (domFlushScheduled) {
+                                            return;
+                                        }
+                                        domFlushScheduled = true;
+                                        yieldToMainThread(16).then(function () {
+                                            domFlushScheduled = false;
+                                            flushSupSubtitleDomBatch(pendingDomUpdates, 100);
+                                            if (pendingDomUpdates.length > 0) {
+                                                scheduleDomFlush(false);
+                                            }
+                                        });
+                                    }
+
+                                    function finalizeSupOcrRun() {
+                                        if (ocrFinalized) {
+                                            return;
+                                        }
+                                        ocrFinalized = true;
+                                        scheduleDomFlush(true);
+                                        persistCacheEntry(true);
+                                        if (failedCount > 0) {
+                                            showFloatingToast('SUP OCR 已完成，仍有 ' + failedCount + ' 条未识别；刷新页面可重试', 'warning', 4200);
+                                            svpSupLog('loadSupFromSup OCR complete with unresolved items', { runId: runId, total: cacheEntry.cues.length, doneCount: doneCount, resolvedCount: resolvedCount, failedCount: failedCount });
+                                        } else {
+                                            showFloatingToast('SUP OCR 已完成并写入缓存', 'success');
+                                            svpSupLog('loadSupFromSup OCR complete', { runId: runId, total: cacheEntry.cues.length });
+                                        }
+                                    }
+
+                                    window.PaddleSubtitleOcr.recognizeSupItems(tempSubtitles, ({ index, text, recognized, attemptsUsed }) => {
+                                        const subtitleItem = tempSubtitles[index];
+                                        if (!subtitleItem) {
+                                            return;
+                                        }
+
+                                        const isRecognized = recognized !== false && !!text;
+                                        const wasResolved = subtitleItem.__ocrResolved === true;
+                                        const prev = cacheEntry.cues[index] ? String(cacheEntry.cues[index].text || '') : '';
+
+                                        if (!wasResolved) {
+                                            resolvedCount++;
+                                        }
+
+                                        if (isRecognized) {
+                                            if (!prev) {
+                                                doneCount++;
+                                            }
+                                            cacheEntry.cues[index] = {
+                                                start: subtitleItem.start,
+                                                end: subtitleItem.end,
+                                                text: text,
+                                            };
+                                            subtitleItem.text = text;
+                                            subtitleItem.listText = text;
+                                            if (subtitles[index]) {
+                                                subtitles[index].text = text;
+                                            }
+                                            pendingDomUpdates.push({ index: index, text: text });
+                                        } else {
+                                            if (!wasResolved) {
+                                                failedCount++;
+                                            }
+                                            cacheEntry.cues[index] = {
+                                                start: subtitleItem.start,
+                                                end: subtitleItem.end,
+                                                text: '',
+                                            };
+                                            subtitleItem.text = '';
+                                            subtitleItem.listText = buildSupFailedText(index, cacheEntry.cues.length, attemptsUsed);
+                                            if (subtitles[index]) {
+                                                subtitles[index].text = '';
+                                            }
+                                            pendingDomUpdates.push({ index: index, text: subtitleItem.listText });
+                                        }
+
+                                        subtitleItem.__ocrResolved = true;
+                                        subtitleItem.__ocrSkip = true;
+                                        subtitleItem.imageRawData = null;
+
+                                        if (doneCount >= cacheEntry.cues.length) {
+                                            cacheEntry.status = 'complete';
+                                        } else {
+                                            cacheEntry.status = 'partial';
+                                        }
+                                        cacheEntry.doneCount = doneCount;
+                                        persistCacheEntry(false);
+                                        scheduleDomFlush(false);
+
+                                        if (resolvedCount >= cacheEntry.cues.length) {
+                                            finalizeSupOcrRun();
+                                        }
+                                    }).then(() => {
+                                        if (resolvedCount >= cacheEntry.cues.length) {
+                                            finalizeSupOcrRun();
+                                        } else {
+                                            scheduleDomFlush(true);
+                                            persistCacheEntry(true);
+                                            showFloatingToast('SUP OCR 本轮结束，仍有 ' + (cacheEntry.cues.length - resolvedCount) + ' 条未完成，刷新页面可重试', 'warning', 4200);
+                                            svpSupLog('loadSupFromSup OCR finished with unresolved pending items', { runId: runId, total: cacheEntry.cues.length, doneCount: doneCount, resolvedCount: resolvedCount, failedCount: failedCount });
+                                        }
+                                    }).catch(err => {
+                                        console.error('SUP OCR failed:', err);
+                                        cacheEntry.doneCount = doneCount;
+                                        scheduleDomFlush(true);
+                                        persistCacheEntry(true);
+                                        showFloatingToast('SUP OCR 中断，已保存当前进度', 'warning', 3200);
+                                        svpSupLog('loadSupFromSup OCR failed', { runId: runId, message: String(err && err.message ? err.message : err), stack: err && err.stack ? String(err.stack) : null });
+                                    });
+                                }, 0);
+
+                                resolve();
+                            } catch (err) {
+                                reject(err);
+                            }
+                        };
+                        reader.onerror = reject;
+                        reader.readAsArrayBuffer(file);
+                    }).catch(reject);
+                });
+            }
+
+            async function loadSupSubtitlesImpl() {
+                subtitles = [];
+                bindSupSubtitleClickHandler();
+
+                var subtitlesContainer = document.getElementById('subtitles');
+                var batchSize = 200;
+                for (let i = 0; i < tempSubtitles.length; i += batchSize) {
+                    var fragment = document.createDocumentFragment();
+                    var end = Math.min(i + batchSize, tempSubtitles.length);
+                    for (let j = i; j < end; j++) {
+                        subtitles.push({ start: tempSubtitles[j].start, end: tempSubtitles[j].end, text: tempSubtitles[j].text });
+                        var subtitleDiv = document.createElement('div');
+                        subtitleDiv.className = 'subtitle';
+                        subtitleDiv.setAttribute('data-index', String(j));
+                        subtitleDiv.textContent = tempSubtitles[j].listText || tempSubtitles[j].text || '';
+                        fragment.appendChild(subtitleDiv);
+                    }
+                    subtitlesContainer.appendChild(fragment);
+                    if (end < tempSubtitles.length) {
+                        await yieldToMainThread(16);
+                    }
+                }
+                $('#subtitles').css('width', window.innerWidth - $('#video-player').width() - $('#divider').width() + 'px');
             }
 
             function loadSubtitlesFromJSONImpl(triggeredFromSentenceLength = false) {
@@ -1627,7 +2232,8 @@
                                 file.toLowerCase().endsWith('.json') ||
                                 file.toLowerCase().endsWith('.srt') ||
                                 file.toLowerCase().endsWith('.ass') ||
-                                file.toLowerCase().endsWith('.html')
+                                file.toLowerCase().endsWith('.html') ||
+                                file.toLowerCase().endsWith('.sup')
                             ) {
                                 return `<label><input type="checkbox" name="file" value="${file}">${file}</label><br>`;
                             }
@@ -1639,12 +2245,21 @@
 
             document.getElementById('loadSelectedFiles').addEventListener('click', async function () {
                 srtLoaded = false
-                var selectedFiles = document.querySelectorAll('input[name="file"]:checked');
+                var selectedFiles = Array.from(document.querySelectorAll('input[name="file"]:checked')).sort(function (a, b) {
+                    var av = isVideoLikeName(a && a.value ? a.value : '');
+                    var bv = isVideoLikeName(b && b.value ? b.value : '');
+                    if (av === bv) {
+                        return 0;
+                    }
+                    return av ? -1 : 1;
+                });
+                svpSupLog('loadSelectedFiles ordered', { names: selectedFiles.map(function (f) { return f.value; }) });
                 for (let file of selectedFiles) {
                     var fileUrl = formatDufsBaseUrl(document.getElementById('dufsUrl').value) + file.value;
                     if (fileUrl.toLowerCase().endsWith('.mp4') || fileUrl.toLowerCase().endsWith('.webm')) {
                         document.getElementById('video').src = fileUrl;
                         document.title = file.value;
+                        setCurrentMovieCacheIdFromFile(null, fileUrl);
                         $('#videoFileName').text(file.value);
                     } else {
                         try {
@@ -1664,6 +2279,8 @@
                                 loadDiarizationInfo(blob);
                             } else if (fileUrl.toLowerCase().endsWith('.html')) {
                                 await loadSupFromHtml(blob);
+                            } else if (fileUrl.toLowerCase().endsWith('.sup')) {
+                                await loadSupFromSup(blob, fileUrl);
                             }
 
                         } catch (error) {

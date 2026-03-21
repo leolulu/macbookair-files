@@ -1,4 +1,6 @@
 *.txt
+!subtitle_video_player/assets/ocr/esearch/ch/ppocr_keys_v1.txt
+!subtitle_video_player/sup字幕使用方法.txt
 *.pkl
 *.log
 
