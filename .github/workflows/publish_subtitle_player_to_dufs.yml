@@ -5,7 +5,12 @@ on:
     branches:
       - master
     paths:
-      - 'subtitle_video_player/**'
+      - '.github/workflows/publish_subtitle_player_to_dufs.yml'
+      - 'subtitle_video_player/subtitle_video_player.html'
+      - 'subtitle_video_player/js/**'
+      - 'subtitle_video_player/assets/**'
+      - 'subtitle_video_player/package.json'
+      - 'subtitle_video_player/scripts/build_single-html.js'
   workflow_dispatch:
 
 jobs:
@@ -14,14 +19,30 @@ jobs:
 
     env:
       PLAYER_CODE_FOLDER_NAME: subtitle_video_player
-      HTML_FILE_NAME: subtitle_video_player.html
+      LOCAL_HTML_FILE_NAME: subtitle_video_player.single.html
+      REMOTE_HTML_FILE_NAME: single.html
       UPLOAD_FOLDER_NAME: subtitleVideoPlayer
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Build single-file subtitle player
+        run: |
+          cd ${{ env.PLAYER_CODE_FOLDER_NAME }}
+          pnpm run build:single-html
+
       - name: Publish to DUFS
         run: |
           cd ${{ env.PLAYER_CODE_FOLDER_NAME }}
-          curl -T ${{ env.HTML_FILE_NAME }} ${{ vars.DUFS_BASE_URL }}/${{ env.UPLOAD_FOLDER_NAME }}/${{ env.HTML_FILE_NAME }}
+          curl -T ${{ env.LOCAL_HTML_FILE_NAME }} ${{ vars.DUFS_BASE_URL }}/${{ env.UPLOAD_FOLDER_NAME }}/${{ env.REMOTE_HTML_FILE_NAME }}
