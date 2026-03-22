@@ -20,7 +20,7 @@ jobs:
     env:
       PLAYER_CODE_FOLDER_NAME: subtitle_video_player
       LOCAL_HTML_FILE_NAME: subtitle_video_player.single.html
-      REMOTE_HTML_FILE_NAME: single.html
+      REMOTE_HTML_FILE_NAME: subtitle_video_player.single.html
       UPLOAD_FOLDER_NAME: subtitleVideoPlayer
 
     steps:
