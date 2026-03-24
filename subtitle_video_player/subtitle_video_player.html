@@ -344,6 +344,11 @@
             font-weight: bold;
         }
 
+        #subtitleSyncStatus {
+            color: #8B5A2B;
+            font-size: 12px;
+        }
+
         #toastContainer {
             position: fixed;
             top: 16px;
@@ -485,6 +490,11 @@
                     <input type="checkbox" id="blurAllSub" />
                 </div>
                 <button id="cycleSubtitlesWidth">调整字幕区宽度</button>
+                <div class="inline-options-container">
+                    <button id="subtitleAdvance" title="将字幕时间轴提前0.1秒；字幕会比视频更早出现">超前0.1s</button>
+                    <button id="subtitleDelay" title="将字幕时间轴延后0.1秒；字幕会比视频更晚出现">滞后0.1s</button>
+                    <span id="subtitleSyncStatus" class="inline-block-element" title="显示当前字幕Offset；超前=字幕更早出现，滞后=字幕更晚出现">字幕Offset: 0.0s</span>
+                </div>
             </div>
             <div class="progress-container" id="progress-container">
                 <div class="progress-bar" id="progress-bar"></div>
@@ -874,6 +884,51 @@
             var currentMovieCacheId = 'no-movie';
             var toastTimers = {};
             var supRunSeq = 0;
+            var subtitleSyncOffset = 0;
+
+            function roundSubtitleSyncOffset(value) {
+                return Math.round(value * 10) / 10;
+            }
+
+            function getSubtitleTimelineTime(videoTime) {
+                return accTime(videoTime - subtitleSyncOffset);
+            }
+
+            function getShiftedSubtitleTime(subtitleTime) {
+                return accTime(Math.max(0, subtitleTime + subtitleSyncOffset));
+            }
+
+            function formatSubtitleSyncStatus() {
+                if (subtitleSyncOffset === 0) {
+                    return '字幕Offset: 0.0s';
+                }
+                if (subtitleSyncOffset < 0) {
+                    return '字幕Offset: 超前 ' + Math.abs(subtitleSyncOffset).toFixed(1) + 's';
+                }
+                return '字幕Offset: 滞后 ' + subtitleSyncOffset.toFixed(1) + 's';
+            }
+
+            function updateSubtitleSyncStatus() {
+                var status = document.getElementById('subtitleSyncStatus');
+                if (status) {
+                    status.textContent = formatSubtitleSyncStatus();
+                    status.title = '显示当前字幕Offset；超前=字幕更早出现，滞后=字幕更晚出现。当前：' + formatSubtitleSyncStatus();
+                }
+            }
+
+            function adjustSubtitleSyncOffset(delta) {
+                subtitleSyncOffset = roundSubtitleSyncOffset(subtitleSyncOffset + delta);
+                updateSubtitleSyncStatus();
+                if (subtitleSyncOffset === 0) {
+                    showFloatingToast('字幕同步已复位到 0.0s', 'success', 1800);
+                } else if (subtitleSyncOffset < 0) {
+                    showFloatingToast('字幕已超前 ' + Math.abs(subtitleSyncOffset).toFixed(1) + 's', 'info', 1800);
+                } else {
+                    showFloatingToast('字幕已滞后 ' + subtitleSyncOffset.toFixed(1) + 's', 'info', 1800);
+                }
+                updatePlayerState();
+                $('#video')[0].focus();
+            }
 
             function svpSupLog(event, details) {
                 try {
@@ -1000,7 +1055,7 @@
                         return;
                     }
                     playerState.skipCalibrationBySubClick = true;
-                    $('#video')[0].currentTime = subtitles[index].start;
+                    $('#video')[0].currentTime = getShiftedSubtitleTime(subtitles[index].start);
                     if ($('#clickToPlay').prop('checked')) {
                         $('#video')[0].play();
                     }
@@ -1525,7 +1580,7 @@
                             word_span.style.cursor = 'pointer';
                             word_span.onclick = function (event) {
                                 event.stopPropagation();
-                                video.currentTime = accTime(word.start);
+                                video.currentTime = getShiftedSubtitleTime(word.start);
                                 if ($('#clickToPlay').prop('checked')) {
                                     $('#video')[0].play();
                                 }
@@ -1560,7 +1615,7 @@
                         (function (currentI) {
                             span.onclick = function (event) {
                                 event.stopPropagation();
-                                video.currentTime = tempSubtitles[currentI].start;
+                                video.currentTime = getShiftedSubtitleTime(tempSubtitles[currentI].start);
                                 if ($('#clickToPlay').prop('checked')) {
                                     $('#video')[0].play();
                                 }
@@ -1587,7 +1642,7 @@
                 // Set up event listener for clicking on subtitles
                 $('.subtitle').click(function () {
                     var index = $(this).data('index');
-                    $('#video')[0].currentTime = subtitles[index].start;
+                    $('#video')[0].currentTime = getShiftedSubtitleTime(subtitles[index].start);
                     if ($('#clickToPlay').prop('checked')) {
                         $('#video')[0].play();
                     }
@@ -1827,7 +1882,7 @@
             var hideProgressBarTempTimer = null;
             // Set up event listener for video time updates
             function highlightSubtitle() {
-                var currentTime = accTime($('#video')[0].currentTime);
+                var currentTime = getSubtitleTimelineTime($('#video')[0].currentTime);
                 // 更新标题显示播放进度
                 var originalTitle = document.title.replace(/^\[\d+%\]\s*/, '');
                 var progress = Math.round(($('#video')[0].currentTime / ($('#video')[0].duration || 1)) * 100);
@@ -1959,6 +2014,7 @@
             };
 
             function checkIsDuringSubtitle(currentTime) {
+                currentTime = getSubtitleTimelineTime(currentTime);
                 const skipIntervalChecked = $('#enableSkipInterval').prop('checked');
                 const skipInterval = parseFloat(document.getElementById('skipInterval').value);
                 const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
@@ -2034,13 +2090,14 @@
                     const skipBlanks = $('#skipBlanks').prop('checked');
                     if (skipBlanks) {
                         const isDuringSubtitle = checkIsDuringSubtitle(currentTime);
+                        const subtitleTimelineTime = getSubtitleTimelineTime(currentTime);
 
                         if (!isDuringSubtitle) {
-                            const nextSubtitle = subtitles.find(sub => sub.start > currentTime);
+                            const nextSubtitle = subtitles.find(sub => sub.start > subtitleTimelineTime);
                             if (nextSubtitle) {
                                 const sentenceExtensionChecked = $('#enableSentenceExtension').prop('checked');
                                 const sentenceExtension = parseFloat(document.getElementById('sentenceExtension').value);
-                                const targetTime = sentenceExtensionChecked ? accTime(nextSubtitle.start - sentenceExtension) : nextSubtitle.start;
+                                const targetTime = sentenceExtensionChecked ? getShiftedSubtitleTime(nextSubtitle.start - sentenceExtension) : getShiftedSubtitleTime(nextSubtitle.start);
                                 const duration = targetTime - currentTime;
                                 const enableFFMode = $('#enableFFMode').prop('checked');
 
@@ -2152,7 +2209,7 @@
 
                     playerState.skipCalibrationBySubClick = true;
 
-                    $('#video')[0].currentTime = subtitles[index].start;
+                    $('#video')[0].currentTime = getShiftedSubtitleTime(subtitles[index].start);
                     if ($('#clickToPlay').prop('checked')) {
                         $('#video')[0].play();
                     }
@@ -2422,6 +2479,16 @@
             $('#video').on('ratechange', function () {
                 $('#videoPlaybackRate').text(`x${this.playbackRate.toFixed(1)}`);
             });
+
+            $('#subtitleAdvance').on('click', function () {
+                adjustSubtitleSyncOffset(-0.1);
+            });
+
+            $('#subtitleDelay').on('click', function () {
+                adjustSubtitleSyncOffset(0.1);
+            });
+
+            updateSubtitleSyncStatus();
 
             // 自定义键盘热键控制播放速度
             (function () {
