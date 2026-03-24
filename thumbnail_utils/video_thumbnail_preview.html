@@ -1349,8 +1349,26 @@
 
                     const { pageDuration } = this.getPageConfig();
                     const videoDuration = this.originalVideo.duration;
+                    const isLocalTabActive = document.getElementById('localTab')?.classList.contains('active');
+                    const hasMultipleFiles = isLocalTabActive && !this.currentVideoUrl && this.videoFiles.length > 1;
 
                     switch (e.key) {
+                        case 'PageUp':
+                            if (hasMultipleFiles) {
+                                e.preventDefault();
+                                if (this.currentVideoIndex > 0) {
+                                    this.switchToFile(this.currentVideoIndex - 1);
+                                }
+                            }
+                            break;
+                        case 'PageDown':
+                            if (hasMultipleFiles) {
+                                e.preventDefault();
+                                if (this.currentVideoIndex < this.videoFiles.length - 1) {
+                                    this.switchToFile(this.currentVideoIndex + 1);
+                                }
+                            }
+                            break;
                         case 'ArrowLeft':
                         case 'ArrowUp':
                             e.preventDefault();
