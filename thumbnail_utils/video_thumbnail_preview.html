@@ -1674,10 +1674,7 @@
                     cellDuration: 0,
                     videoFile: null
                 };
-                // 重置缩放和拖动状态
-                this.videoScale = 1;
-                this.videoTranslateX = 0;
-                this.videoTranslateY = 0;
+                this.resetTransformState();
             }
 
             calculatePages() {
@@ -1790,6 +1787,7 @@
                     // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
                     if (this.currentVideoUrl && !remoteOptimizationEnabled) {
                         // 远程视频且未启用优化：强制重绘
+                        this.resetGridState();
                         this.updatePreviewDebouncedWrapper();
                     } else if (this.gridState.isInitialized) {
                         // 本地视频或远程视频已启用优化：只调整时间点
@@ -2160,6 +2158,10 @@
             createGridElements() {
                 try {
                     const grid = document.getElementById('videoGrid');
+
+                    // 任何重建路径都应回到默认 transform，避免新节点与右侧控件状态不一致
+                    this.resetTransformState();
+
                     grid.innerHTML = '';
 
                     // 清理旧网格视频和事件，只保留 originalVideo (index=0)
@@ -2444,31 +2446,37 @@
                 });
             }
 
-            // 显示重置缩放和位置按钮
-            showResetTransformButton() {
-                const resetSection = document.getElementById('resetTransformSection');
-                if (resetSection) {
-                    resetSection.classList.remove('is-hidden');
-                }
-            }
-
-            // 重置视频缩放和位置
-            resetVideoTransform() {
-                // 重置缩放和拖动状态
+            // 重置 transform 状态并同步右侧控件
+            resetTransformState() {
                 this.videoScale = 1;
                 this.videoTranslateX = 0;
                 this.videoTranslateY = 0;
                 this.hasTransformed = false;
                 this.hasMoved = false;
+                this.isDragging = false;
 
-                // 应用重置后的变换
+                // 同步重置现有节点上的 transform，避免重建前出现 UI 与画面不一致
                 this.applyVideoTransformToAll();
+                this.syncTransformUI();
+            }
 
-                // 隐藏重置按钮
+            // 根据当前 transform 状态同步重置控件显示
+            syncTransformUI() {
                 const resetSection = document.getElementById('resetTransformSection');
                 if (resetSection) {
-                    resetSection.classList.add('is-hidden');
+                    resetSection.classList.toggle('is-hidden', !this.hasTransformed);
                 }
+            }
+
+            // 显示重置缩放和位置按钮
+            showResetTransformButton() {
+                this.hasTransformed = true;
+                this.syncTransformUI();
+            }
+
+            // 重置视频缩放和位置
+            resetVideoTransform() {
+                this.resetTransformState();
 
                 // 显示提示
                 this.showNotification('缩放和位置已重置', false);
