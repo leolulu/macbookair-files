@@ -496,6 +496,9 @@
                     <button id="subtitleDelay" title="将字幕时间轴延后0.1秒；字幕会比视频更晚出现">滞后0.1s</button>
                     <span id="subtitleSyncStatus" class="inline-block-element" title="显示当前字幕Offset；超前=字幕更早出现，滞后=字幕更晚出现">字幕Offset: 0.0s</span>
                 </div>
+                <div class="inline-block-element">
+                    <button id="refreshCurrentSubtitle" type="button" disabled title="仅在当前已加载本地 SRT 时可用">刷新当前字幕</button>
+                </div>
             </div>
             <div class="progress-container" id="progress-container">
                 <div class="progress-bar" id="progress-bar"></div>
@@ -886,6 +889,128 @@
             var toastTimers = {};
             var supRunSeq = 0;
             var subtitleSyncOffset = 0;
+            var currentSubtitleKind = 'none';
+            var currentSubtitleFileName = '';
+            var currentSrtRefreshHandle = null;
+            var isRefreshingCurrentSubtitle = false;
+
+            function getSubtitleDisplayName(fileLike, fallbackName) {
+                if (fileLike && typeof fileLike.name === 'string' && fileLike.name) {
+                    return fileLike.name;
+                }
+                if (typeof fallbackName === 'string' && fallbackName) {
+                    return fallbackName;
+                }
+                return '';
+            }
+
+            function isRefreshableLocalSrtLoaded() {
+                return currentSubtitleKind === 'local-srt';
+            }
+
+            function updateRefreshCurrentSubtitleButtonState() {
+                var button = document.getElementById('refreshCurrentSubtitle');
+                if (!button) {
+                    return;
+                }
+
+                var hasRefreshableLocalSrt = isRefreshableLocalSrtLoaded();
+                button.disabled = !hasRefreshableLocalSrt || isRefreshingCurrentSubtitle;
+                button.textContent = isRefreshingCurrentSubtitle ? '刷新中...' : '刷新当前字幕';
+
+                if (!hasRefreshableLocalSrt) {
+                    button.title = '仅在当前已加载本地 SRT 时可用';
+                } else if (currentSrtRefreshHandle) {
+                    button.title = '重新读取磁盘上的当前 SRT 文件';
+                } else {
+                    button.title = '首次刷新需要重新选择一次当前 SRT 文件';
+                }
+            }
+
+            function setCurrentSubtitleContext(kind, fileLike, options) {
+                options = options || {};
+                currentSubtitleKind = kind || 'none';
+                currentSubtitleFileName = getSubtitleDisplayName(fileLike, options.fallbackName);
+
+                if (currentSubtitleKind !== 'local-srt' || options.keepRefreshHandle !== true) {
+                    currentSrtRefreshHandle = null;
+                }
+
+                updateRefreshCurrentSubtitleButtonState();
+            }
+
+            async function bindCurrentSrtRefreshHandle() {
+                if (!window.isSecureContext || typeof window.showOpenFilePicker !== 'function') {
+                    throw new Error('当前环境不支持刷新当前字幕');
+                }
+
+                var handles = await window.showOpenFilePicker({
+                    id: 'subtitle-video-player-refresh-srt',
+                    multiple: false,
+                    excludeAcceptAllOption: true,
+                    types: [{
+                        description: 'SRT 字幕',
+                        accept: {
+                            'text/plain': ['.srt']
+                        }
+                    }]
+                });
+
+                if (!handles || handles.length === 0) {
+                    return null;
+                }
+
+                return handles[0];
+            }
+
+            async function refreshCurrentSubtitle() {
+                if (!isRefreshableLocalSrtLoaded() || isRefreshingCurrentSubtitle) {
+                    return;
+                }
+
+                isRefreshingCurrentSubtitle = true;
+                updateRefreshCurrentSubtitleButtonState();
+
+                try {
+                    var isFirstBind = currentSrtRefreshHandle === null;
+                    var handle = currentSrtRefreshHandle;
+
+                    if (!handle) {
+                        handle = await bindCurrentSrtRefreshHandle();
+                        if (!handle) {
+                            return;
+                        }
+                        currentSrtRefreshHandle = handle;
+                    }
+
+                    var file = await handle.getFile();
+                    var fileName = getSubtitleDisplayName(file, currentSubtitleFileName);
+
+                    if (!fileName || !fileName.toLowerCase().endsWith('.srt')) {
+                        currentSrtRefreshHandle = null;
+                        showFloatingToast('请选择 SRT 字幕文件', 'error', 2200);
+                        return;
+                    }
+
+                    srtLoaded = true;
+                    await loadSubtitles(file);
+                    setCurrentSubtitleContext('local-srt', file, { keepRefreshHandle: true });
+                    showFloatingToast(isFirstBind ? '已绑定并刷新当前字幕' : '已刷新当前字幕', 'success', 1800);
+                    $('#video')[0].focus();
+                } catch (error) {
+                    if (error && error.name === 'AbortError') {
+                        return;
+                    }
+
+                    currentSrtRefreshHandle = null;
+                    updateRefreshCurrentSubtitleButtonState();
+                    console.error('Refresh current subtitle failed:', error);
+                    showFloatingToast('刷新失败，请重新选择当前 SRT', 'error', 2600);
+                } finally {
+                    isRefreshingCurrentSubtitle = false;
+                    updateRefreshCurrentSubtitleButtonState();
+                }
+            }
 
             function roundSubtitleSyncOffset(value) {
                 return Math.round(value * 10) / 10;
@@ -1169,18 +1294,23 @@
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.ass')) {
                         srtLoaded = true
                         await loadSubtitles(orderedFiles[i], formatIsAss = true);
+                        setCurrentSubtitleContext('ass', orderedFiles[i]);
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.srt')) {
                         srtLoaded = true
                         await loadSubtitles(orderedFiles[i]);
+                        setCurrentSubtitleContext('local-srt', orderedFiles[i]);
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.json')) {
                         if (!srtLoaded) {
                             await loadSubtitlesFromJSON(orderedFiles[i]);
+                            setCurrentSubtitleContext('json', orderedFiles[i]);
                         }
                         loadDiarizationInfo(orderedFiles[i]);
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.html')) {
                         await loadSupFromHtml(orderedFiles[i])
+                        setCurrentSubtitleContext('sup-html', orderedFiles[i]);
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.sup')) {
                         await loadSupFromSup(orderedFiles[i], orderedFiles[i].name)
+                        setCurrentSubtitleContext('sup', orderedFiles[i]);
                     }
                 }
             }
@@ -2327,18 +2457,23 @@
                             if (fileUrl.toLowerCase().endsWith('.srt')) {
                                 srtLoaded = true;
                                 await loadSubtitles(blob);
+                                setCurrentSubtitleContext('remote-srt', blob, { fallbackName: file.value });
                             } else if (fileUrl.toLowerCase().endsWith('.ass')) {
                                 srtLoaded = true;
                                 await loadSubtitles(blob, formatIsAss = true);
+                                setCurrentSubtitleContext('ass', blob, { fallbackName: file.value });
                             } else if (fileUrl.toLowerCase().endsWith('.json')) {
                                 if (!srtLoaded) {
                                     await loadSubtitlesFromJSON(blob);
+                                    setCurrentSubtitleContext('json', blob, { fallbackName: file.value });
                                 }
                                 loadDiarizationInfo(blob);
                             } else if (fileUrl.toLowerCase().endsWith('.html')) {
                                 await loadSupFromHtml(blob);
+                                setCurrentSubtitleContext('sup-html', blob, { fallbackName: file.value });
                             } else if (fileUrl.toLowerCase().endsWith('.sup')) {
                                 await loadSupFromSup(blob, fileUrl);
+                                setCurrentSubtitleContext('sup', blob, { fallbackName: file.value });
                             }
 
                         } catch (error) {
@@ -2490,6 +2625,11 @@
             });
 
             updateSubtitleSyncStatus();
+            updateRefreshCurrentSubtitleButtonState();
+
+            $('#refreshCurrentSubtitle').on('click', function () {
+                refreshCurrentSubtitle();
+            });
 
             // 自定义键盘热键控制播放速度
             (function () {
