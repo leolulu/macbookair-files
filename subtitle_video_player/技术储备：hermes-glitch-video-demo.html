@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRT Video Texture Demo</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23030807'/%3E%3Cpath d='M6 10h20v12H6z' fill='none' stroke='%23ffff89' stroke-width='2'/%3E%3Cpath d='M10 26h12' stroke='%238dffbf' stroke-width='2'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #030807;
+      --panel: rgba(6, 20, 18, 0.78);
+      --ink: #f6e7be;
+      --dim: rgba(246, 231, 190, 0.58);
+      --acid: #ffff89;
+      --green: #8dffbf;
+      --red: #ff6a6a;
+      --line: rgba(246, 231, 190, 0.2);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 12% 12%, rgba(141, 255, 191, 0.10), transparent 22rem),
+        radial-gradient(circle at 86% 78%, rgba(255, 255, 137, 0.12), transparent 28rem),
+        linear-gradient(140deg, #010403, #061412 48%, #11070a);
+      color: var(--ink);
+      font-family: "Courier New", Consolas, ui-monospace, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      content: "";
+      background:
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.035) 0 1px, transparent 1px 4px),
+        radial-gradient(ellipse at center, transparent 54%, rgba(0,0,0,0.44));
+      mix-blend-mode: overlay;
+      opacity: 0.62;
+    }
+
+    body::after {
+      position: fixed;
+      inset: -18%;
+      z-index: 11;
+      pointer-events: none;
+      content: "";
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,0.09) 0 1px, transparent 1px),
+        radial-gradient(circle, rgba(255,255,255,0.05) 0 1px, transparent 1px);
+      background-position: 0 0, 17px 23px;
+      background-size: 4px 4px, 7px 7px;
+      opacity: 0.13;
+      animation: grain 640ms steps(2, end) infinite;
+    }
+
+    @keyframes grain {
+      0% { transform: translate3d(-1%, 1%, 0); }
+      25% { transform: translate3d(2%, -1%, 0); }
+      50% { transform: translate3d(1%, 2%, 0); }
+      75% { transform: translate3d(-2%, -1%, 0); }
+      100% { transform: translate3d(0, 1%, 0); }
+    }
+
+    main {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      padding: clamp(16px, 3.5vw, 48px);
+    }
+
+    .console {
+      width: min(1480px, 100%);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: 0 48px 140px rgba(0,0,0,0.52), inset 0 0 0 1px rgba(255,255,137,0.05);
+      backdrop-filter: blur(10px);
+    }
+
+    .topbar,
+    .bottombar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--line);
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .bottombar {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    .brand {
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+    }
+
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .live::before {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--red);
+      box-shadow: 0 0 16px var(--red);
+      content: "";
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      50% { opacity: 0.35; transform: scale(0.72); }
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(360px, 430px) minmax(520px, 1fr);
+      min-height: 680px;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      max-height: 680px;
+      overflow-y: auto;
+      padding: clamp(20px, 2.4vw, 34px);
+      border-right: 1px solid var(--line);
+      scrollbar-color: rgba(255,255,137,0.44) transparent;
+    }
+
+    h1 {
+      max-width: 12ch;
+      margin: 0;
+      color: #fff8dd;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(46px, 6vw, 88px);
+      font-weight: 900;
+      line-height: 0.88;
+      letter-spacing: -0.06em;
+      text-transform: none;
+    }
+
+    .note {
+      max-width: 48ch;
+      margin: 24px 0 0;
+      color: var(--dim);
+      font-size: 13px;
+      line-height: 1.85;
+      letter-spacing: 0.035em;
+      text-transform: none;
+    }
+
+    .chooser {
+      display: grid;
+      gap: 14px;
+    }
+
+    .file-label {
+      display: grid;
+      place-items: center;
+      min-height: 76px;
+      border: 1px dashed rgba(255,255,137,0.38);
+      background: rgba(255,255,137,0.04);
+      color: var(--acid);
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+
+    .file-label:hover {
+      border-color: var(--acid);
+      background: rgba(255,255,137,0.08);
+      transform: translateY(-1px);
+    }
+
+    input[type="file"] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .control-deck {
+      display: grid;
+      gap: 16px;
+    }
+
+    .control-section {
+      border: 1px solid rgba(246,231,190,0.14);
+      background: rgba(255,255,255,0.025);
+      padding: 14px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0 0 13px;
+      color: var(--acid);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+    }
+
+    .section-title::after {
+      width: 32%;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(255,255,137,0.42), transparent);
+      content: "";
+    }
+
+    .control-grid {
+      display: grid;
+      gap: 13px;
+    }
+
+    .control-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .control-row label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--dim);
+      font-size: 11px;
+    }
+
+    .control-name,
+    .switch-name {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      gap: 7px;
+    }
+
+    .tip {
+      position: relative;
+      display: inline-grid;
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid rgba(255,255,137,0.28);
+      border-radius: 999px;
+      background: rgba(255,255,137,0.045);
+      color: var(--acid);
+      cursor: help;
+      font: inherit;
+      font-size: 10px;
+      line-height: 1;
+      padding: 0;
+      text-transform: none;
+    }
+
+    .tip::before {
+      position: absolute;
+      top: 50%;
+      left: calc(100% + 5px);
+      z-index: 20;
+      width: 8px;
+      height: 8px;
+      background: rgba(4, 12, 10, 0.96);
+      border-bottom: 1px solid rgba(255,255,137,0.22);
+      border-left: 1px solid rgba(255,255,137,0.22);
+      content: "";
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-50%) rotate(45deg) scale(0.94);
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .tip::after {
+      position: absolute;
+      top: 50%;
+      left: calc(100% + 9px);
+      z-index: 21;
+      width: min(300px, 58vw);
+      border: 1px solid rgba(255,255,137,0.24);
+      background:
+        linear-gradient(180deg, rgba(255,255,137,0.055), transparent 52%),
+        rgba(4, 12, 10, 0.96);
+      box-shadow: 0 18px 42px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.025);
+      color: rgba(246, 231, 190, 0.88);
+      content: attr(data-tooltip);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      line-height: 1.68;
+      opacity: 0;
+      padding: 11px 12px;
+      pointer-events: none;
+      text-align: left;
+      text-transform: none;
+      transform: translateY(-50%) translateX(-3px);
+      transition: opacity 140ms ease, transform 140ms ease;
+      white-space: normal;
+    }
+
+    .tip:hover,
+    .tip:focus-visible {
+      border-color: var(--acid);
+      background: rgba(255,255,137,0.10);
+      outline: none;
+    }
+
+    .tip:hover::before,
+    .tip:hover::after,
+    .tip:focus-visible::before,
+    .tip:focus-visible::after {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
+
+    .tip:hover::before,
+    .tip:focus-visible::before {
+      transform: translateY(-50%) rotate(45deg) scale(1);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--acid);
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      color: var(--dim);
+      font-size: 11px;
+    }
+
+    .switch-row input {
+      accent-color: var(--acid);
+      transform: scale(1.1);
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .preset-button {
+      border: 1px solid rgba(255,255,137,0.24);
+      background: rgba(255,255,137,0.04);
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      padding: 10px 8px;
+      text-transform: uppercase;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .preset-button:hover {
+      border-color: var(--acid);
+      background: rgba(255,255,137,0.10);
+      transform: translateY(-1px);
+    }
+
+    .screen-wrap {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 680px;
+      overflow: hidden;
+      background: #020403;
+      cursor: crosshair;
+      isolation: isolate;
+    }
+
+    .tube {
+      position: relative;
+      width: min(94%, 850px);
+      aspect-ratio: 16 / 10;
+      overflow: hidden;
+      border: 1px solid rgba(246,231,190,0.24);
+      border-radius: 28px;
+      background: #000;
+      box-shadow:
+        inset 0 0 38px rgba(0,0,0,0.82),
+        inset 0 0 160px rgba(141,255,191,0.08),
+        0 0 0 8px rgba(255,255,255,0.018),
+        0 28px 80px rgba(0,0,0,0.46);
+    }
+
+    video,
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #sourceVideo {
+      object-fit: cover;
+      opacity: 0.001;
+      pointer-events: none;
+    }
+
+    #crtCanvas {
+      display: block;
+      z-index: 1;
+    }
+
+    .tube::before {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      content: "";
+      background:
+        linear-gradient(90deg, rgba(255, 0, 0, 0.08), transparent 9%, transparent 91%, rgba(0, 180, 255, 0.09)),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.10) 0 1px, rgba(0,0,0,0.10) 1px 3px, transparent 3px 5px);
+      mix-blend-mode: soft-light;
+      opacity: 0.68;
+    }
+
+    .tube::after {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      content: "";
+      border-radius: inherit;
+      box-shadow:
+        inset 0 0 32px rgba(255,255,255,0.06),
+        inset 0 0 120px rgba(0,0,0,0.78);
+    }
+
+    .readout {
+      position: absolute;
+      top: 20px;
+      left: 22px;
+      z-index: 4;
+      color: rgba(255,255,137,0.74);
+      font-size: 11px;
+      line-height: 1.75;
+      text-shadow: 0 0 12px rgba(255,255,137,0.35);
+    }
+
+    .badge {
+      position: absolute;
+      right: 22px;
+      bottom: 18px;
+      z-index: 4;
+      color: var(--green);
+      font-size: 12px;
+      text-shadow: 0 0 14px rgba(141,255,191,0.45);
+    }
+
+    .drop-hint {
+      position: absolute;
+      right: 24px;
+      top: 22px;
+      color: rgba(246,231,190,0.34);
+      font-size: 11px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .controls { border-right: 0; border-bottom: 1px solid var(--line); }
+      .screen-wrap { min-height: 56vh; }
+      .topbar,
+      .bottombar { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="console" aria-label="CRT video WebGL demo">
+      <header class="topbar">
+        <span class="brand">CRT VIDEO LAB</span>
+        <span class="live" id="signalLabel">Generated Signal</span>
+      </header>
+
+      <div class="layout">
+        <aside class="controls">
+          <div>
+            <h1>Signal control deck.</h1>
+            <p class="note">
+              真实 video 每帧上传到 WebGL 纹理，最终画面完全由 shader 重绘。下面这些旋钮控制每一种失真、色散、扫描线、显像管曲率和交互响应。
+            </p>
+          </div>
+
+          <div class="chooser">
+            <label class="file-label" for="videoFile">Choose any local video</label>
+            <input id="videoFile" type="file" accept="video/*" />
+
+            <div class="control-deck curated" id="controlDeck">
+              <section class="control-section">
+                <h2 class="section-title">Presets</h2>
+                <div class="preset-grid">
+                  <button class="preset-button" type="button" data-preset="clean">Clean Tube</button>
+                  <button class="preset-button" type="button" data-preset="hermes">Hermes Pulse</button>
+                  <button class="preset-button" type="button" data-preset="damaged">Broken Signal</button>
+                </div>
+              </section>
+
+              <section class="control-section">
+                <h2 class="section-title">Signal Core</h2>
+                <div class="control-grid">
+                  <div class="control-row"><label><span class="control-name">Signal Instability <button class="tip" type="button" aria-label="Signal Instability 说明" data-tooltip="整体信号不稳定程度，也就是故障感总量。它会放大撕裂、色散、噪声、滚动和轻微闪烁；低值更干净，高值更像坏掉的模拟信号。">?</button></span><span data-value="intensity">0.82</span></label><input data-control="intensity" type="range" min="0" max="1.45" step="0.01" value="0.82" /></div>
+                  <div class="control-row"><label><span class="control-name">Horizontal Tearing <button class="tip" type="button" aria-label="Horizontal Tearing 说明" data-tooltip="横向撕裂强度。它会真实改变视频采样坐标的 X 方向，让局部画面像模拟电视信号断层一样被横向拖开。">?</button></span><span data-value="tear">0.95</span></label><input data-control="tear" type="range" min="0" max="1.85" step="0.01" value="0.95" /></div>
+                  <div class="control-row"><label><span class="control-name">RGB Separation <button class="tip" type="button" aria-label="RGB Separation 说明" data-tooltip="RGB 通道分离强度。红、绿、蓝会从略微不同的位置采样，数值越高，边缘和撕裂处的红蓝/青紫彩边越明显。">?</button></span><span data-value="chroma">1.00</span></label><input data-control="chroma" type="range" min="0" max="1.8" step="0.01" value="1" /></div>
+                </div>
+              </section>
+
+              <section class="control-section">
+                <h2 class="section-title">Display Texture</h2>
+                <div class="control-grid">
+                  <div class="control-row"><label><span class="control-name">Scanline Weight <button class="tip" type="button" aria-label="Scanline Weight 说明" data-tooltip="扫描线权重。它按屏幕行数调制亮度，让画面带有老式屏幕的横向纹理；低值更平滑，高值 CRT 感更重。">?</button></span><span data-value="scan">0.82</span></label><input data-control="scan" type="range" min="0" max="1.15" step="0.01" value="0.82" /></div>
+                  <div class="control-row"><label><span class="control-name">Warm Phosphor Tint <button class="tip" type="button" aria-label="Warm Phosphor Tint 说明" data-tooltip="磷光屏幕色偏。它把视频颜色轻微推向复古显示器的绿/暖荧光质感；建议低到中等，过高会像普通染色滤镜。">?</button></span><span data-value="tint">0.22</span></label><input data-control="tint" type="range" min="0" max="0.72" step="0.01" value="0.22" /></div>
+                </div>
+              </section>
+
+              <section class="control-section">
+                <h2 class="section-title">Interaction</h2>
+                <div class="control-grid">
+                  <div class="control-row"><label><span class="control-name">Cursor Pull <button class="tip" type="button" aria-label="Cursor Pull 说明" data-tooltip="鼠标对附近扫描线的拉力。以鼠标所在高度为中心形成影响带，数值越高，鼠标附近的信号越容易被拖拽和撕裂。">?</button></span><span data-value="mouseInfluence">1.00</span></label><input data-control="mouseInfluence" type="range" min="0" max="1.65" step="0.01" value="1" /></div>
+                  <div class="control-row"><label><span class="control-name">Motion Bite <button class="tip" type="button" aria-label="Motion Bite 说明" data-tooltip="鼠标移动速度的撕裂响应。数值越高，快速移动鼠标时越容易触发强烈的信号撕咬；低值则更稳定克制。">?</button></span><span data-value="velocityResponse">1.00</span></label><input data-control="velocityResponse" type="range" min="0" max="1.7" step="0.01" value="1" /></div>
+                  <div class="switch-row"><span class="switch-name">Freeze Interaction <button class="tip" type="button" aria-label="Freeze Interaction 说明" data-tooltip="冻结鼠标驱动的动态失真。它不会暂停视频或 shader，只会让 Cursor Pull 和 Motion Bite 相关的交互扰动逐渐停止。">?</button></span><input data-toggle="freeze" type="checkbox" /></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </aside>
+
+        <section class="screen-wrap" id="screenWrap">
+          <div class="drop-hint">Drop video here</div>
+          <div class="tube" id="tube">
+            <video id="sourceVideo" muted playsinline loop></video>
+            <canvas id="crtCanvas"></canvas>
+            <div class="readout" id="readout">BOOTING<br>SYNC --<br>VEL 0.00</div>
+            <div class="badge">LIVE TEXTURE</div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="bottombar">
+        <span>video → webgl texture → crt shader → canvas overlay</span>
+        <span>hover / move cursor over the tube for signal tearing</span>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const video = document.getElementById("sourceVideo");
+      const canvas = document.getElementById("crtCanvas");
+      const tube = document.getElementById("tube");
+      const screenWrap = document.getElementById("screenWrap");
+      const readout = document.getElementById("readout");
+      const signalLabel = document.getElementById("signalLabel");
+      const videoFile = document.getElementById("videoFile");
+      const controls = Object.fromEntries(
+        Array.from(document.querySelectorAll("[data-control]")).map((input) => [input.dataset.control, input])
+      );
+      const valueLabels = Object.fromEntries(
+        Array.from(document.querySelectorAll("[data-value]")).map((label) => [label.dataset.value, label])
+      );
+      const toggles = Object.fromEntries(
+        Array.from(document.querySelectorAll("[data-toggle]")).map((input) => [input.dataset.toggle, input])
+      );
+
+      const gl = canvas.getContext("webgl", {
+        alpha: false,
+        antialias: false,
+        preserveDrawingBuffer: true,
+      });
+
+      if (!gl) {
+        readout.textContent = "WEBGL UNAVAILABLE";
+        return;
+      }
+
+      const vertexSource = `
+        attribute vec2 aPosition;
+        varying vec2 vUv;
+
+        void main() {
+          vUv = vec2(aPosition.x * 0.5 + 0.5, 0.5 - aPosition.y * 0.5);
+          gl_Position = vec4(aPosition, 0.0, 1.0);
+        }
+      `;
+
+      const fragmentSource = `
+        precision highp float;
+
+        uniform sampler2D uVideo;
+        uniform vec2 uResolution;
+        uniform vec2 uVideoSize;
+        uniform vec2 uMouse;
+        uniform vec2 uVelocity;
+        uniform float uTime;
+        uniform float uIntensity;
+        uniform float uCurvature;
+        uniform float uChroma;
+        uniform float uHover;
+        uniform float uTear;
+        uniform float uRoll;
+        uniform float uJitter;
+        uniform float uSnow;
+        uniform float uFlicker;
+        uniform float uZoom;
+        uniform float uWarp;
+        uniform float uVignette;
+        uniform float uSaturation;
+        uniform float uContrast;
+        uniform float uBrightness;
+        uniform float uTint;
+        uniform float uGlow;
+        uniform float uScan;
+        uniform float uPhosphor;
+        uniform float uRolling;
+        uniform float uMouseInfluence;
+        uniform float uVelocityResponse;
+
+        varying vec2 vUv;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+            f.y
+          );
+        }
+
+        vec3 saturateColor(vec3 color, float amount) {
+          float gray = dot(color, vec3(0.299, 0.587, 0.114));
+          return mix(vec3(gray), color, amount);
+        }
+
+        vec2 coverUv(vec2 uv) {
+          float canvasAspect = uResolution.x / uResolution.y;
+          float videoAspect = uVideoSize.x / uVideoSize.y;
+          vec2 scale = canvasAspect > videoAspect
+            ? vec2(1.0, videoAspect / canvasAspect)
+            : vec2(canvasAspect / videoAspect, 1.0);
+          return ((uv - 0.5) * scale) / max(uZoom, 0.001) + 0.5;
+        }
+
+        vec2 curveUv(vec2 uv) {
+          vec2 centered = uv * 2.0 - 1.0;
+          float r2 = dot(centered, centered);
+          centered *= 1.0 + uCurvature * r2;
+          return centered * 0.5 + 0.5;
+        }
+
+        void main() {
+          vec2 screenUv = curveUv(vUv);
+          vec2 baseUv = coverUv(screenUv);
+
+          float speed = length(uVelocity) * uVelocityResponse;
+          vec2 direction = speed > 0.0001 ? normalize(uVelocity) : vec2(0.0);
+          direction *= smoothstep(0.0, 0.03, speed);
+
+          float mouseBand = exp(-abs(vUv.y - uMouse.y) * 8.5) * uMouseInfluence;
+          float globalStatic = noise(vec2(vUv.y * 42.0, floor(uTime * 18.0)));
+          float lineSeed = hash(vec2(floor(vUv.y * uResolution.y), floor(uTime * 8.0)));
+          float rollingWave = sin(vUv.y * 46.0 + uTime * 5.0) * 0.5 + 0.5;
+          float hoverPower = uHover * (0.24 + mouseBand * 0.76);
+          float damage = uIntensity * (0.10 + hoverPower + globalStatic * 0.08);
+
+          float tearGate = step(0.62, lineSeed) * smoothstep(0.08, 0.8, hoverPower + speed);
+          float tearX = direction.x * damage * mouseBand * 0.17 * uTear;
+          tearX += (lineSeed - 0.5) * damage * 0.045 * uJitter;
+          tearX += sin(vUv.y * 80.0 + uTime * 3.2) * damage * 0.004 * uJitter;
+
+          float verticalRoll = sin(vUv.y * 10.0 - uTime * 2.2) * damage * 0.012 * uRoll;
+          vec2 uv = baseUv;
+          uv.x += tearX + tearGate * direction.x * damage * 0.055 * uTear;
+          uv.y += direction.y * damage * mouseBand * 0.045 + verticalRoll;
+          uv += vec2(
+            noise(vUv * 7.0 + uTime * 0.18) - 0.5,
+            noise(vUv.yx * 8.0 - uTime * 0.16) - 0.5
+          ) * damage * uWarp * 0.034;
+
+          float chroma = uChroma * (0.0025 + abs(tearX) * 1.8 + tearGate * damage * 0.01);
+          float red = texture2D(uVideo, uv + vec2(chroma, chroma * 0.35)).r;
+          float green = texture2D(uVideo, uv).g;
+          float blue = texture2D(uVideo, uv - vec2(chroma, chroma * 0.35)).b;
+          vec3 color = vec3(red, green, blue);
+
+          float scan = mix(1.0, 0.82 + 0.18 * sin(vUv.y * uResolution.y * 3.14159265), uScan);
+          float phosphor = mix(1.0, 0.94 + 0.06 * sin(vUv.x * uResolution.x * 2.094 + mod(floor(vUv.y * uResolution.y), 3.0)), uPhosphor);
+          color *= scan * phosphor;
+
+          float snow = hash(vUv * uResolution + floor(uTime * 60.0));
+          color += vec3(snow) * damage * 0.12 * uSnow;
+          color += vec3(1.0, 0.92, 0.45) * tearGate * damage * 0.18;
+
+          color = mix(color, color * vec3(0.78, 1.08, 0.88), uTint);
+          color *= 1.02 + rollingWave * damage * 0.08 * uRolling;
+          color += max(color - 0.72, 0.0) * uGlow * 0.38;
+          color = saturateColor(color, uSaturation);
+          color = (color - 0.5) * uContrast + 0.5;
+          color *= uBrightness;
+          color *= 1.0 + (hash(vec2(floor(uTime * 18.0), 91.0)) - 0.5) * uFlicker * 0.16;
+
+          vec2 vignetteUv = vUv * 2.0 - 1.0;
+          float vignette = smoothstep(1.42, 0.22, dot(vignetteUv, vignetteUv));
+          color *= mix(1.0 - 0.74 * uVignette, 1.1, vignette);
+
+          float outside = step(0.0, screenUv.x) * step(screenUv.x, 1.0) * step(0.0, screenUv.y) * step(screenUv.y, 1.0);
+          color *= outside;
+
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `;
+
+      const compile = (type, source) => {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const message = gl.getShaderInfoLog(shader) || "Shader compile failed";
+          gl.deleteShader(shader);
+          throw new Error(message);
+        }
+        return shader;
+      };
+
+      const program = gl.createProgram();
+      gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
+      gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(program) || "Program link failed");
+      }
+      gl.useProgram(program);
+
+      const quad = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+      const position = gl.getAttribLocation(program, "aPosition");
+      gl.enableVertexAttribArray(position);
+      gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+      const uniforms = {
+        video: gl.getUniformLocation(program, "uVideo"),
+        resolution: gl.getUniformLocation(program, "uResolution"),
+        videoSize: gl.getUniformLocation(program, "uVideoSize"),
+        mouse: gl.getUniformLocation(program, "uMouse"),
+        velocity: gl.getUniformLocation(program, "uVelocity"),
+        time: gl.getUniformLocation(program, "uTime"),
+        intensity: gl.getUniformLocation(program, "uIntensity"),
+        curvature: gl.getUniformLocation(program, "uCurvature"),
+        chroma: gl.getUniformLocation(program, "uChroma"),
+        hover: gl.getUniformLocation(program, "uHover"),
+        tear: gl.getUniformLocation(program, "uTear"),
+        roll: gl.getUniformLocation(program, "uRoll"),
+        jitter: gl.getUniformLocation(program, "uJitter"),
+        snow: gl.getUniformLocation(program, "uSnow"),
+        flicker: gl.getUniformLocation(program, "uFlicker"),
+        zoom: gl.getUniformLocation(program, "uZoom"),
+        warp: gl.getUniformLocation(program, "uWarp"),
+        vignette: gl.getUniformLocation(program, "uVignette"),
+        saturation: gl.getUniformLocation(program, "uSaturation"),
+        contrast: gl.getUniformLocation(program, "uContrast"),
+        brightness: gl.getUniformLocation(program, "uBrightness"),
+        tint: gl.getUniformLocation(program, "uTint"),
+        glow: gl.getUniformLocation(program, "uGlow"),
+        scan: gl.getUniformLocation(program, "uScan"),
+        phosphor: gl.getUniformLocation(program, "uPhosphor"),
+        rolling: gl.getUniformLocation(program, "uRolling"),
+        mouseInfluence: gl.getUniformLocation(program, "uMouseInfluence"),
+        velocityResponse: gl.getUniformLocation(program, "uVelocityResponse"),
+      };
+
+      const texture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+      gl.uniform1i(uniforms.video, 0);
+
+      const state = {
+        mouseX: 0.5,
+        mouseY: 0.5,
+        prevX: 0.5,
+        prevY: 0.5,
+        velocityX: 0,
+        velocityY: 0,
+        hover: 0,
+        hoverTarget: 0,
+        objectUrl: "",
+      };
+
+      const resize = () => {
+        const rect = tube.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      };
+
+      new ResizeObserver(resize).observe(tube);
+      resize();
+
+      const updateMouse = (event) => {
+        const rect = tube.getBoundingClientRect();
+        state.mouseX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        state.mouseY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+      };
+
+      tube.addEventListener("pointerenter", () => { state.hoverTarget = 1; });
+      tube.addEventListener("pointerleave", () => { state.hoverTarget = 0; });
+      tube.addEventListener("pointermove", updateMouse);
+
+      const curatedDefaults = {
+        roll: 0.38,
+        jitter: 0.72,
+        snow: 0.28,
+        flicker: 0.18,
+        zoom: 1.0,
+        warp: 0.14,
+        vignette: 0.72,
+        saturation: 0.96,
+        contrast: 1.08,
+        brightness: 1.02,
+        glow: 0.16,
+        phosphor: 0.52,
+        rolling: 0.34,
+        hoverFade: 0.1,
+      };
+
+      const readControl = (name) => Number(controls[name]?.value ?? curatedDefaults[name] ?? 0);
+
+      const updateControlLabels = () => {
+        Object.entries(controls).forEach(([name, input]) => {
+          if (valueLabels[name]) {
+            valueLabels[name].textContent = Number(input.value).toFixed(2);
+          }
+        });
+      };
+
+      const presets = {
+        clean: {
+          intensity: 0.18, tear: 0.16, chroma: 0.18,
+          scan: 0.34, tint: 0.08,
+          mouseInfluence: 0.45, velocityResponse: 0.35,
+        },
+        hermes: {
+          intensity: 0.82, tear: 0.95, chroma: 1.0,
+          scan: 0.82, tint: 0.22,
+          mouseInfluence: 1.0, velocityResponse: 1.0,
+        },
+        damaged: {
+          intensity: 1.18, tear: 1.48, chroma: 1.42,
+          scan: 0.96, tint: 0.32,
+          mouseInfluence: 1.28, velocityResponse: 1.24,
+        },
+      };
+
+      document.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const preset = presets[button.dataset.preset];
+          if (!preset) return;
+          Object.entries(preset).forEach(([name, value]) => {
+            if (controls[name]) controls[name].value = String(value);
+          });
+          updateControlLabels();
+        });
+      });
+
+      Object.values(controls).forEach((input) => input.addEventListener("input", updateControlLabels));
+      updateControlLabels();
+
+      const createGeneratedSignal = () => {
+        const sourceCanvas = document.createElement("canvas");
+        sourceCanvas.width = 960;
+        sourceCanvas.height = 540;
+        const ctx = sourceCanvas.getContext("2d");
+        let frame = 0;
+
+        const draw = () => {
+          frame += 1;
+          const w = sourceCanvas.width;
+          const h = sourceCanvas.height;
+          const gradient = ctx.createLinearGradient(0, 0, w, h);
+          gradient.addColorStop(0, `hsl(${(frame * 0.7) % 360}, 80%, 42%)`);
+          gradient.addColorStop(0.45, "#081e1b");
+          gradient.addColorStop(1, `hsl(${(frame * 0.7 + 140) % 360}, 75%, 48%)`);
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, w, h);
+
+          ctx.save();
+          ctx.translate(w / 2, h / 2);
+          ctx.rotate(frame * 0.01);
+          for (let i = 0; i < 9; i += 1) {
+            ctx.strokeStyle = `hsla(${(frame * 2 + i * 38) % 360}, 90%, 72%, ${0.18 + i * 0.035})`;
+            ctx.lineWidth = 8 + i * 2;
+            ctx.strokeRect(-260 + i * 22, -150 + i * 14, 520 - i * 44, 300 - i * 28);
+          }
+          ctx.restore();
+
+          ctx.fillStyle = "rgba(255, 255, 137, 0.82)";
+          ctx.font = "700 56px Courier New";
+          ctx.fillText("NO INPUT / TEST SIGNAL", 54, 96);
+          ctx.font = "24px Courier New";
+          ctx.fillText("CHOOSE A LOCAL VIDEO TO REPLACE THIS STREAM", 56, 136);
+
+          for (let y = 0; y < h; y += 8) {
+            ctx.fillStyle = `rgba(255,255,255,${0.018 + Math.random() * 0.024})`;
+            ctx.fillRect(0, y, w, 1);
+          }
+
+          requestAnimationFrame(draw);
+        };
+
+        draw();
+        return sourceCanvas.captureStream(30);
+      };
+
+      const playVideo = async () => {
+        try {
+          await video.play();
+        } catch (error) {
+          signalLabel.textContent = "Click Screen To Start";
+        }
+      };
+
+      video.srcObject = createGeneratedSignal();
+      video.addEventListener("loadedmetadata", playVideo, { once: true });
+      tube.addEventListener("click", playVideo);
+
+      const loadFile = (file) => {
+        if (!file || !file.type.startsWith("video/")) return;
+        if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
+        state.objectUrl = URL.createObjectURL(file);
+        video.pause();
+        video.srcObject = null;
+        video.src = state.objectUrl;
+        video.muted = true;
+        video.loop = true;
+        signalLabel.textContent = file.name;
+        video.load();
+        video.addEventListener("loadedmetadata", playVideo, { once: true });
+      };
+
+      videoFile.addEventListener("change", (event) => loadFile(event.target.files[0]));
+
+      screenWrap.addEventListener("dragover", (event) => {
+        event.preventDefault();
+      });
+
+      screenWrap.addEventListener("drop", (event) => {
+        event.preventDefault();
+        loadFile(event.dataTransfer.files[0]);
+      });
+
+      const start = performance.now();
+
+      const render = () => {
+        requestAnimationFrame(render);
+
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          try {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+          } catch (error) {
+            readout.textContent = "VIDEO TEXTURE ERROR";
+          }
+        }
+
+        const interactionFrozen = Boolean(toggles.freeze?.checked);
+        const dx = interactionFrozen ? 0 : state.mouseX - state.prevX;
+        const dy = interactionFrozen ? 0 : state.mouseY - state.prevY;
+        state.velocityX += (dx * 9 - state.velocityX) * 0.12;
+        state.velocityY += (dy * 9 - state.velocityY) * 0.12;
+        state.prevX = state.mouseX;
+        state.prevY = state.mouseY;
+        state.hover += ((interactionFrozen ? 0 : state.hoverTarget) - state.hover) * readControl("hoverFade");
+
+        const videoWidth = video.videoWidth || 960;
+        const videoHeight = video.videoHeight || 540;
+        const speed = Math.sqrt(state.velocityX * state.velocityX + state.velocityY * state.velocityY);
+
+        gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
+        gl.uniform2f(uniforms.videoSize, videoWidth, videoHeight);
+        gl.uniform2f(uniforms.mouse, state.mouseX, state.mouseY);
+        gl.uniform2f(uniforms.velocity, state.velocityX, state.velocityY);
+        gl.uniform1f(uniforms.time, (performance.now() - start) / 1000);
+        gl.uniform1f(uniforms.intensity, readControl("intensity"));
+        gl.uniform1f(uniforms.curvature, readControl("curvature"));
+        gl.uniform1f(uniforms.chroma, readControl("chroma"));
+        gl.uniform1f(uniforms.hover, state.hover);
+        gl.uniform1f(uniforms.tear, readControl("tear"));
+        gl.uniform1f(uniforms.roll, readControl("roll"));
+        gl.uniform1f(uniforms.jitter, readControl("jitter"));
+        gl.uniform1f(uniforms.snow, readControl("snow"));
+        gl.uniform1f(uniforms.flicker, readControl("flicker"));
+        gl.uniform1f(uniforms.zoom, readControl("zoom"));
+        gl.uniform1f(uniforms.warp, readControl("warp"));
+        gl.uniform1f(uniforms.vignette, readControl("vignette"));
+        gl.uniform1f(uniforms.saturation, readControl("saturation"));
+        gl.uniform1f(uniforms.contrast, readControl("contrast"));
+        gl.uniform1f(uniforms.brightness, readControl("brightness"));
+        gl.uniform1f(uniforms.tint, readControl("tint"));
+        gl.uniform1f(uniforms.glow, readControl("glow"));
+        gl.uniform1f(uniforms.scan, readControl("scan"));
+        gl.uniform1f(uniforms.phosphor, readControl("phosphor"));
+        gl.uniform1f(uniforms.rolling, readControl("rolling"));
+        gl.uniform1f(uniforms.mouseInfluence, readControl("mouseInfluence"));
+        gl.uniform1f(uniforms.velocityResponse, readControl("velocityResponse"));
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        readout.innerHTML = `SRC ${videoWidth}x${videoHeight}<br>SYNC ${video.readyState >= 2 ? "LOCK" : "WAIT"}<br>VEL ${speed.toFixed(2)}`;
+      };
+
+      render();
+    })();
+  </script>
+</body>
+</html>
