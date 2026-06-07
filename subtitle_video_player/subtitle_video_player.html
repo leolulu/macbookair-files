@@ -3,6 +3,7 @@
 
 <head>
     <title>Video Player with Subtitles</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/vendor/jquery/jquery-ui-1.13.2.css">
     <style>
@@ -12,30 +13,61 @@
         }
 
         #container {
-            display: flex;
+            --divider-width: 4px;
+            --landscape-subtitles-width: 33%;
+            --portrait-subtitles-width: 60%;
+            display: grid;
             height: 100vh;
+            overflow: hidden;
+            width: 100vw;
         }
 
-        .container-layout-normal {
-            flex-direction: row;
+        #container.layout-landscape {
+            grid-template-rows: auto minmax(0, 1fr);
         }
 
-        .container-layout-reversed {
-            flex-direction: row-reverse;
+        #container.layout-landscape:not(.layout-reversed) {
+            grid-template-columns: minmax(0, calc(100% - var(--landscape-subtitles-width) - var(--divider-width))) var(--divider-width) minmax(0, var(--landscape-subtitles-width));
+            grid-template-areas:
+                "video divider subtitles"
+                "options divider subtitles";
+        }
+
+        #container.layout-landscape.layout-reversed {
+            grid-template-columns: minmax(0, var(--landscape-subtitles-width)) var(--divider-width) minmax(0, calc(100% - var(--landscape-subtitles-width) - var(--divider-width)));
+            grid-template-areas:
+                "subtitles divider video"
+                "subtitles divider options";
+        }
+
+        #container.layout-portrait {
+            grid-template-rows: auto minmax(220px, 1fr);
+            overflow-y: auto;
+        }
+
+        #container.layout-portrait:not(.layout-reversed) {
+            grid-template-columns: minmax(0, calc(100% - var(--portrait-subtitles-width) - var(--divider-width))) var(--divider-width) minmax(0, var(--portrait-subtitles-width));
+            grid-template-areas:
+                "video video video"
+                "options divider subtitles";
+        }
+
+        #container.layout-portrait.layout-reversed {
+            grid-template-columns: minmax(0, var(--portrait-subtitles-width)) var(--divider-width) minmax(0, calc(100% - var(--portrait-subtitles-width) - var(--divider-width)));
+            grid-template-areas:
+                "video video video"
+                "subtitles divider options";
         }
 
         #video-player {
-            width: 66%;
+            grid-area: video;
+            min-width: 0;
             overflow: auto;
             align-self: flex-start;
         }
 
-        .video-layout-normal {
-            margin-left: 0px;
-        }
-
-        .video-layout-reversed {
-            margin-left: -4px;
+        #container.layout-portrait #video-player {
+            overflow: visible;
         }
 
         #video {
@@ -43,17 +75,26 @@
             display: block;
         }
 
+        #container.layout-portrait #video {
+            height: auto !important;
+        }
+
         #divider {
+            grid-area: divider;
             cursor: col-resize;
             border-left: 1px solid #aaa;
-            width: 4px;
+            box-sizing: border-box;
+            width: var(--divider-width);
+            min-width: var(--divider-width);
             z-index: 2;
         }
 
         #subtitles {
-            width: 33%;
+            grid-area: subtitles;
+            min-height: 0;
+            min-width: 0;
             overflow: auto;
-            height: 99.9vh;
+            height: auto;
             border-bottom: 1px solid #e0e0e0;
             font-weight: 600;
         }
@@ -108,6 +149,37 @@
             justify-content: space-between;
             margin: 10px;
             font-weight: 800;
+        }
+
+        #video-meta-options-slot {
+            display: block;
+            width: 100%;
+        }
+
+        #video-meta-options-slot:empty {
+            display: none;
+        }
+
+        #video-meta-options-slot #videoFileNameContainer {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: row-reverse;
+            gap: 10px;
+            justify-content: space-between;
+            margin: 0 8px 4px 0 !important;
+            white-space: nowrap;
+            width: calc(100% - 8px);
+        }
+
+        #video-meta-options-slot #videoFileName {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #video-meta-options-slot #videoDurationInfo {
+            flex: 0 0 auto;
+            margin-right: 0;
         }
 
         .videoFileNameContainer-alternative-margin {
@@ -319,6 +391,13 @@
             white-space: nowrap;
         }
 
+        #options-pane {
+            grid-area: options;
+            min-height: 0;
+            min-width: 0;
+            overflow: auto;
+        }
+
         .warning-sign {
             position: relative;
             top: -2px;
@@ -396,7 +475,7 @@
 </head>
 
 <body>
-    <div id="container">
+    <div id="container" class="layout-landscape">
         <div id="video-player">
             <div class="video_container">
                 <video id="video" controls preload="auto" crossorigin="anonymous">
@@ -407,7 +486,10 @@
                 <div id="resizable-shade"></div>
             </div>
             <div id="horizontal-divider"></div>
+        </div>
+        <div id="options-pane">
             <div class="options-container">
+                <div id="video-meta-options-slot"></div>
                 <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html, .sup" multiple />
                 <span id="videoPlaybackRate" class="inline-block-element">x1.0</span>
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
@@ -448,6 +530,13 @@
                 <div class="inline-block-element">
                     <label for="hideControl">隐藏播放器控件</label>
                     <input type="checkbox" id="hideControl" />
+                </div>
+                <div class="inline-options-container">
+                    <span>布局方向:</span>
+                    <label for="layoutOrientationLandscape">横屏</label>
+                    <input type="radio" name="layoutOrientation" id="layoutOrientationLandscape" value="landscape" />
+                    <label for="layoutOrientationPortrait">竖屏</label>
+                    <input type="radio" name="layoutOrientation" id="layoutOrientationPortrait" value="portrait" />
                 </div>
                 <div class="inline-block-element">
                     <label for="toggleLayout">反转布局</label>
@@ -506,9 +595,11 @@
                 <div class="progress-bar-shade" id="progress-bar-shade"></div>
             </div>
             <!-- 添加一个元素用来显示视频文件名 -->
-            <div id="videoFileNameContainer">
-                <span id="videoFileName" title="点击拖动可以调整视频垂直位置"></span>
-                <span id="videoDurationInfo"></span>
+            <div id="video-meta-video-slot">
+                <div id="videoFileNameContainer">
+                    <span id="videoFileName" title="点击拖动可以调整视频垂直位置"></span>
+                    <span id="videoDurationInfo"></span>
+                </div>
             </div>
         </div>
         <div id="divider"></div>
@@ -726,18 +817,66 @@
         var isResizing = false;
         var isResizingVertically = false;
 
+        var layoutOrientation = 'landscape';
+
+        function inferInitialLayoutOrientation() {
+            return window.innerHeight > window.innerWidth * 1.05 ? 'portrait' : 'landscape';
+        }
+
+        function getLayoutContainer() {
+            return $('#container');
+        }
+
+        function isPortraitLayout() {
+            return layoutOrientation === 'portrait';
+        }
+
+        function setSubtitleAreaWidthPercent(percent) {
+            var safePercent = Math.max(20, Math.min(80, percent));
+            var variableName = isPortraitLayout() ? '--portrait-subtitles-width' : '--landscape-subtitles-width';
+            getLayoutContainer()[0].style.setProperty(variableName, safePercent + '%');
+        }
+
+        function placeVideoMeta() {
+            var meta = document.getElementById('videoFileNameContainer');
+            var target = document.getElementById(isPortraitLayout() ? 'video-meta-options-slot' : 'video-meta-video-slot');
+            if (meta && target && meta.parentElement !== target) {
+                target.appendChild(meta);
+            }
+        }
+
+        function refreshLayout() {
+            var container = getLayoutContainer();
+            var reversed = $('#toggleLayout').prop('checked');
+            container.toggleClass('layout-landscape', !isPortraitLayout());
+            container.toggleClass('layout-portrait', isPortraitLayout());
+            container.toggleClass('layout-reversed', reversed);
+            placeVideoMeta();
+
+            $('#layoutOrientationLandscape').prop('checked', !isPortraitLayout());
+            $('#layoutOrientationPortrait').prop('checked', isPortraitLayout());
+
+            $('#subtitles').css('width', '');
+            $('#video-player').css('width', '');
+        }
+
+        function setLayoutOrientation(orientation) {
+            layoutOrientation = orientation === 'portrait' ? 'portrait' : 'landscape';
+            refreshLayout();
+        }
+
         // 通过拖动水平分割线调整视频高度
         $(function () {
             var video = $('#video');
 
+            setLayoutOrientation(inferInitialLayoutOrientation());
+
+            $('input[name="layoutOrientation"]').change(function () {
+                setLayoutOrientation(this.value);
+            });
+
             $('#toggleLayout').change(function () {
-                if ($(this).is(':checked')) {
-                    $('#container').addClass('container-layout-reversed').removeClass('container-layout-normal');
-                    $('#video-player').addClass('video-layout-reversed').removeClass('video-layout-normal');
-                } else {
-                    $('#container').addClass('container-layout-normal').removeClass('container-layout-reversed');
-                    $('#video-player').addClass('video-layout-normal').removeClass('video-layout-reversed');
-                }
+                refreshLayout();
             });
 
             var needInitAudioCtx = true;
@@ -792,12 +931,13 @@
             var horizontalDivider = $('#horizontal-divider');
 
             horizontalDivider.on('mousedown', function (e) {
+                if (isPortraitLayout()) return;
                 e.preventDefault();
                 isResizingVertically = true;
             });
 
             $(document).on('mousemove', function (e) {
-                if (!isResizingVertically) return;
+                if (!isResizingVertically || isPortraitLayout()) return;
 
                 var y = e.clientY;
 
@@ -811,7 +951,6 @@
 
         // 通过拖动垂直分割线调整视频和字幕区域的水平比例
         $(function () {
-            var videoPlayer = $('#video-player');
             var subtitles = $('#subtitles');
             var divider = $('#divider');
 
@@ -824,17 +963,15 @@
                 if (!isResizing) return;
 
                 var x = e.clientX;
+                var subtitlesWidth;
 
                 if ($('#toggleLayout').prop('checked')) {
-                    var subtitlesWidth = x - subtitles.offset().left;
-                    var videoPlayerWidth = window.innerWidth - subtitlesWidth - divider.width();
+                    subtitlesWidth = x - subtitles.offset().left;
                 } else {
-                    var videoPlayerWidth = (x - videoPlayer.offset().left);
-                    var subtitlesWidth = window.innerWidth - videoPlayerWidth - divider.width();
+                    subtitlesWidth = window.innerWidth - x;
                 }
 
-                videoPlayer.css('width', videoPlayerWidth + 'px');
-                subtitles.css('width', subtitlesWidth + 'px');
+                setSubtitleAreaWidthPercent((subtitlesWidth / window.innerWidth) * 100);
             }).on('mouseup', function (e) {
                 isResizing = false;
             });
@@ -843,11 +980,13 @@
         $(function () {
             // 通过特定区域（视频名称）调整视频播放器的垂直位置
             $('#videoFileName').on('mousedown', function (e) {
+                if (isPortraitLayout()) return;
                 e.preventDefault();
                 $('#video-player').draggable({ axis: 'y' });
             });
 
             $('#videoFileName').on('mouseup', function (e) {
+                if (isPortraitLayout()) return;
                 e.preventDefault();
                 $('#video-player').draggable('destroy');
             });
@@ -1690,7 +1829,7 @@
                         await yieldToMainThread(16);
                     }
                 }
-                $('#subtitles').css('width', window.innerWidth - $('#video-player').width() - $('#divider').width() + 'px');
+                refreshLayout();
             }
 
             function loadSubtitlesFromJSONImpl(triggeredFromSentenceLength = false) {
@@ -1779,7 +1918,7 @@
                     }
                     $('#video')[0].focus();
                 });
-                $('#subtitles').css('width', window.innerWidth - $('#video-player').width() - $('#divider').width() + 'px');
+                refreshLayout();
             }
 
 
@@ -2346,7 +2485,7 @@
                     }
                     $('#video')[0].focus();
                 });
-                $('#subtitles').css('width', window.innerWidth - $('#video-player').width() - $('#divider').width() + 'px');
+                refreshLayout();
             }
 
             function loadSubtitles(file, formatIsAss = false) {
@@ -2591,15 +2730,8 @@
                 const cycleButton = $('#cycleSubtitlesWidth');
 
                 cycleButton.on('click', function () {
-                    const windowWidth = window.innerWidth;
-                    const dividerWidth = $('#divider').width();
-
                     const newSubtitlesWidthPercent = subtitlesWidthSequence[currentWidthIndex];
-                    const newSubtitlesWidthPx = (newSubtitlesWidthPercent / 100) * windowWidth;
-                    const newVideoPlayerWidthPx = windowWidth - newSubtitlesWidthPx - dividerWidth;
-
-                    $('#subtitles').css('width', newSubtitlesWidthPx + 'px');
-                    $('#video-player').css('width', newVideoPlayerWidthPx + 'px');
+                    setSubtitleAreaWidthPercent(newSubtitlesWidthPercent);
 
                     cycleButton.text(`当前宽度: ${subtitlesWidthSequence[currentWidthIndex]}%`);
 
