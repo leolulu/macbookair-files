@@ -839,7 +839,7 @@
 
         function placeVideoMeta() {
             var meta = document.getElementById('videoFileNameContainer');
-            var target = document.getElementById(isPortraitLayout() ? 'video-meta-options-slot' : 'video-meta-video-slot');
+            var target = document.getElementById('video-meta-video-slot');
             if (meta && target && meta.parentElement !== target) {
                 target.appendChild(meta);
             }
