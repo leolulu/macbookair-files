@@ -312,6 +312,189 @@
             margin-right: 20px;
         }
 
+        #fileListContainer {
+            min-width: min(760px, 90vw);
+        }
+
+        .dufs-tree-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .dufs-tree-toolbar button {
+            font-size: 13px;
+            padding: 3px 8px;
+        }
+
+        #dufsTreeStatus {
+            color: #555;
+            font-size: 13px;
+        }
+
+        #fileList {
+            max-height: calc(90vh - 115px);
+            overflow: auto;
+            padding-right: 8px;
+        }
+
+        .dufs-tree {
+            --dufs-tree-text: #24364f;
+            --dufs-tree-muted: #8aa0b8;
+            --dufs-tree-line: #dbe5f1;
+            --dufs-tree-hover: #f8fafc;
+            color: var(--dufs-tree-text);
+            font-size: 15px;
+        }
+
+        .dufs-tree,
+        .dufs-tree ul {
+            list-style: none;
+            margin: 0;
+            padding-left: 0;
+        }
+
+        .dufs-tree ul {
+            position: relative;
+            margin-left: 20px;
+            padding-left: 22px;
+        }
+
+        .dufs-tree ul::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 8px;
+            left: 7px;
+            border-left: 1px solid var(--dufs-tree-line);
+        }
+
+        .dufs-tree li.dufs-collapsed>ul {
+            display: none;
+        }
+
+        .dufs-tree-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 30px;
+            width: min(360px, 100%);
+            padding: 3px 8px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            line-height: 1.3;
+        }
+
+        .dufs-tree-row:hover {
+            background: var(--dufs-tree-hover);
+        }
+
+        .dufs-file-row {
+            min-height: 25px;
+            padding-top: 1px;
+            padding-bottom: 1px;
+        }
+
+        .dufs-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            min-width: 26px;
+            height: 26px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+            color: var(--dufs-tree-text);
+        }
+
+        .dufs-toggle:hover {
+            background: #eef3f8;
+        }
+
+        .dufs-toggle-placeholder {
+            width: 26px;
+            min-width: 26px;
+        }
+
+        .dufs-toggle svg,
+        .dufs-node-icon svg {
+            display: block;
+        }
+
+        .dufs-node-checkbox {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: #2563eb;
+        }
+
+        .dufs-node-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            min-width: 22px;
+            height: 22px;
+        }
+
+        .dufs-dir-icon {
+            color: #24364f;
+        }
+
+        .dufs-file-icon {
+            color: #64748b;
+        }
+
+        .dufs-file-icon-video {
+            color: #2563eb;
+        }
+
+        .dufs-file-icon-subtitle {
+            color: #10b981;
+        }
+
+        .dufs-file-icon-data {
+            color: #d97706;
+        }
+
+        .dufs-file-icon-page {
+            color: #7c3aed;
+        }
+
+        .dufs-file-icon-image {
+            color: #e11d48;
+        }
+
+        .dufs-node-name {
+            cursor: pointer;
+            user-select: none;
+            color: var(--dufs-tree-text);
+        }
+
+        .dufs-dir-name {
+            font-weight: 600;
+        }
+
+        .dufs-file-name {
+            font-family: inherit;
+            font-size: 15px;
+        }
+
+        .dufs-empty,
+        .dufs-error {
+            color: #666;
+            padding: 4px 5px 4px 31px;
+        }
+
+        .dufs-error {
+            color: #b00020;
+        }
+
         .progress-container {
             position: relative;
             width: 98%;
@@ -610,6 +793,13 @@
 
     <div id="modalOverlay" class="modal-overlay">
         <div id="fileListContainer" class="modal">
+            <div class="dufs-tree-toolbar">
+                <button id="expandDufsTree" type="button">全部展开</button>
+                <button id="collapseDufsTree" type="button">全部折叠</button>
+                <button id="checkDufsTree" type="button">全选</button>
+                <button id="uncheckDufsTree" type="button">全不选</button>
+                <span id="dufsTreeStatus"></span>
+            </div>
             <div id="fileList"></div>
             <button id="loadSelectedFiles">加载选中文件</button>
             <button id="closeFileList">关闭</button>
@@ -2538,7 +2728,480 @@
                 return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
             }
 
-            document.getElementById('fetchDufsFiles').addEventListener('click', function () {
+            var dufsTreeState = null;
+
+            function isDufsLoadableName(name) {
+                var lowerName = (name || '').toLowerCase();
+                return lowerName.endsWith('.mp4') ||
+                    lowerName.endsWith('.webm') ||
+                    lowerName.endsWith('.json') ||
+                    lowerName.endsWith('.srt') ||
+                    lowerName.endsWith('.ass') ||
+                    lowerName.endsWith('.html') ||
+                    lowerName.endsWith('.sup') ||
+                    isDufsImageName(lowerName);
+            }
+
+            function isDufsImageName(name) {
+                var lowerName = (name || '').toLowerCase();
+                return lowerName.endsWith('.jpg') ||
+                    lowerName.endsWith('.jpeg') ||
+                    lowerName.endsWith('.png') ||
+                    lowerName.endsWith('.webp') ||
+                    lowerName.endsWith('.gif') ||
+                    lowerName.endsWith('.bmp');
+            }
+
+            function isDufsDirectoryItem(item) {
+                return item && typeof item.path_type === 'string' && item.path_type.endsWith('Dir');
+            }
+
+            function getDufsDisplayName(path) {
+                var normalized = (path || '').replace(/\/+$/, '');
+                var parts = normalized.split('/');
+                return parts[parts.length - 1] || normalized || '主目录';
+            }
+
+            function decodeDufsSimpleName(name) {
+                var textarea = document.createElement('textarea');
+                textarea.innerHTML = name;
+                return textarea.value;
+            }
+
+            function normalizeDufsItemName(name) {
+                return (name || '').replace(/^\/+/, '').replace(/\/+$/, '');
+            }
+
+            function joinDufsRelativePath(parentPath, childName) {
+                var cleanParent = normalizeDufsItemName(parentPath);
+                var cleanChild = normalizeDufsItemName(childName);
+                if (!cleanParent) return cleanChild;
+                if (!cleanChild) return cleanParent;
+                return cleanParent + '/' + cleanChild;
+            }
+
+            function getDufsChildPath(parentPath, itemName) {
+                var cleanParent = normalizeDufsItemName(parentPath);
+                var cleanName = normalizeDufsItemName(itemName);
+                if (!cleanParent || cleanName.indexOf(cleanParent + '/') === 0) {
+                    return cleanName;
+                }
+                return joinDufsRelativePath(cleanParent, cleanName);
+            }
+
+            function encodeDufsRelativePath(relativePath) {
+                return normalizeDufsItemName(relativePath)
+                    .split('/')
+                    .filter(function (segment) { return segment !== ''; })
+                    .map(function (segment) { return encodeURIComponent(segment); })
+                    .join('/');
+            }
+
+            function getDufsDirectoryUrl(baseUrl, relativePath) {
+                var encodedPath = encodeDufsRelativePath(relativePath);
+                if (!encodedPath) return baseUrl;
+                return baseUrl + encodedPath + '/';
+            }
+
+            function getDufsFileUrl(baseUrl, relativePath) {
+                var encodedPath = encodeDufsRelativePath(relativePath);
+                return baseUrl + encodedPath;
+            }
+
+            function updateDufsTreeStatus(text) {
+                document.getElementById('dufsTreeStatus').textContent = text || '';
+            }
+
+            function countDufsFiles(node, checkedOnly) {
+                if (!node) return 0;
+                if (node.type === 'file') {
+                    return !checkedOnly || node.checked ? 1 : 0;
+                }
+                return (node.children || []).reduce(function (sum, child) {
+                    return sum + countDufsFiles(child, checkedOnly);
+                }, 0);
+            }
+
+            function refreshDufsNodeCheckState(node) {
+                if (!node || node.type !== 'dir') return;
+                var fileCount = 0;
+                var checkedCount = 0;
+                (node.children || []).forEach(function (child) {
+                    if (child.type === 'dir') refreshDufsNodeCheckState(child);
+                    fileCount += countDufsFiles(child, false);
+                    checkedCount += countDufsFiles(child, true);
+                });
+                node.checked = fileCount > 0 && checkedCount === fileCount;
+                node.indeterminate = checkedCount > 0 && checkedCount < fileCount;
+            }
+
+            function refreshDufsTreeCheckState() {
+                if (dufsTreeState && dufsTreeState.root) {
+                    refreshDufsNodeCheckState(dufsTreeState.root);
+                }
+            }
+
+            function setDufsNodeChecked(node, checked) {
+                if (!node) return;
+                if (node.type === 'file') {
+                    node.checked = checked;
+                    return;
+                }
+                (node.children || []).forEach(function (child) {
+                    setDufsNodeChecked(child, checked);
+                });
+                refreshDufsNodeCheckState(node);
+            }
+
+            function setDufsExpanded(node, expanded, keepRootOpen) {
+                if (!node || node.type !== 'dir') return;
+                if (!keepRootOpen || node.parent) {
+                    node.expanded = expanded;
+                }
+                (node.children || []).forEach(function (child) {
+                    setDufsExpanded(child, expanded, keepRootOpen);
+                });
+            }
+
+            function updateDufsTreeSelectionStatus() {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                var total = countDufsFiles(dufsTreeState.root, false);
+                var checked = countDufsFiles(dufsTreeState.root, true);
+                var errorText = dufsTreeState.errors > 0 ? '，' + dufsTreeState.errors + ' 个目录读取失败' : '';
+                updateDufsTreeStatus('共 ' + total + ' 个可加载文件，已选 ' + checked + errorText);
+            }
+
+            function sortDufsNodes(nodes) {
+                nodes.sort(function (a, b) {
+                    if (a.type !== b.type) {
+                        return a.type === 'dir' ? -1 : 1;
+                    }
+                    return a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true });
+                });
+                nodes.forEach(function (node) {
+                    if (node.type === 'dir') sortDufsNodes(node.children || []);
+                });
+            }
+
+            async function fetchDufsDirectoryEntries(baseUrl, relativePath) {
+                var dirUrl = getDufsDirectoryUrl(baseUrl, relativePath);
+                try {
+                    var response = await fetch(dirUrl + '?json');
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    var data = await response.json();
+                    if (data && Array.isArray(data.paths)) {
+                        return data.paths;
+                    }
+                    throw new Error('DUFS JSON 中没有 paths 字段');
+                } catch (jsonError) {
+                    var simpleResponse = await fetch(dirUrl + '?simple');
+                    if (!simpleResponse.ok) {
+                        throw jsonError;
+                    }
+                    var text = await simpleResponse.text();
+                    return text.split('\n')
+                        .map(function (line) { return line.trim(); })
+                        .filter(Boolean)
+                        .map(function (line) {
+                            var isDir = line.endsWith('/');
+                            return {
+                                path_type: isDir ? 'Dir' : 'File',
+                                name: decodeDufsSimpleName(line)
+                            };
+                        });
+                }
+            }
+
+            async function loadDufsDirectory(baseUrl, node, stats, depth) {
+                if (depth > 30) {
+                    node.error = '目录层级超过 30 层，已停止继续递归';
+                    stats.errors++;
+                    return;
+                }
+
+                updateDufsTreeStatus('正在扫描：' + (node.path || '主目录') + '（目录 ' + stats.dirs + '，文件 ' + stats.files + '）');
+                var entries;
+                try {
+                    entries = await fetchDufsDirectoryEntries(baseUrl, node.path);
+                } catch (error) {
+                    node.error = error && error.message ? error.message : '读取失败';
+                    stats.errors++;
+                    return;
+                }
+
+                for (var i = 0; i < entries.length; i++) {
+                    var entry = entries[i];
+                    var itemName = normalizeDufsItemName(entry.name);
+                    if (!itemName) continue;
+
+                    var childPath = getDufsChildPath(node.path, itemName);
+                    if (isDufsDirectoryItem(entry)) {
+                        var childDir = {
+                            type: 'dir',
+                            name: getDufsDisplayName(itemName),
+                            path: childPath,
+                            children: [],
+                            expanded: true,
+                            checked: false,
+                            indeterminate: false,
+                            parent: node
+                        };
+                        node.children.push(childDir);
+                        stats.dirs++;
+                        await loadDufsDirectory(baseUrl, childDir, stats, depth + 1);
+                    } else if (isDufsLoadableName(itemName)) {
+                        node.children.push({
+                            type: 'file',
+                            name: getDufsDisplayName(itemName),
+                            path: childPath,
+                            checked: false,
+                            parent: node
+                        });
+                        stats.files++;
+                    }
+                }
+            }
+
+            async function buildDufsTree(baseUrl) {
+                var root = {
+                    type: 'dir',
+                    name: getDufsDisplayName(baseUrl),
+                    path: '',
+                    children: [],
+                    expanded: true,
+                    checked: false,
+                    indeterminate: false,
+                    parent: null
+                };
+                var stats = { dirs: 1, files: 0, errors: 0 };
+                await loadDufsDirectory(baseUrl, root, stats, 0);
+                sortDufsNodes(root.children);
+                dufsTreeState = {
+                    baseUrl: baseUrl,
+                    root: root,
+                    errors: stats.errors
+                };
+                refreshDufsTreeCheckState();
+            }
+
+            function createDufsSvgIcon(markup) {
+                var holder = document.createElement('span');
+                holder.innerHTML = markup.trim();
+                return holder.firstElementChild;
+            }
+
+            function getDufsFileIconClass(name) {
+                var lowerName = (name || '').toLowerCase();
+                if (lowerName.endsWith('.mp4') || lowerName.endsWith('.webm')) {
+                    return 'dufs-file-icon-video';
+                }
+                if (lowerName.endsWith('.srt') || lowerName.endsWith('.ass') || lowerName.endsWith('.sup')) {
+                    return 'dufs-file-icon-subtitle';
+                }
+                if (lowerName.endsWith('.json')) {
+                    return 'dufs-file-icon-data';
+                }
+                if (lowerName.endsWith('.html')) {
+                    return 'dufs-file-icon-page';
+                }
+                if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png') || lowerName.endsWith('.webp') || lowerName.endsWith('.gif') || lowerName.endsWith('.bmp')) {
+                    return 'dufs-file-icon-image';
+                }
+                return '';
+            }
+
+            function getDufsFileIconMarkup(name) {
+                var lowerName = (name || '').toLowerCase();
+                if (lowerName.endsWith('.mp4') || lowerName.endsWith('.webm')) {
+                    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                        '<rect x="4" y="5" width="16" height="14" rx="2.2" stroke="currentColor" stroke-width="1.7"/>' +
+                        '<path d="m10 9 5 3-5 3V9Z" fill="currentColor"/>' +
+                        '</svg>';
+                }
+                if (lowerName.endsWith('.srt') || lowerName.endsWith('.ass') || lowerName.endsWith('.sup')) {
+                    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                        '<rect x="4" y="5" width="16" height="14" rx="2.2" stroke="currentColor" stroke-width="1.7"/>' +
+                        '<path d="M7.5 11h4.2M7.5 14.5h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+                        '</svg>';
+                }
+                if (lowerName.endsWith('.json')) {
+                    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                        '<path d="M8.6 8.4 6.4 12l2.2 3.6M15.4 8.4l2.2 3.6-2.2 3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
+                        '<path d="m13 7-2 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
+                        '</svg>';
+                }
+                if (lowerName.endsWith('.html')) {
+                    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                        '<path d="M6.75 3.75h7.1l3.4 3.55v12.95H6.75V3.75Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' +
+                        '<path d="M9 12.2h6M9 15.5h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+                        '</svg>';
+                }
+                if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png') || lowerName.endsWith('.webp') || lowerName.endsWith('.gif') || lowerName.endsWith('.bmp')) {
+                    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                        '<rect x="4" y="5" width="16" height="14" rx="2.2" stroke="currentColor" stroke-width="1.7"/>' +
+                        '<path d="m6.8 16 3.1-3.2 2.2 2.1 2.2-2.7 3 3.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>' +
+                        '<circle cx="15.8" cy="9.2" r="1.1" fill="currentColor"/>' +
+                        '</svg>';
+                }
+                return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                    '<path d="M6.75 3.75h7.1l3.4 3.55v12.95H6.75V3.75Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' +
+                    '<path d="M13.75 3.9v3.55h3.35" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>' +
+                    '</svg>';
+            }
+
+            function createDufsNodeIcon(node) {
+                var icon = document.createElement('span');
+                icon.className = 'dufs-node-icon ' + (node.type === 'dir' ? 'dufs-dir-icon' : 'dufs-file-icon ' + getDufsFileIconClass(node.name));
+                if (node.type === 'dir') {
+                    icon.appendChild(createDufsSvgIcon(
+                        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                        '<path d="M3.75 7.25c0-1.1.9-2 2-2h4.1l2 2h6.4c1.1 0 2 .9 2 2v7.5c0 1.1-.9 2-2 2H5.75c-1.1 0-2-.9-2-2v-9.5Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>' +
+                        '<path d="M3.9 10.2h16.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>' +
+                        '</svg>'
+                    ));
+                } else {
+                    icon.appendChild(createDufsSvgIcon(getDufsFileIconMarkup(node.name)));
+                }
+                return icon;
+            }
+
+            function createDufsToggleIcon(expanded) {
+                return createDufsSvgIcon(
+                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+                    (expanded
+                        ? '<path d="m6 15 6-6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
+                        : '<path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>') +
+                    '</svg>'
+                );
+            }
+
+            function renderDufsTreeNode(node) {
+                var li = document.createElement('li');
+                if (node.type === 'dir' && !node.expanded) {
+                    li.classList.add('dufs-collapsed');
+                }
+
+                var row = document.createElement('div');
+                row.className = 'dufs-tree-row ' + (node.type === 'dir' ? 'dufs-dir-row' : 'dufs-file-row');
+                li.appendChild(row);
+
+                if (node.type === 'dir') {
+                    var toggle = document.createElement('button');
+                    toggle.type = 'button';
+                    toggle.className = 'dufs-toggle';
+                    toggle.title = node.expanded ? '折叠' : '展开';
+                    toggle.appendChild(createDufsToggleIcon(node.expanded));
+                    toggle.addEventListener('click', function () {
+                        node.expanded = !node.expanded;
+                        renderDufsTree();
+                    });
+                    row.appendChild(toggle);
+                } else {
+                    var placeholder = document.createElement('span');
+                    placeholder.className = 'dufs-toggle-placeholder';
+                    row.appendChild(placeholder);
+                }
+
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'dufs-node-checkbox';
+                checkbox.checked = !!node.checked;
+                checkbox.indeterminate = !!node.indeterminate;
+                checkbox.disabled = node.type === 'dir' && countDufsFiles(node, false) === 0;
+                if (node.type === 'file') {
+                    checkbox.name = 'file';
+                    checkbox.value = node.path;
+                    checkbox.dataset.displayName = node.path;
+                }
+                checkbox.addEventListener('change', function () {
+                    setDufsNodeChecked(node, checkbox.checked);
+                    refreshDufsTreeCheckState();
+                    renderDufsTree();
+                });
+                row.appendChild(checkbox);
+                row.appendChild(createDufsNodeIcon(node));
+
+                var name = document.createElement('span');
+                name.className = 'dufs-node-name ' + (node.type === 'dir' ? 'dufs-dir-name' : 'dufs-file-name');
+                name.textContent = node.type === 'dir' ? node.name + '/' : node.name;
+                name.title = node.path || node.name;
+                name.addEventListener('click', function () {
+                    if (node.type === 'dir') {
+                        node.expanded = !node.expanded;
+                    } else {
+                        node.checked = !node.checked;
+                    }
+                    refreshDufsTreeCheckState();
+                    renderDufsTree();
+                });
+                row.appendChild(name);
+
+                if (node.type === 'dir') {
+                    var childList = document.createElement('ul');
+                    (node.children || []).forEach(function (child) {
+                        childList.appendChild(renderDufsTreeNode(child));
+                    });
+                    if (node.error) {
+                        var errorItem = document.createElement('li');
+                        errorItem.className = 'dufs-error';
+                        errorItem.textContent = '读取失败：' + node.error;
+                        childList.appendChild(errorItem);
+                    } else if (!node.children || node.children.length === 0) {
+                        var emptyItem = document.createElement('li');
+                        emptyItem.className = 'dufs-empty';
+                        emptyItem.textContent = '没有可加载文件';
+                        childList.appendChild(emptyItem);
+                    }
+                    li.appendChild(childList);
+                }
+
+                return li;
+            }
+
+            function renderDufsTree() {
+                var fileList = document.getElementById('fileList');
+                fileList.textContent = '';
+                if (!dufsTreeState || !dufsTreeState.root) {
+                    updateDufsTreeStatus('');
+                    return;
+                }
+                var tree = document.createElement('ul');
+                tree.className = 'dufs-tree';
+                tree.appendChild(renderDufsTreeNode(dufsTreeState.root));
+                fileList.appendChild(tree);
+                updateDufsTreeSelectionStatus();
+            }
+
+            document.getElementById('expandDufsTree').addEventListener('click', function () {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                setDufsExpanded(dufsTreeState.root, true, false);
+                renderDufsTree();
+            });
+
+            document.getElementById('collapseDufsTree').addEventListener('click', function () {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                setDufsExpanded(dufsTreeState.root, false, true);
+                dufsTreeState.root.expanded = true;
+                renderDufsTree();
+            });
+
+            document.getElementById('checkDufsTree').addEventListener('click', function () {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                setDufsNodeChecked(dufsTreeState.root, true);
+                refreshDufsTreeCheckState();
+                renderDufsTree();
+            });
+
+            document.getElementById('uncheckDufsTree').addEventListener('click', function () {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                setDufsNodeChecked(dufsTreeState.root, false);
+                refreshDufsTreeCheckState();
+                renderDufsTree();
+            });
+
+            document.getElementById('fetchDufsFiles').addEventListener('click', async function () {
                 var dufsUrlElem = document.getElementById('dufsUrl');
                 var dufsUrl = dufsUrlElem.value;
                 if (!dufsUrl) {
@@ -2548,26 +3211,19 @@
                     }, 500);
                     return
                 }
-                fetch(dufsUrl + '?simple')
-                    .then(response => response.text())
-                    .then(data => {
-                        var files = data.split('\n');
-                        var fileListHtml = files.map(file => {
-                            if (
-                                file.toLowerCase().endsWith('.mp4') ||
-                                file.toLowerCase().endsWith('.webm') ||
-                                file.toLowerCase().endsWith('.json') ||
-                                file.toLowerCase().endsWith('.srt') ||
-                                file.toLowerCase().endsWith('.ass') ||
-                                file.toLowerCase().endsWith('.html') ||
-                                file.toLowerCase().endsWith('.sup')
-                            ) {
-                                return `<label><input type="checkbox" name="file" value="${file}">${file}</label><br>`;
-                            }
-                        }).join('');
-                        document.getElementById('fileList').innerHTML = fileListHtml;
-                        document.getElementById('modalOverlay').style.display = 'block';
-                    });
+                var baseUrl = formatDufsBaseUrl(dufsUrl);
+                dufsTreeState = null;
+                document.getElementById('fileList').textContent = '正在递归读取 DUFS 目录...';
+                document.getElementById('modalOverlay').style.display = 'block';
+                updateDufsTreeStatus('准备扫描');
+                try {
+                    await buildDufsTree(baseUrl);
+                    renderDufsTree();
+                } catch (error) {
+                    console.error("DUFS tree fetch error: ", error);
+                    document.getElementById('fileList').textContent = '读取 DUFS 目录失败：' + (error && error.message ? error.message : error);
+                    updateDufsTreeStatus('读取失败');
+                }
             });
 
             document.getElementById('loadSelectedFiles').addEventListener('click', async function () {
@@ -2582,12 +3238,15 @@
                 });
                 svpSupLog('loadSelectedFiles ordered', { names: selectedFiles.map(function (f) { return f.value; }) });
                 for (let file of selectedFiles) {
-                    var fileUrl = formatDufsBaseUrl(document.getElementById('dufsUrl').value) + file.value;
+                    var fileName = file.value;
+                    var fileUrl = getDufsFileUrl(formatDufsBaseUrl(document.getElementById('dufsUrl').value), fileName);
                     if (fileUrl.toLowerCase().endsWith('.mp4') || fileUrl.toLowerCase().endsWith('.webm')) {
                         document.getElementById('video').src = fileUrl;
-                        document.title = file.value;
+                        document.title = fileName;
                         setCurrentMovieCacheIdFromFile(null, fileUrl);
-                        $('#videoFileName').text(file.value);
+                        $('#videoFileName').text(fileName);
+                    } else if (isDufsImageName(fileUrl)) {
+                        window.open(fileUrl, '_blank');
                     } else {
                         try {
                             let response = await fetch(fileUrl);
@@ -2596,23 +3255,23 @@
                             if (fileUrl.toLowerCase().endsWith('.srt')) {
                                 srtLoaded = true;
                                 await loadSubtitles(blob);
-                                setCurrentSubtitleContext('remote-srt', blob, { fallbackName: file.value });
+                                setCurrentSubtitleContext('remote-srt', blob, { fallbackName: fileName });
                             } else if (fileUrl.toLowerCase().endsWith('.ass')) {
                                 srtLoaded = true;
                                 await loadSubtitles(blob, formatIsAss = true);
-                                setCurrentSubtitleContext('ass', blob, { fallbackName: file.value });
+                                setCurrentSubtitleContext('ass', blob, { fallbackName: fileName });
                             } else if (fileUrl.toLowerCase().endsWith('.json')) {
                                 if (!srtLoaded) {
                                     await loadSubtitlesFromJSON(blob);
-                                    setCurrentSubtitleContext('json', blob, { fallbackName: file.value });
+                                    setCurrentSubtitleContext('json', blob, { fallbackName: fileName });
                                 }
                                 loadDiarizationInfo(blob);
                             } else if (fileUrl.toLowerCase().endsWith('.html')) {
                                 await loadSupFromHtml(blob);
-                                setCurrentSubtitleContext('sup-html', blob, { fallbackName: file.value });
+                                setCurrentSubtitleContext('sup-html', blob, { fallbackName: fileName });
                             } else if (fileUrl.toLowerCase().endsWith('.sup')) {
                                 await loadSupFromSup(blob, fileUrl);
-                                setCurrentSubtitleContext('sup', blob, { fallbackName: file.value });
+                                setCurrentSubtitleContext('sup', blob, { fallbackName: fileName });
                             }
 
                         } catch (error) {
