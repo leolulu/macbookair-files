@@ -2368,14 +2368,18 @@
                         }
                         // Check if active subtitle is in the viewport
                         var subtitlesBox = $('#subtitles');
-                        var scrollTop = subtitlesBox.scrollTop();
-                        var scrollBottom = scrollTop + subtitlesBox.height();
-                        var activeSubtitleTop = activeSubtitle.position().top + scrollTop;
-                        var activeSubtitleBottom = activeSubtitleTop + activeSubtitle.height();
+                        var subtitleBoxElement = subtitlesBox[0];
+                        var subtitleBoxRect = subtitleBoxElement.getBoundingClientRect();
+                        var activeSubtitleRect = activeSubtitle[0].getBoundingClientRect();
+                        var subtitleLineHeight = parseFloat(activeSubtitle.css('line-height')) || 28;
+                        var subtitleLineOffset = subtitleLineHeight + activeSubtitle.outerHeight() - activeSubtitle.height();
+                        var activeSubtitleTop = activeSubtitleRect.top - subtitleBoxRect.top;
+                        var activeSubtitleBottom = activeSubtitleRect.bottom - subtitleBoxRect.top;
+                        var visibleBottom = subtitlesBox.height() - subtitleLineOffset;
 
-                        if (activeSubtitleTop < scrollTop || activeSubtitleBottom > scrollBottom - 34) {
-                            // Scroll to active subtitle
-                            subtitlesBox.scrollTop(activeSubtitleTop - 33);
+                        if (activeSubtitleTop < 0 || activeSubtitleBottom > visibleBottom) {
+                            // Keep one subtitle line above the active line when auto-scrolling.
+                            subtitlesBox.scrollTop(subtitlesBox.scrollTop() + activeSubtitleTop - subtitleLineOffset);
                         }
                         found = true;
 
