@@ -2733,6 +2733,122 @@
             }
 
             var dufsTreeState = null;
+            var dufsTreeCache = {};
+            var dufsTreeInflight = {};
+            var dufsTreeRefreshSeq = 0;
+            var dufsTreeActiveBaseUrl = '';
+            var DUFS_DIRECTORY_FETCH_TIMEOUT_MS = 120000;
+
+            function createDufsTreeState(baseUrl, root, errors) {
+                return {
+                    baseUrl: baseUrl,
+                    root: root,
+                    errors: errors || 0,
+                    nodeElements: {}
+                };
+            }
+
+            function getDufsNodeKey(node) {
+                return node && node.path ? node.path : '__root__';
+            }
+
+            function getDufsCachedTree(baseUrl) {
+                return dufsTreeCache[baseUrl] || null;
+            }
+
+            function setDufsCachedTree(baseUrl, root, errors) {
+                dufsTreeCache[baseUrl] = {
+                    root: root,
+                    errors: errors || 0,
+                    updatedAt: Date.now()
+                };
+            }
+
+            function resetDufsTreeCheckedState(node) {
+                if (!node) return;
+                node.checked = false;
+                node.indeterminate = false;
+                (node.children || []).forEach(resetDufsTreeCheckedState);
+            }
+
+            function isDufsFileListModalVisible() {
+                var modal = document.getElementById('modalOverlay');
+                return modal && window.getComputedStyle(modal).display !== 'none';
+            }
+
+            function showDufsFileListModal(baseUrl) {
+                dufsTreeActiveBaseUrl = baseUrl;
+                document.getElementById('modalOverlay').style.display = 'block';
+            }
+
+            function hideDufsFileListModal() {
+                document.getElementById('modalOverlay').style.display = 'none';
+                dufsTreeActiveBaseUrl = '';
+                dufsTreeRefreshSeq++;
+            }
+
+            function cacheDufsTreeSnapshot(baseUrl, snapshot) {
+                if (!snapshot || !snapshot.root) return;
+                setDufsCachedTree(baseUrl, snapshot.root, snapshot.errors);
+                if (!isDufsFileListModalVisible() && dufsTreeState && dufsTreeState.baseUrl === baseUrl) {
+                    dufsTreeState = null;
+                }
+            }
+
+            function registerDufsNodeDom(node, dom) {
+                node.dom = dom;
+                if (!dufsTreeState || !dufsTreeState.nodeElements) return;
+                var key = getDufsNodeKey(node);
+                dom.row.dataset.dufsNodeKey = key;
+                dufsTreeState.nodeElements[key] = node;
+            }
+
+            function unregisterDufsNodeDom(node) {
+                if (!node) return;
+                (node.children || []).forEach(unregisterDufsNodeDom);
+                if (dufsTreeState && dufsTreeState.nodeElements) {
+                    delete dufsTreeState.nodeElements[getDufsNodeKey(node)];
+                }
+                if (node.dom && node.dom.li && node.dom.li.parentNode) {
+                    node.dom.li.parentNode.removeChild(node.dom.li);
+                }
+                node.dom = null;
+            }
+
+            function captureDufsScrollAnchor() {
+                var fileList = document.getElementById('fileList');
+                if (!fileList) return null;
+                var listRect = fileList.getBoundingClientRect();
+                var rows = fileList.querySelectorAll('.dufs-tree-row');
+                for (var i = 0; i < rows.length; i++) {
+                    var rowRect = rows[i].getBoundingClientRect();
+                    if (rowRect.bottom >= listRect.top) {
+                        return {
+                            key: rows[i].dataset.dufsNodeKey,
+                            offset: rowRect.top - listRect.top,
+                            scrollTop: fileList.scrollTop
+                        };
+                    }
+                }
+                return { scrollTop: fileList.scrollTop };
+            }
+
+            function restoreDufsScrollAnchor(anchor) {
+                var fileList = document.getElementById('fileList');
+                if (!fileList || !anchor) return;
+                if (anchor.key && dufsTreeState && dufsTreeState.nodeElements && dufsTreeState.nodeElements[anchor.key]) {
+                    var node = dufsTreeState.nodeElements[anchor.key];
+                    if (node.dom && node.dom.row) {
+                        var listRect = fileList.getBoundingClientRect();
+                        var rowRect = node.dom.row.getBoundingClientRect();
+                        fileList.scrollTop += rowRect.top - listRect.top - anchor.offset;
+                        return;
+                    }
+                }
+                if (typeof anchor.scrollTop === 'number') {
+                    fileList.scrollTop = anchor.scrollTop;
+                }
+            }
 
             function isDufsLoadableName(name) {
                 var lowerName = (name || '').toLowerCase();
@@ -2887,10 +3003,139 @@
                 });
             }
 
+            function findDufsInsertBefore(parentNode, node, siblings, index) {
+                for (var i = index + 1; i < siblings.length; i++) {
+                    if (siblings[i].dom && siblings[i].dom.li && siblings[i].dom.li.parentNode === parentNode) {
+                        return siblings[i].dom.li;
+                    }
+                }
+                return null;
+            }
+
+            function updateDufsTreeContainerClasses(node) {
+                if (!node || !node.dom || !node.dom.li) return;
+                if (node.type === 'dir' && !node.expanded) {
+                    node.dom.li.classList.add('dufs-collapsed');
+                } else {
+                    node.dom.li.classList.remove('dufs-collapsed');
+                }
+            }
+
+            function updateDufsTreeRowDom(node) {
+                if (!node || !node.dom) return;
+                var dom = node.dom;
+                updateDufsTreeContainerClasses(node);
+                dom.checkbox.checked = !!node.checked;
+                dom.checkbox.indeterminate = !!node.indeterminate;
+                dom.checkbox.disabled = node.type === 'dir' && countDufsFiles(node, false) === 0;
+                if (node.type === 'file') {
+                    dom.checkbox.value = node.path;
+                    dom.checkbox.dataset.displayName = node.path;
+                }
+                if (dom.name) {
+                    dom.name.textContent = node.type === 'dir' ? node.name + '/' : node.name;
+                    dom.name.title = node.path || node.name;
+                }
+                if (dom.icon) {
+                    var nextIcon = createDufsNodeIcon(node);
+                    dom.icon.replaceWith(nextIcon);
+                    dom.icon = nextIcon;
+                }
+                if (dom.toggle) {
+                    dom.toggle.title = node.expanded ? '折叠' : '展开';
+                    dom.toggle.textContent = '';
+                    dom.toggle.appendChild(createDufsToggleIcon(node.expanded));
+                }
+            }
+
+            function updateDufsEmptyState(node) {
+                if (!node || node.type !== 'dir' || !node.dom || !node.dom.childList) return;
+                if (node.dom.errorItem) {
+                    node.dom.errorItem.remove();
+                    node.dom.errorItem = null;
+                }
+                if (node.dom.emptyItem) {
+                    node.dom.emptyItem.remove();
+                    node.dom.emptyItem = null;
+                }
+                if (node.error) {
+                    var errorItem = document.createElement('li');
+                    errorItem.className = 'dufs-error';
+                    errorItem.textContent = '读取失败：' + node.error;
+                    node.dom.childList.appendChild(errorItem);
+                    node.dom.errorItem = errorItem;
+                } else if (!node.children || node.children.length === 0) {
+                    var emptyItem = document.createElement('li');
+                    emptyItem.className = 'dufs-empty';
+                    emptyItem.textContent = '没有可加载文件';
+                    node.dom.childList.appendChild(emptyItem);
+                    node.dom.emptyItem = emptyItem;
+                }
+            }
+
+            function syncDufsChildrenDom(node) {
+                if (!node || node.type !== 'dir' || !node.dom || !node.dom.childList) return;
+                if (node.dom.emptyItem) {
+                    node.dom.emptyItem.remove();
+                    node.dom.emptyItem = null;
+                }
+                if (node.dom.errorItem) {
+                    node.dom.errorItem.remove();
+                    node.dom.errorItem = null;
+                }
+                (node.children || []).forEach(function (child, index, siblings) {
+                    if (!child.dom) {
+                        var childDom = renderDufsTreeNode(child);
+                        node.dom.childList.insertBefore(childDom, findDufsInsertBefore(node.dom.childList, child, siblings, index));
+                    } else if (child.dom.li.parentNode !== node.dom.childList) {
+                        node.dom.childList.insertBefore(child.dom.li, findDufsInsertBefore(node.dom.childList, child, siblings, index));
+                    }
+                    updateDufsTreeRowDom(child);
+                    syncDufsChildrenDom(child);
+                });
+                updateDufsEmptyState(node);
+            }
+
+            function createDufsTimeoutError() {
+                var error = new Error('DUFS 请求超时（120 秒）');
+                error.name = 'DufsTimeoutError';
+                return error;
+            }
+
+            function isDufsTimeoutError(error) {
+                return error && error.name === 'DufsTimeoutError';
+            }
+
+            async function fetchDufsDirectoryResource(url) {
+                var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                var timedOut = false;
+                var timeoutId = null;
+                var timeoutPromise = new Promise(function (_, reject) {
+                    timeoutId = setTimeout(function () {
+                        timedOut = true;
+                        if (controller) {
+                            controller.abort();
+                        }
+                        reject(createDufsTimeoutError());
+                    }, DUFS_DIRECTORY_FETCH_TIMEOUT_MS);
+                });
+                try {
+                    var fetchOptions = controller ? { signal: controller.signal } : undefined;
+                    return await Promise.race([fetch(url, fetchOptions), timeoutPromise]);
+                } catch (error) {
+                    if (timedOut || error.name === 'AbortError') {
+                        throw createDufsTimeoutError();
+                    }
+                    throw error;
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+            }
+
             async function fetchDufsDirectoryEntries(baseUrl, relativePath) {
                 var dirUrl = getDufsDirectoryUrl(baseUrl, relativePath);
                 try {
-                    var response = await fetch(dirUrl + '?json');
+                    var response = await fetchDufsDirectoryResource(dirUrl + '?json');
                     if (!response.ok) {
                         throw new Error('HTTP ' + response.status);
                     }
@@ -2900,7 +3145,10 @@
                     }
                     throw new Error('DUFS JSON 中没有 paths 字段');
                 } catch (jsonError) {
-                    var simpleResponse = await fetch(dirUrl + '?simple');
+                    if (isDufsTimeoutError(jsonError)) {
+                        throw jsonError;
+                    }
+                    var simpleResponse = await fetchDufsDirectoryResource(dirUrl + '?simple');
                     if (!simpleResponse.ok) {
                         throw jsonError;
                     }
@@ -2925,7 +3173,9 @@
                     return;
                 }
 
-                updateDufsTreeStatus('正在扫描：' + (node.path || '主目录') + '（目录 ' + stats.dirs + '，文件 ' + stats.files + '）');
+                if (!stats.silent && stats.baseUrl === dufsTreeActiveBaseUrl && isDufsFileListModalVisible()) {
+                    updateDufsTreeStatus('正在扫描：' + (node.path || '主目录') + '（目录 ' + stats.dirs + '，文件 ' + stats.files + '）');
+                }
                 var entries;
                 try {
                     entries = await fetchDufsDirectoryEntries(baseUrl, node.path);
@@ -2968,7 +3218,8 @@
                 }
             }
 
-            async function buildDufsTree(baseUrl) {
+            async function buildDufsTree(baseUrl, options) {
+                options = options || {};
                 var root = {
                     type: 'dir',
                     name: getDufsDisplayName(baseUrl),
@@ -2979,15 +3230,103 @@
                     indeterminate: false,
                     parent: null
                 };
-                var stats = { dirs: 1, files: 0, errors: 0 };
+                var stats = { dirs: 1, files: 0, errors: 0, silent: !!options.silent, baseUrl: baseUrl };
                 await loadDufsDirectory(baseUrl, root, stats, 0);
                 sortDufsNodes(root.children);
-                dufsTreeState = {
-                    baseUrl: baseUrl,
+                return {
                     root: root,
                     errors: stats.errors
                 };
+            }
+
+            function fetchDufsTreeSnapshot(baseUrl, options) {
+                if (dufsTreeInflight[baseUrl]) {
+                    return dufsTreeInflight[baseUrl];
+                }
+                var request = buildDufsTree(baseUrl, options).then(function (snapshot) {
+                    if (snapshot && snapshot.root && snapshot.root.error) {
+                        throw new Error(snapshot.root.error);
+                    }
+                    cacheDufsTreeSnapshot(baseUrl, snapshot);
+                    return snapshot;
+                });
+                dufsTreeInflight[baseUrl] = request;
+                request.then(function () {
+                    if (dufsTreeInflight[baseUrl] === request) {
+                        delete dufsTreeInflight[baseUrl];
+                    }
+                }, function () {
+                    if (dufsTreeInflight[baseUrl] === request) {
+                        delete dufsTreeInflight[baseUrl];
+                    }
+                });
+                return request;
+            }
+
+            function mergeDufsNode(existing, incoming, parent) {
+                existing.type = incoming.type;
+                existing.name = incoming.name;
+                existing.path = incoming.path;
+                existing.error = incoming.error || null;
+                existing.parent = parent || null;
+                if (existing.type === 'file') {
+                    existing.children = [];
+                    return existing;
+                }
+
+                var existingByPath = {};
+                (existing.children || []).forEach(function (child) {
+                    existingByPath[getDufsNodeKey(child)] = child;
+                });
+
+                var mergedChildren = [];
+                (incoming.children || []).forEach(function (incomingChild) {
+                    var childKey = getDufsNodeKey(incomingChild);
+                    var existingChild = existingByPath[childKey];
+                    if (existingChild && existingChild.type === incomingChild.type) {
+                        mergeDufsNode(existingChild, incomingChild, existing);
+                        mergedChildren.push(existingChild);
+                        delete existingByPath[childKey];
+                    } else {
+                        if (existingChild) {
+                            unregisterDufsNodeDom(existingChild);
+                            delete existingByPath[childKey];
+                        }
+                        incomingChild.parent = existing;
+                        if (existing.checked) {
+                            setDufsNodeChecked(incomingChild, true);
+                        }
+                        mergedChildren.push(incomingChild);
+                    }
+                });
+
+                Object.keys(existingByPath).forEach(function (key) {
+                    unregisterDufsNodeDom(existingByPath[key]);
+                });
+                existing.children = mergedChildren;
+                sortDufsNodes(existing.children);
+                return existing;
+            }
+
+            function applyDufsTreeSnapshot(baseUrl, snapshot, options) {
+                options = options || {};
+                if (!dufsTreeState || !dufsTreeState.root || dufsTreeState.baseUrl !== baseUrl || options.replace) {
+                    dufsTreeState = createDufsTreeState(baseUrl, snapshot.root, snapshot.errors);
+                    refreshDufsTreeCheckState();
+                    renderDufsTree({ preserveScroll: options.preserveScroll });
+                    return;
+                }
+
+                var anchor = options.preserveScroll ? captureDufsScrollAnchor() : null;
+                mergeDufsNode(dufsTreeState.root, snapshot.root, null);
+                dufsTreeState.errors = snapshot.errors || 0;
                 refreshDufsTreeCheckState();
+                updateDufsTreeRowDom(dufsTreeState.root);
+                syncDufsChildrenDom(dufsTreeState.root);
+                updateDufsTreeSelectionStatus();
+                if (options.preserveScroll) {
+                    restoreDufsScrollAnchor(anchor);
+                }
             }
 
             function createDufsSvgIcon(markup) {
@@ -3099,7 +3438,7 @@
                     toggle.appendChild(createDufsToggleIcon(node.expanded));
                     toggle.addEventListener('click', function () {
                         node.expanded = !node.expanded;
-                        renderDufsTree();
+                        updateDufsTreeRowDom(node);
                     });
                     row.appendChild(toggle);
                 } else {
@@ -3122,10 +3461,11 @@
                 checkbox.addEventListener('change', function () {
                     setDufsNodeChecked(node, checkbox.checked);
                     refreshDufsTreeCheckState();
-                    renderDufsTree();
+                    updateDufsVisibleRows();
                 });
                 row.appendChild(checkbox);
-                row.appendChild(createDufsNodeIcon(node));
+                var icon = createDufsNodeIcon(node);
+                row.appendChild(icon);
 
                 var name = document.createElement('span');
                 name.className = 'dufs-node-name ' + (node.type === 'dir' ? 'dufs-dir-name' : 'dufs-file-name');
@@ -3138,7 +3478,7 @@
                         node.checked = !node.checked;
                     }
                     refreshDufsTreeCheckState();
-                    renderDufsTree();
+                    updateDufsVisibleRows();
                 });
                 row.appendChild(name);
 
@@ -3152,30 +3492,59 @@
                         errorItem.className = 'dufs-error';
                         errorItem.textContent = '读取失败：' + node.error;
                         childList.appendChild(errorItem);
+                        node.dom = node.dom || {};
+                        node.dom.errorItem = errorItem;
                     } else if (!node.children || node.children.length === 0) {
                         var emptyItem = document.createElement('li');
                         emptyItem.className = 'dufs-empty';
                         emptyItem.textContent = '没有可加载文件';
                         childList.appendChild(emptyItem);
+                        node.dom = node.dom || {};
+                        node.dom.emptyItem = emptyItem;
                     }
                     li.appendChild(childList);
                 }
 
+                registerDufsNodeDom(node, {
+                    li: li,
+                    row: row,
+                    checkbox: checkbox,
+                    icon: icon,
+                    name: name,
+                    toggle: toggle || null,
+                    childList: childList || null,
+                    emptyItem: node.dom && node.dom.emptyItem ? node.dom.emptyItem : null,
+                    errorItem: node.dom && node.dom.errorItem ? node.dom.errorItem : null
+                });
                 return li;
             }
 
-            function renderDufsTree() {
+            function updateDufsVisibleRows() {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                Object.keys(dufsTreeState.nodeElements || {}).forEach(function (key) {
+                    updateDufsTreeRowDom(dufsTreeState.nodeElements[key]);
+                });
+                updateDufsTreeSelectionStatus();
+            }
+
+            function renderDufsTree(options) {
+                options = options || {};
                 var fileList = document.getElementById('fileList');
+                var anchor = options.preserveScroll ? captureDufsScrollAnchor() : null;
                 fileList.textContent = '';
                 if (!dufsTreeState || !dufsTreeState.root) {
                     updateDufsTreeStatus('');
                     return;
                 }
+                dufsTreeState.nodeElements = {};
                 var tree = document.createElement('ul');
                 tree.className = 'dufs-tree';
                 tree.appendChild(renderDufsTreeNode(dufsTreeState.root));
                 fileList.appendChild(tree);
                 updateDufsTreeSelectionStatus();
+                if (options.preserveScroll) {
+                    restoreDufsScrollAnchor(anchor);
+                }
             }
 
             document.getElementById('expandDufsTree').addEventListener('click', function () {
@@ -3216,17 +3585,41 @@
                     return
                 }
                 var baseUrl = formatDufsBaseUrl(dufsUrl);
-                dufsTreeState = null;
-                document.getElementById('fileList').textContent = '正在递归读取 DUFS 目录...';
-                document.getElementById('modalOverlay').style.display = 'block';
-                updateDufsTreeStatus('准备扫描');
+                var cachedTree = getDufsCachedTree(baseUrl);
+                var refreshSeq = ++dufsTreeRefreshSeq;
+                showDufsFileListModal(baseUrl);
+                if (cachedTree) {
+                    resetDufsTreeCheckedState(cachedTree.root);
+                    if (!dufsTreeState || dufsTreeState.baseUrl !== baseUrl) {
+                        applyDufsTreeSnapshot(baseUrl, { root: cachedTree.root, errors: cachedTree.errors }, { replace: true, preserveScroll: true });
+                    } else {
+                        resetDufsTreeCheckedState(dufsTreeState.root);
+                        refreshDufsTreeCheckState();
+                        updateDufsVisibleRows();
+                    }
+                    updateDufsTreeStatus(dufsTreeInflight[baseUrl] ? '已使用缓存，后台刷新仍在进行...' : '已使用缓存，后台刷新中...');
+                } else {
+                    dufsTreeState = null;
+                    document.getElementById('fileList').textContent = '正在递归读取 DUFS 目录...';
+                    updateDufsTreeStatus('准备扫描');
+                }
                 try {
-                    await buildDufsTree(baseUrl);
-                    renderDufsTree();
+                    var snapshot = await fetchDufsTreeSnapshot(baseUrl, { silent: !!cachedTree });
+                    if (refreshSeq !== dufsTreeRefreshSeq || dufsTreeActiveBaseUrl !== baseUrl || !isDufsFileListModalVisible()) return;
+                    applyDufsTreeSnapshot(baseUrl, snapshot, { replace: !cachedTree, preserveScroll: true });
+                    if (dufsTreeState && dufsTreeState.baseUrl === baseUrl) {
+                        setDufsCachedTree(baseUrl, dufsTreeState.root, dufsTreeState.errors);
+                    }
                 } catch (error) {
+                    if (refreshSeq !== dufsTreeRefreshSeq || dufsTreeActiveBaseUrl !== baseUrl || !isDufsFileListModalVisible()) return;
                     console.error("DUFS tree fetch error: ", error);
-                    document.getElementById('fileList').textContent = '读取 DUFS 目录失败：' + (error && error.message ? error.message : error);
-                    updateDufsTreeStatus('读取失败');
+                    if (cachedTree) {
+                        updateDufsTreeSelectionStatus();
+                        updateDufsTreeStatus(document.getElementById('dufsTreeStatus').textContent + '，后台刷新失败，继续使用缓存');
+                    } else {
+                        document.getElementById('fileList').textContent = '读取 DUFS 目录失败：' + (error && error.message ? error.message : error);
+                        updateDufsTreeStatus('读取失败');
+                    }
                 }
             });
 
@@ -3283,7 +3676,7 @@
                         }
                     }
                 };
-                document.getElementById('modalOverlay').style.display = 'none';
+                hideDufsFileListModal();
             });
 
             function formatDufsBaseUrl(url) {
@@ -3295,7 +3688,7 @@
             }
 
             document.getElementById('closeFileList').addEventListener('click', function () {
-                document.getElementById('modalOverlay').style.display = 'none';
+                hideDufsFileListModal();
             })
 
             $("#resizable-shade").resizable({
