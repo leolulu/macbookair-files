@@ -13,6 +13,9 @@ on:
       - 'subtitle_video_player/scripts/build_single-html.js'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   checkout-and-publish:
     runs-on: ubuntu-latest
@@ -41,6 +44,19 @@ jobs:
         run: |
           cd ${{ env.PLAYER_CODE_FOLDER_NAME }}
           pnpm run build:single-html
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: subtitle-player-latest
+        run: |
+          gh release delete "${RELEASE_TAG}" --cleanup-tag --yes || true
+          gh release create "${RELEASE_TAG}" \
+            "${{ env.PLAYER_CODE_FOLDER_NAME }}/${{ env.LOCAL_HTML_FILE_NAME }}" \
+            --target "${GITHUB_SHA}" \
+            --title "Video Subtitle Player (latest)" \
+            --notes "Generated from ${GITHUB_SHA} in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --latest
 
       - name: Publish to DUFS
         run: |
