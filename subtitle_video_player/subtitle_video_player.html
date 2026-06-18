@@ -220,6 +220,80 @@
             width: 13.1rem;
         }
 
+        .dufs-url-history-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dufs-url-history-list {
+            position: absolute;
+            left: 0;
+            top: calc(100% + 4px);
+            z-index: 1200;
+            display: none;
+            width: min(34rem, 82vw);
+            max-height: 14rem;
+            overflow-y: auto;
+            padding: 4px;
+            background: #fff;
+            border: 1px solid #d8e2ee;
+            border-radius: 5px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+            text-wrap: wrap;
+        }
+
+        .dufs-url-history-list.visible {
+            display: block;
+        }
+
+        .dufs-url-history-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 5px 6px 5px 8px;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: #1f2f46;
+            font-size: 13px;
+            line-height: 1.35;
+            text-align: left;
+            overflow-wrap: anywhere;
+            cursor: pointer;
+        }
+
+        .dufs-url-history-text {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dufs-url-history-remove {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 26px;
+            height: 26px;
+            border: 0;
+            border-radius: 4px;
+            background: #e8eef6;
+            color: #8aa0b8;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .dufs-url-history-remove:hover {
+            background: #dbe5f1;
+            color: #334155;
+        }
+
+        .dufs-url-history-item:hover,
+        .dufs-url-history-item.active {
+            background: #f2f6fb;
+        }
+
         #skipInterval,
         #sentenceExtension,
         #scaleSupCaption {
@@ -751,7 +825,10 @@
                     </div>
                 </div>
                 <div class="inline-block-element">
-                    <input type="text" id="dufsUrl" placeholder='dufs目录路径(结尾不用加"?simple")'>
+                    <span class="dufs-url-history-wrapper">
+                        <input type="text" id="dufsUrl" placeholder='dufs目录路径(结尾不用加"?simple")' autocomplete="off">
+                        <div id="dufsUrlHistoryList" class="dufs-url-history-list"></div>
+                    </span>
                     <button id="fetchDufsFiles">获取Dufs列表</button>
                 </div>
                 <div class="inline-block-element">
@@ -2738,6 +2815,10 @@
             var dufsTreeRefreshSeq = 0;
             var dufsTreeActiveBaseUrl = '';
             var DUFS_DIRECTORY_FETCH_TIMEOUT_MS = 120000;
+            var DUFS_URL_HISTORY_STORAGE_KEY = 'svp.dufsUrlHistory.v1';
+            var DUFS_URL_HISTORY_LIMIT = 20;
+            var dufsUrlHistory = [];
+            var dufsUrlHistoryActiveIndex = -1;
 
             function createDufsTreeState(baseUrl, root, errors) {
                 return {
@@ -2746,6 +2827,203 @@
                     errors: errors || 0,
                     nodeElements: {}
                 };
+            }
+
+            function readDufsUrlHistory() {
+                try {
+                    var raw = localStorage.getItem(DUFS_URL_HISTORY_STORAGE_KEY);
+                    var parsed = raw ? JSON.parse(raw) : [];
+                    if (!Array.isArray(parsed)) return [];
+                    return parsed
+                        .filter(function (item) {
+                            return item && typeof item.url === 'string' && item.url;
+                        })
+                        .map(function (item) {
+                            return {
+                                url: item.url,
+                                lastUsedAt: Number(item.lastUsedAt) || 0,
+                                useCount: Number(item.useCount) || 1
+                            };
+                        })
+                        .sort(function (a, b) {
+                            return b.lastUsedAt - a.lastUsedAt;
+                        })
+                        .slice(0, DUFS_URL_HISTORY_LIMIT);
+                } catch (error) {
+                    console.warn('DUFS URL history read failed:', error);
+                    return [];
+                }
+            }
+
+            function writeDufsUrlHistory() {
+                try {
+                    localStorage.setItem(DUFS_URL_HISTORY_STORAGE_KEY, JSON.stringify(dufsUrlHistory.slice(0, DUFS_URL_HISTORY_LIMIT)));
+                } catch (error) {
+                    console.warn('DUFS URL history write failed:', error);
+                }
+            }
+
+            function rememberDufsUrl(baseUrl) {
+                if (!baseUrl) return;
+                var now = Date.now();
+                var found = null;
+                dufsUrlHistory = dufsUrlHistory.filter(function (item) {
+                    if (item.url === baseUrl) {
+                        found = item;
+                        return false;
+                    }
+                    return true;
+                });
+                dufsUrlHistory.unshift({
+                    url: baseUrl,
+                    lastUsedAt: now,
+                    useCount: found ? found.useCount + 1 : 1
+                });
+                dufsUrlHistory = dufsUrlHistory.slice(0, DUFS_URL_HISTORY_LIMIT);
+                writeDufsUrlHistory();
+            }
+
+            function getFilteredDufsUrlHistory(filterText) {
+                var normalized = (filterText || '').trim().toLowerCase();
+                if (!normalized) return dufsUrlHistory.slice(0, DUFS_URL_HISTORY_LIMIT);
+                return dufsUrlHistory.filter(function (item) {
+                    return item.url.toLowerCase().indexOf(normalized) !== -1;
+                }).slice(0, DUFS_URL_HISTORY_LIMIT);
+            }
+
+            function hideDufsUrlHistory() {
+                var list = document.getElementById('dufsUrlHistoryList');
+                if (!list) return;
+                list.classList.remove('visible');
+                list.textContent = '';
+                dufsUrlHistoryActiveIndex = -1;
+            }
+
+            function setDufsUrlHistoryActiveIndex(index) {
+                var list = document.getElementById('dufsUrlHistoryList');
+                if (!list) return;
+                var items = Array.from(list.querySelectorAll('.dufs-url-history-item'));
+                if (!items.length) {
+                    dufsUrlHistoryActiveIndex = -1;
+                    return;
+                }
+                dufsUrlHistoryActiveIndex = (index + items.length) % items.length;
+                items.forEach(function (item, itemIndex) {
+                    item.classList.toggle('active', itemIndex === dufsUrlHistoryActiveIndex);
+                });
+                items[dufsUrlHistoryActiveIndex].scrollIntoView({ block: 'nearest' });
+            }
+
+            function selectDufsUrlHistoryItem(url) {
+                var input = document.getElementById('dufsUrl');
+                if (!input) return;
+                input.value = url;
+                input.focus();
+                hideDufsUrlHistory();
+            }
+
+            function removeDufsUrlHistoryItem(url) {
+                var input = document.getElementById('dufsUrl');
+                dufsUrlHistory = dufsUrlHistory.filter(function (item) {
+                    return item.url !== url;
+                });
+                writeDufsUrlHistory();
+                if (input && input.value === url) {
+                    input.value = dufsUrlHistory.length ? dufsUrlHistory[0].url : '';
+                }
+                showDufsUrlHistory();
+            }
+
+            function showDufsUrlHistory(options) {
+                options = options || {};
+                var input = document.getElementById('dufsUrl');
+                var list = document.getElementById('dufsUrlHistoryList');
+                if (!input || !list) return;
+                var history = options.filter ? getFilteredDufsUrlHistory(input.value) : dufsUrlHistory.slice(0, DUFS_URL_HISTORY_LIMIT);
+                list.textContent = '';
+                dufsUrlHistoryActiveIndex = -1;
+                if (!history.length) {
+                    hideDufsUrlHistory();
+                    return;
+                }
+                history.forEach(function (item) {
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'dufs-url-history-item';
+                    button.title = item.url;
+                    button.addEventListener('mousedown', function (event) {
+                        event.preventDefault();
+                    });
+                    button.addEventListener('click', function () {
+                        selectDufsUrlHistoryItem(item.url);
+                    });
+                    var text = document.createElement('span');
+                    text.className = 'dufs-url-history-text';
+                    text.textContent = item.url;
+                    button.appendChild(text);
+
+                    var remove = document.createElement('span');
+                    remove.className = 'dufs-url-history-remove';
+                    remove.textContent = '×';
+                    remove.title = '删除这条历史';
+                    remove.addEventListener('mousedown', function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    });
+                    remove.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        removeDufsUrlHistoryItem(item.url);
+                    });
+                    button.appendChild(remove);
+                    list.appendChild(button);
+                });
+                list.classList.add('visible');
+            }
+
+            function initDufsUrlHistory() {
+                var input = document.getElementById('dufsUrl');
+                if (!input) return;
+                dufsUrlHistory = readDufsUrlHistory();
+                if (!input.value && dufsUrlHistory.length) {
+                    input.value = dufsUrlHistory[0].url;
+                }
+                input.addEventListener('focus', function () {
+                    showDufsUrlHistory();
+                });
+                input.addEventListener('input', function () {
+                    showDufsUrlHistory({ filter: true });
+                });
+                input.addEventListener('keydown', function (event) {
+                    var list = document.getElementById('dufsUrlHistoryList');
+                    var isVisible = list && list.classList.contains('visible');
+                    if (event.key === 'ArrowDown') {
+                        if (!isVisible) {
+                            showDufsUrlHistory();
+                        }
+                        setDufsUrlHistoryActiveIndex(dufsUrlHistoryActiveIndex + 1);
+                        event.preventDefault();
+                    } else if (event.key === 'ArrowUp' && isVisible) {
+                        setDufsUrlHistoryActiveIndex(dufsUrlHistoryActiveIndex - 1);
+                        event.preventDefault();
+                    } else if (event.key === 'Enter' && isVisible && dufsUrlHistoryActiveIndex >= 0) {
+                        var items = Array.from(list.querySelectorAll('.dufs-url-history-item'));
+                        if (items[dufsUrlHistoryActiveIndex]) {
+                            var text = items[dufsUrlHistoryActiveIndex].querySelector('.dufs-url-history-text');
+                            selectDufsUrlHistoryItem(text ? text.textContent : items[dufsUrlHistoryActiveIndex].textContent);
+                            event.preventDefault();
+                        }
+                    } else if (event.key === 'Escape' && isVisible) {
+                        hideDufsUrlHistory();
+                        event.preventDefault();
+                    }
+                });
+                document.addEventListener('click', function (event) {
+                    var wrapper = input.closest('.dufs-url-history-wrapper');
+                    if (wrapper && !wrapper.contains(event.target)) {
+                        hideDufsUrlHistory();
+                    }
+                });
             }
 
             function getDufsNodeKey(node) {
@@ -3610,6 +3888,7 @@
                     if (dufsTreeState && dufsTreeState.baseUrl === baseUrl) {
                         setDufsCachedTree(baseUrl, dufsTreeState.root, dufsTreeState.errors);
                     }
+                    rememberDufsUrl(baseUrl);
                 } catch (error) {
                     if (refreshSeq !== dufsTreeRefreshSeq || dufsTreeActiveBaseUrl !== baseUrl || !isDufsFileListModalVisible()) return;
                     console.error("DUFS tree fetch error: ", error);
@@ -3690,6 +3969,8 @@
             document.getElementById('closeFileList').addEventListener('click', function () {
                 hideDufsFileListModal();
             })
+
+            initDufsUrlHistory();
 
             $("#resizable-shade").resizable({
                 handles: "all",
