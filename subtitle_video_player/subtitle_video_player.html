@@ -392,20 +392,86 @@
 
         .dufs-tree-toolbar {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             align-items: center;
             gap: 8px;
             margin-bottom: 12px;
+            max-width: 100%;
         }
 
         .dufs-tree-toolbar button {
             font-size: 13px;
             padding: 3px 8px;
+            flex: 0 0 auto;
         }
 
         #dufsTreeStatus {
             color: #555;
             font-size: 13px;
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dufs-tree-filter {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            width: clamp(260px, 38vw, 420px);
+            flex: 0 0 clamp(260px, 38vw, 420px);
+        }
+
+        #dufsTreeFilter {
+            width: 100%;
+            height: 28px;
+            box-sizing: border-box;
+            padding: 3px 32px 3px 8px;
+            border: 1px solid #b8c4d4;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #24364f;
+            outline: none;
+        }
+
+        #dufsTreeFilter:focus {
+            border-color: #6b8fca;
+            box-shadow: 0 0 0 2px rgba(107, 143, 202, 0.16);
+        }
+
+        #dufsTreeFilter.dufs-filter-fallback {
+            border-color: #d8bc64;
+            background: #fffdf5;
+        }
+
+        .dufs-tree-toolbar .dufs-tree-filter-clear {
+            position: absolute;
+            top: 50%;
+            right: 3px;
+            width: 22px;
+            height: 22px;
+            box-sizing: border-box;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transform: translateY(-50%);
+            background: #e8eef6;
+            color: #8aa0b8;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .dufs-tree-toolbar .dufs-tree-filter-clear.visible {
+            display: inline-flex;
+        }
+
+        .dufs-tree-toolbar .dufs-tree-filter-clear:hover {
+            background: #dbe5f1;
+            color: #334155;
         }
 
         #fileList {
@@ -876,6 +942,10 @@
                 <button id="checkDufsTree" type="button">全选</button>
                 <button id="uncheckDufsTree" type="button">全不选</button>
                 <span id="dufsTreeStatus"></span>
+                <span class="dufs-tree-filter">
+                    <input type="text" id="dufsTreeFilter" placeholder="筛选文件或目录，支持正则" autocomplete="off">
+                    <button id="clearDufsTreeFilter" class="dufs-tree-filter-clear" type="button" title="清空筛选" aria-label="清空筛选">×</button>
+                </span>
             </div>
             <div id="fileList"></div>
             <button id="loadSelectedFiles">加载选中文件</button>
@@ -2809,6 +2879,7 @@
 
             var dufsTreeState = null;
             var dufsTreeCache = {};
+            var dufsTreeFilterCache = {};
             var dufsTreeInflight = {};
             var dufsTreeRefreshSeq = 0;
             var dufsTreeActiveBaseUrl = '';
@@ -2823,7 +2894,12 @@
                     baseUrl: baseUrl,
                     root: root,
                     errors: errors || 0,
-                    nodeElements: {}
+                    nodeElements: {},
+                    filterText: getDufsCachedTreeFilter(baseUrl),
+                    filterMatcher: null,
+                    filterFallback: false,
+                    filterView: null,
+                    filterManualCollapsedKeys: {}
                 };
             }
 
@@ -3040,6 +3116,15 @@
                 };
             }
 
+            function getDufsCachedTreeFilter(baseUrl) {
+                return dufsTreeFilterCache[baseUrl] || '';
+            }
+
+            function setDufsCachedTreeFilter(baseUrl, filterText) {
+                if (!baseUrl) return;
+                dufsTreeFilterCache[baseUrl] = filterText || '';
+            }
+
             function resetDufsTreeCheckedState(node) {
                 if (!node) return;
                 node.checked = false;
@@ -3208,6 +3293,180 @@
                 document.getElementById('dufsTreeStatus').textContent = text || '';
             }
 
+            function getDufsTreeFilterInput() {
+                return document.getElementById('dufsTreeFilter');
+            }
+
+            function getDufsTreeFilterClearButton() {
+                return document.getElementById('clearDufsTreeFilter');
+            }
+
+            function escapeDufsRegExpText(text) {
+                return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+
+            function createDufsFilterMatcher(filterText) {
+                var rawText = String(filterText || '');
+                var normalized = rawText.trim();
+                if (!normalized) {
+                    return null;
+                }
+                try {
+                    var regex = new RegExp(normalized, 'i');
+                    return {
+                        fallback: false,
+                        test: function (text) {
+                            regex.lastIndex = 0;
+                            return regex.test(text || '');
+                        }
+                    };
+                } catch (error) {
+                    var escapedText = escapeDufsRegExpText(normalized);
+                    var textRegex = new RegExp(escapedText, 'i');
+                    return {
+                        fallback: true,
+                        test: function (text) {
+                            textRegex.lastIndex = 0;
+                            return textRegex.test(text || '');
+                        }
+                    };
+                }
+            }
+
+            function getDufsNodeSearchText(node) {
+                if (!node) return '';
+                return node.path || node.name || '';
+            }
+
+            function hasActiveDufsTreeFilter() {
+                return !!(dufsTreeState && dufsTreeState.filterView && dufsTreeState.filterView.active);
+            }
+
+            function isDufsNodeVisibleInFilter(node) {
+                if (!node) return false;
+                if (!hasActiveDufsTreeFilter()) return true;
+                return !!dufsTreeState.filterView.visibleKeys[getDufsNodeKey(node)];
+            }
+
+            function isDufsNodeAutoExpandedInFilter(node) {
+                if (!node || !hasActiveDufsTreeFilter()) return false;
+                return !!dufsTreeState.filterView.autoExpandKeys[getDufsNodeKey(node)];
+            }
+
+            function getDufsRenderableChildren(node) {
+                var children = node && node.children ? node.children : [];
+                if (!hasActiveDufsTreeFilter()) return children;
+                return children.filter(isDufsNodeVisibleInFilter);
+            }
+
+            function updateDufsTreeFilterControl() {
+                var input = getDufsTreeFilterInput();
+                var clearButton = getDufsTreeFilterClearButton();
+                var filterText = dufsTreeState ? dufsTreeState.filterText || '' : getDufsCachedTreeFilter(dufsTreeActiveBaseUrl);
+                var fallback = !!(dufsTreeState && dufsTreeState.filterFallback);
+                if (input) {
+                    if (input.value !== filterText) {
+                        input.value = filterText;
+                    }
+                    input.classList.toggle('dufs-filter-fallback', fallback);
+                    input.title = fallback ? '正则暂不可用，已按普通文本筛选' : '';
+                }
+                if (clearButton) {
+                    clearButton.classList.toggle('visible', !!filterText);
+                }
+            }
+
+            function prepareDufsTreeFilterView() {
+                if (!dufsTreeState || !dufsTreeState.root) return;
+                var matcher = createDufsFilterMatcher(dufsTreeState.filterText);
+                dufsTreeState.filterMatcher = matcher;
+                dufsTreeState.filterFallback = !!(matcher && matcher.fallback);
+                if (!matcher) {
+                    dufsTreeState.filterView = null;
+                    dufsTreeState.filterManualCollapsedKeys = {};
+                    updateDufsTreeFilterControl();
+                    return;
+                }
+
+                var view = {
+                    active: true,
+                    visibleKeys: {},
+                    autoExpandKeys: {},
+                    visibleFileCount: 0,
+                    visibleCheckedFileCount: 0
+                };
+
+                function markWholeSubtree(node) {
+                    var key = getDufsNodeKey(node);
+                    view.visibleKeys[key] = true;
+                    if (node.type === 'file') {
+                        view.visibleFileCount++;
+                        if (node.checked) {
+                            view.visibleCheckedFileCount++;
+                        }
+                        return;
+                    }
+                    view.autoExpandKeys[key] = true;
+                    (node.children || []).forEach(markWholeSubtree);
+                }
+
+                function visit(node) {
+                    var key = getDufsNodeKey(node);
+                    var matched = matcher.test(getDufsNodeSearchText(node));
+                    if (matched) {
+                        markWholeSubtree(node);
+                        return true;
+                    }
+                    if (node.type === 'file') {
+                        return false;
+                    }
+                    var childVisible = false;
+                    (node.children || []).forEach(function (child) {
+                        childVisible = visit(child) || childVisible;
+                    });
+                    if (childVisible || !node.parent) {
+                        view.visibleKeys[key] = true;
+                        if (childVisible) {
+                            view.autoExpandKeys[key] = true;
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+
+                visit(dufsTreeState.root);
+                dufsTreeState.filterView = view;
+                updateDufsTreeFilterControl();
+            }
+
+            function getDufsNodeEffectiveExpanded(node) {
+                if (!node || node.type !== 'dir') return false;
+                if (!hasActiveDufsTreeFilter()) return !!node.expanded;
+                var key = getDufsNodeKey(node);
+                if (dufsTreeState.filterManualCollapsedKeys && dufsTreeState.filterManualCollapsedKeys[key]) {
+                    return false;
+                }
+                return !!node.expanded || isDufsNodeAutoExpandedInFilter(node);
+            }
+
+            function toggleDufsNodeExpanded(node) {
+                if (!node || node.type !== 'dir') return;
+                var key = getDufsNodeKey(node);
+                var expanded = getDufsNodeEffectiveExpanded(node);
+                if (hasActiveDufsTreeFilter()) {
+                    if (expanded) {
+                        node.expanded = false;
+                        dufsTreeState.filterManualCollapsedKeys[key] = true;
+                    } else {
+                        node.expanded = true;
+                        delete dufsTreeState.filterManualCollapsedKeys[key];
+                    }
+                } else {
+                    node.expanded = !node.expanded;
+                }
+                updateDufsTreeRowDom(node);
+            }
+
             function countDufsFiles(node, checkedOnly) {
                 if (!node) return 0;
                 if (node.type === 'file') {
@@ -3216,6 +3475,61 @@
                 return (node.children || []).reduce(function (sum, child) {
                     return sum + countDufsFiles(child, checkedOnly);
                 }, 0);
+            }
+
+            function countDufsVisibleFiles(node, checkedOnly) {
+                if (!node) return 0;
+                if (!hasActiveDufsTreeFilter()) {
+                    return countDufsFiles(node, checkedOnly);
+                }
+                if (!isDufsNodeVisibleInFilter(node)) return 0;
+                if (node.type === 'file') {
+                    return !checkedOnly || node.checked ? 1 : 0;
+                }
+                return (node.children || []).reduce(function (sum, child) {
+                    return sum + countDufsVisibleFiles(child, checkedOnly);
+                }, 0);
+            }
+
+            function collectDufsCheckedFiles(node, files) {
+                if (!node) return files;
+                if (node.type === 'file') {
+                    if (node.checked) {
+                        files.push({
+                            value: node.path,
+                            displayName: node.path
+                        });
+                    }
+                    return files;
+                }
+                (node.children || []).forEach(function (child) {
+                    collectDufsCheckedFiles(child, files);
+                });
+                return files;
+            }
+
+            function getDufsNodeDisplayCheckState(node) {
+                if (!node) {
+                    return {
+                        checked: false,
+                        indeterminate: false,
+                        disabled: true
+                    };
+                }
+                if (node.type === 'file') {
+                    return {
+                        checked: !!node.checked,
+                        indeterminate: false,
+                        disabled: false
+                    };
+                }
+                var fileCount = hasActiveDufsTreeFilter() ? countDufsVisibleFiles(node, false) : countDufsFiles(node, false);
+                var checkedCount = hasActiveDufsTreeFilter() ? countDufsVisibleFiles(node, true) : countDufsFiles(node, true);
+                return {
+                    checked: fileCount > 0 && checkedCount === fileCount,
+                    indeterminate: checkedCount > 0 && checkedCount < fileCount,
+                    disabled: fileCount === 0
+                };
             }
 
             function refreshDufsNodeCheckState(node) {
@@ -3249,6 +3563,22 @@
                 refreshDufsNodeCheckState(node);
             }
 
+            function setDufsVisibleNodeChecked(node, checked) {
+                if (!node) return;
+                if (!hasActiveDufsTreeFilter()) {
+                    setDufsNodeChecked(node, checked);
+                    return;
+                }
+                if (!isDufsNodeVisibleInFilter(node)) return;
+                if (node.type === 'file') {
+                    node.checked = checked;
+                    return;
+                }
+                (node.children || []).forEach(function (child) {
+                    setDufsVisibleNodeChecked(child, checked);
+                });
+            }
+
             function setDufsExpanded(node, expanded, keepRootOpen) {
                 if (!node || node.type !== 'dir') return;
                 if (!keepRootOpen || node.parent) {
@@ -3263,8 +3593,15 @@
                 if (!dufsTreeState || !dufsTreeState.root) return;
                 var total = countDufsFiles(dufsTreeState.root, false);
                 var checked = countDufsFiles(dufsTreeState.root, true);
+                var filterText = (dufsTreeState.filterText || '').trim();
+                var filterTextPart = '';
+                if (filterText && hasActiveDufsTreeFilter()) {
+                    var visibleTotal = dufsTreeState.filterView.visibleFileCount;
+                    var visibleChecked = dufsTreeState.filterView.visibleCheckedFileCount;
+                    filterTextPart = '，筛选显示 ' + visibleTotal + ' 个，当前可见已选 ' + visibleChecked;
+                }
                 var errorText = dufsTreeState.errors > 0 ? '，' + dufsTreeState.errors + ' 个目录读取失败' : '';
-                updateDufsTreeStatus('共 ' + total + ' 个可加载文件，已选 ' + checked + errorText);
+                updateDufsTreeStatus('共 ' + total + ' 个可加载文件，已选 ' + checked + filterTextPart + errorText);
             }
 
             function sortDufsNodes(nodes) {
@@ -3290,7 +3627,7 @@
 
             function updateDufsTreeContainerClasses(node) {
                 if (!node || !node.dom || !node.dom.li) return;
-                if (node.type === 'dir' && !node.expanded) {
+                if (node.type === 'dir' && !getDufsNodeEffectiveExpanded(node)) {
                     node.dom.li.classList.add('dufs-collapsed');
                 } else {
                     node.dom.li.classList.remove('dufs-collapsed');
@@ -3301,9 +3638,10 @@
                 if (!node || !node.dom) return;
                 var dom = node.dom;
                 updateDufsTreeContainerClasses(node);
-                dom.checkbox.checked = !!node.checked;
-                dom.checkbox.indeterminate = !!node.indeterminate;
-                dom.checkbox.disabled = node.type === 'dir' && countDufsFiles(node, false) === 0;
+                var checkState = getDufsNodeDisplayCheckState(node);
+                dom.checkbox.checked = checkState.checked;
+                dom.checkbox.indeterminate = checkState.indeterminate;
+                dom.checkbox.disabled = checkState.disabled;
                 if (node.type === 'file') {
                     dom.checkbox.value = node.path;
                     dom.checkbox.dataset.displayName = node.path;
@@ -3318,9 +3656,9 @@
                     dom.icon = nextIcon;
                 }
                 if (dom.toggle) {
-                    dom.toggle.title = node.expanded ? '折叠' : '展开';
+                    dom.toggle.title = getDufsNodeEffectiveExpanded(node) ? '折叠' : '展开';
                     dom.toggle.textContent = '';
-                    dom.toggle.appendChild(createDufsToggleIcon(node.expanded));
+                    dom.toggle.appendChild(createDufsToggleIcon(getDufsNodeEffectiveExpanded(node)));
                 }
             }
 
@@ -3340,10 +3678,10 @@
                     errorItem.textContent = '读取失败：' + node.error;
                     node.dom.childList.appendChild(errorItem);
                     node.dom.errorItem = errorItem;
-                } else if (!node.children || node.children.length === 0) {
+                } else if (getDufsRenderableChildren(node).length === 0) {
                     var emptyItem = document.createElement('li');
                     emptyItem.className = 'dufs-empty';
-                    emptyItem.textContent = '没有可加载文件';
+                    emptyItem.textContent = hasActiveDufsTreeFilter() ? '没有匹配的文件' : '没有可加载文件';
                     node.dom.childList.appendChild(emptyItem);
                     node.dom.emptyItem = emptyItem;
                 }
@@ -3359,7 +3697,13 @@
                     node.dom.errorItem.remove();
                     node.dom.errorItem = null;
                 }
-                (node.children || []).forEach(function (child, index, siblings) {
+                var renderableChildren = getDufsRenderableChildren(node);
+                (node.children || []).forEach(function (child) {
+                    if (renderableChildren.indexOf(child) === -1 && child.dom) {
+                        unregisterDufsNodeDom(child);
+                    }
+                });
+                renderableChildren.forEach(function (child, index, siblings) {
                     if (!child.dom) {
                         var childDom = renderDufsTreeNode(child);
                         node.dom.childList.insertBefore(childDom, findDufsInsertBefore(node.dom.childList, child, siblings, index));
@@ -3597,6 +3941,7 @@
                 mergeDufsNode(dufsTreeState.root, snapshot.root, null);
                 dufsTreeState.errors = snapshot.errors || 0;
                 refreshDufsTreeCheckState();
+                prepareDufsTreeFilterView();
                 updateDufsTreeRowDom(dufsTreeState.root);
                 syncDufsChildrenDom(dufsTreeState.root);
                 updateDufsTreeSelectionStatus();
@@ -3698,7 +4043,7 @@
 
             function renderDufsTreeNode(node) {
                 var li = document.createElement('li');
-                if (node.type === 'dir' && !node.expanded) {
+                if (node.type === 'dir' && !getDufsNodeEffectiveExpanded(node)) {
                     li.classList.add('dufs-collapsed');
                 }
 
@@ -3710,11 +4055,10 @@
                     var toggle = document.createElement('button');
                     toggle.type = 'button';
                     toggle.className = 'dufs-toggle';
-                    toggle.title = node.expanded ? '折叠' : '展开';
-                    toggle.appendChild(createDufsToggleIcon(node.expanded));
+                    toggle.title = getDufsNodeEffectiveExpanded(node) ? '折叠' : '展开';
+                    toggle.appendChild(createDufsToggleIcon(getDufsNodeEffectiveExpanded(node)));
                     toggle.addEventListener('click', function () {
-                        node.expanded = !node.expanded;
-                        updateDufsTreeRowDom(node);
+                        toggleDufsNodeExpanded(node);
                     });
                     row.appendChild(toggle);
                 } else {
@@ -3726,17 +4070,19 @@
                 var checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.className = 'dufs-node-checkbox';
-                checkbox.checked = !!node.checked;
-                checkbox.indeterminate = !!node.indeterminate;
-                checkbox.disabled = node.type === 'dir' && countDufsFiles(node, false) === 0;
+                var checkState = getDufsNodeDisplayCheckState(node);
+                checkbox.checked = checkState.checked;
+                checkbox.indeterminate = checkState.indeterminate;
+                checkbox.disabled = checkState.disabled;
                 if (node.type === 'file') {
                     checkbox.name = 'file';
                     checkbox.value = node.path;
                     checkbox.dataset.displayName = node.path;
                 }
                 checkbox.addEventListener('change', function () {
-                    setDufsNodeChecked(node, checkbox.checked);
+                    setDufsVisibleNodeChecked(node, checkbox.checked);
                     refreshDufsTreeCheckState();
+                    prepareDufsTreeFilterView();
                     updateDufsVisibleRows();
                 });
                 row.appendChild(checkbox);
@@ -3749,18 +4095,19 @@
                 name.title = node.path || node.name;
                 name.addEventListener('click', function () {
                     if (node.type === 'dir') {
-                        node.expanded = !node.expanded;
-                    } else {
-                        node.checked = !node.checked;
+                        toggleDufsNodeExpanded(node);
+                        return;
                     }
+                    node.checked = !node.checked;
                     refreshDufsTreeCheckState();
+                    prepareDufsTreeFilterView();
                     updateDufsVisibleRows();
                 });
                 row.appendChild(name);
 
                 if (node.type === 'dir') {
                     var childList = document.createElement('ul');
-                    (node.children || []).forEach(function (child) {
+                    getDufsRenderableChildren(node).forEach(function (child) {
                         childList.appendChild(renderDufsTreeNode(child));
                     });
                     if (node.error) {
@@ -3770,10 +4117,10 @@
                         childList.appendChild(errorItem);
                         node.dom = node.dom || {};
                         node.dom.errorItem = errorItem;
-                    } else if (!node.children || node.children.length === 0) {
+                    } else if (getDufsRenderableChildren(node).length === 0) {
                         var emptyItem = document.createElement('li');
                         emptyItem.className = 'dufs-empty';
-                        emptyItem.textContent = '没有可加载文件';
+                        emptyItem.textContent = hasActiveDufsTreeFilter() ? '没有匹配的文件' : '没有可加载文件';
                         childList.appendChild(emptyItem);
                         node.dom = node.dom || {};
                         node.dom.emptyItem = emptyItem;
@@ -3810,8 +4157,10 @@
                 fileList.textContent = '';
                 if (!dufsTreeState || !dufsTreeState.root) {
                     updateDufsTreeStatus('');
+                    updateDufsTreeFilterControl();
                     return;
                 }
+                prepareDufsTreeFilterView();
                 dufsTreeState.nodeElements = {};
                 var tree = document.createElement('ul');
                 tree.className = 'dufs-tree';
@@ -3823,9 +4172,42 @@
                 }
             }
 
+            function setDufsTreeFilterText(filterText, options) {
+                options = options || {};
+                if (!dufsTreeState || !dufsTreeState.root) {
+                    if (dufsTreeActiveBaseUrl) {
+                        setDufsCachedTreeFilter(dufsTreeActiveBaseUrl, filterText);
+                    }
+                    updateDufsTreeFilterControl();
+                    return;
+                }
+                dufsTreeState.filterText = filterText || '';
+                dufsTreeState.filterManualCollapsedKeys = {};
+                setDufsCachedTreeFilter(dufsTreeState.baseUrl, dufsTreeState.filterText);
+                renderDufsTree({ preserveScroll: options.preserveScroll });
+            }
+
+            function initDufsTreeFilter() {
+                var input = getDufsTreeFilterInput();
+                var clearButton = getDufsTreeFilterClearButton();
+                if (!input || !clearButton) return;
+                input.addEventListener('input', function () {
+                    setDufsTreeFilterText(input.value, { preserveScroll: false });
+                });
+                clearButton.addEventListener('click', function () {
+                    input.value = '';
+                    setDufsTreeFilterText('', { preserveScroll: false });
+                    input.focus();
+                });
+                updateDufsTreeFilterControl();
+            }
+
             document.getElementById('expandDufsTree').addEventListener('click', function () {
                 if (!dufsTreeState || !dufsTreeState.root) return;
                 setDufsExpanded(dufsTreeState.root, true, false);
+                if (dufsTreeState.filterManualCollapsedKeys) {
+                    dufsTreeState.filterManualCollapsedKeys = {};
+                }
                 renderDufsTree();
             });
 
@@ -3838,15 +4220,17 @@
 
             document.getElementById('checkDufsTree').addEventListener('click', function () {
                 if (!dufsTreeState || !dufsTreeState.root) return;
-                setDufsNodeChecked(dufsTreeState.root, true);
+                setDufsVisibleNodeChecked(dufsTreeState.root, true);
                 refreshDufsTreeCheckState();
+                prepareDufsTreeFilterView();
                 renderDufsTree();
             });
 
             document.getElementById('uncheckDufsTree').addEventListener('click', function () {
                 if (!dufsTreeState || !dufsTreeState.root) return;
-                setDufsNodeChecked(dufsTreeState.root, false);
+                setDufsVisibleNodeChecked(dufsTreeState.root, false);
                 refreshDufsTreeCheckState();
+                prepareDufsTreeFilterView();
                 renderDufsTree();
             });
 
@@ -3871,12 +4255,14 @@
                     } else {
                         resetDufsTreeCheckedState(dufsTreeState.root);
                         refreshDufsTreeCheckState();
+                        prepareDufsTreeFilterView();
                         updateDufsVisibleRows();
                     }
                     updateDufsTreeStatus(dufsTreeInflight[baseUrl] ? '已使用缓存，后台刷新仍在进行...' : '已使用缓存，后台刷新中...');
                 } else {
                     dufsTreeState = null;
                     document.getElementById('fileList').textContent = '正在递归读取 DUFS 目录...';
+                    updateDufsTreeFilterControl();
                     updateDufsTreeStatus('准备扫描');
                 }
                 try {
@@ -3902,7 +4288,15 @@
 
             document.getElementById('loadSelectedFiles').addEventListener('click', async function () {
                 srtLoaded = false
-                var selectedFiles = Array.from(document.querySelectorAll('input[name="file"]:checked')).sort(function (a, b) {
+                var selectedFiles = dufsTreeState && dufsTreeState.root
+                    ? collectDufsCheckedFiles(dufsTreeState.root, [])
+                    : Array.from(document.querySelectorAll('input[name="file"]:checked')).map(function (input) {
+                        return {
+                            value: input.value,
+                            displayName: input.dataset.displayName || input.value
+                        };
+                    });
+                selectedFiles.sort(function (a, b) {
                     var av = isVideoLikeName(a && a.value ? a.value : '');
                     var bv = isVideoLikeName(b && b.value ? b.value : '');
                     if (av === bv) {
@@ -3969,6 +4363,7 @@
             })
 
             initDufsUrlHistory();
+            initDufsTreeFilter();
 
             $("#resizable-shade").resizable({
                 handles: "all",
