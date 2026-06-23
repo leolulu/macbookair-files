@@ -232,6 +232,8 @@
             z-index: 1200;
             display: none;
             width: min(34rem, 82vw);
+            box-sizing: border-box;
+            max-width: calc(100vw - 16px);
             max-height: 14rem;
             overflow-y: auto;
             padding: 4px;
@@ -2969,8 +2971,36 @@
                 var list = document.getElementById('dufsUrlHistoryList');
                 if (!list) return;
                 list.classList.remove('visible');
+                list.style.left = '';
+                list.style.width = '';
                 list.textContent = '';
                 dufsUrlHistoryActiveIndex = -1;
+            }
+
+            function positionDufsUrlHistoryList() {
+                var input = document.getElementById('dufsUrl');
+                var list = document.getElementById('dufsUrlHistoryList');
+                if (!input || !list || !list.classList.contains('visible')) return;
+
+                var viewportPadding = 8;
+                var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+                var maxWidth = Math.max(220, viewportWidth - viewportPadding * 2);
+                list.style.left = '0px';
+                list.style.width = '';
+
+                if (list.offsetWidth > maxWidth) {
+                    list.style.width = maxWidth + 'px';
+                }
+
+                var listRect = list.getBoundingClientRect();
+                var offsetLeft = 0;
+                if (listRect.right > viewportWidth - viewportPadding) {
+                    offsetLeft -= listRect.right - (viewportWidth - viewportPadding);
+                }
+                if (listRect.left + offsetLeft < viewportPadding) {
+                    offsetLeft += viewportPadding - (listRect.left + offsetLeft);
+                }
+                list.style.left = offsetLeft + 'px';
             }
 
             function setDufsUrlHistoryActiveIndex(index) {
@@ -3053,6 +3083,7 @@
                     list.appendChild(button);
                 });
                 list.classList.add('visible');
+                positionDufsUrlHistoryList();
             }
 
             function initDufsUrlHistory() {
@@ -3068,6 +3099,8 @@
                 input.addEventListener('input', function () {
                     showDufsUrlHistory({ filter: true });
                 });
+                window.addEventListener('resize', positionDufsUrlHistoryList);
+                window.addEventListener('scroll', positionDufsUrlHistoryList, { passive: true });
                 input.addEventListener('keydown', function (event) {
                     var list = document.getElementById('dufsUrlHistoryList');
                     var isVisible = list && list.classList.contains('visible');
