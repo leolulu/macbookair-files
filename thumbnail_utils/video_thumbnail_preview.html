@@ -890,7 +890,8 @@
             <div id="remoteTab" class="tab-content">
                 <div class="control-group">
                     <input type="url" id="remoteUrlInput" placeholder="视频URL" class="remote-url-input"
-                        onkeypress="handleRemoteUrlKeyPress(event)" ondblclick="clearRemoteUrlInput()">
+                        onkeypress="handleRemoteUrlKeyPress(event)" onpaste="replaceRemoteUrlOnPaste(event)"
+                        ondblclick="clearRemoteUrlInput()">
                     <button class="btn"
                         onclick="app.loadRemoteVideo(document.getElementById('remoteUrlInput').value)">确认加载远程视频</button>
                 </div>
@@ -3532,6 +3533,22 @@
             const input = document.getElementById('remoteUrlInput');
             input.value = '';
             input.focus();
+        }
+
+        // 粘贴远程URL时，如果输入框已有内容，则用剪贴板内容整体替换
+        function replaceRemoteUrlOnPaste(event) {
+            const input = event.target;
+            if (!input.value) return;
+
+            const clipboardData = event.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+
+            const pastedText = clipboardData.getData('text/plain') || clipboardData.getData('text');
+            if (!pastedText) return;
+
+            event.preventDefault();
+            input.value = pastedText;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
         }
     </script>
 </body>
