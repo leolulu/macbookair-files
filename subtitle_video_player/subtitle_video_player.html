@@ -226,9 +226,9 @@
         }
 
         .dufs-url-history-list {
-            position: absolute;
+            position: fixed;
             left: 0;
-            top: calc(100% + 4px);
+            top: 0;
             z-index: 1200;
             display: none;
             width: min(34rem, 82vw);
@@ -2972,7 +2972,9 @@
                 if (!list) return;
                 list.classList.remove('visible');
                 list.style.left = '';
+                list.style.top = '';
                 list.style.width = '';
+                list.style.maxHeight = '';
                 list.textContent = '';
                 dufsUrlHistoryActiveIndex = -1;
             }
@@ -2984,23 +2986,38 @@
 
                 var viewportPadding = 8;
                 var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+                var viewportHeight = document.documentElement.clientHeight || window.innerHeight;
                 var maxWidth = Math.max(220, viewportWidth - viewportPadding * 2);
-                list.style.left = '0px';
+                var inputRect = input.getBoundingClientRect();
                 list.style.width = '';
+                list.style.maxHeight = '';
 
                 if (list.offsetWidth > maxWidth) {
                     list.style.width = maxWidth + 'px';
                 }
 
+                var left = inputRect.left;
                 var listRect = list.getBoundingClientRect();
-                var offsetLeft = 0;
-                if (listRect.right > viewportWidth - viewportPadding) {
-                    offsetLeft -= listRect.right - (viewportWidth - viewportPadding);
+                var listWidth = listRect.width;
+                if (left + listWidth > viewportWidth - viewportPadding) {
+                    left = viewportWidth - viewportPadding - listWidth;
                 }
-                if (listRect.left + offsetLeft < viewportPadding) {
-                    offsetLeft += viewportPadding - (listRect.left + offsetLeft);
+                if (left < viewportPadding) {
+                    left = viewportPadding;
                 }
-                list.style.left = offsetLeft + 'px';
+
+                var top = inputRect.bottom + 4;
+                var availableBelow = viewportHeight - top - viewportPadding;
+                if (availableBelow < 80 && inputRect.top > viewportHeight - inputRect.bottom) {
+                    var availableAbove = inputRect.top - viewportPadding - 4;
+                    list.style.maxHeight = Math.max(80, availableAbove) + 'px';
+                    top = Math.max(viewportPadding, inputRect.top - list.offsetHeight - 4);
+                } else {
+                    list.style.maxHeight = Math.max(80, availableBelow) + 'px';
+                }
+
+                list.style.left = Math.round(left) + 'px';
+                list.style.top = Math.round(top) + 'px';
             }
 
             function setDufsUrlHistoryActiveIndex(index) {
