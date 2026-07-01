@@ -7,6 +7,7 @@ WATCH_DIRS = [
     Path(r"D:\tmp\share folder in D"),
     Path(r"C:\Users\sisplayer\Downloads"),
     Path(r"C:\Users\sisplayer\Downloads\porn"),
+    Path(r"D:\tmp\missav"),
 ]
 
 INTERVAL = 10
