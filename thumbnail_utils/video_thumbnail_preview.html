@@ -1485,6 +1485,7 @@
                 this.cropDialogOpen = false;
                 this.cropInteraction = null;
                 this.cropSnappedEdges = new Set();
+                this.cropPausedGridVideos = new Set();
 
                 // 资源跟踪
                 this.createdURLs = new Set();
@@ -1598,6 +1599,8 @@
 
             // 检查所有视频的播放状态
             checkVideosPlayState() {
+                if (this.cropDialogOpen) return;
+
                 // 跳过originalVideo (index=0)，只检查缩略图视频
                 this.createdVideos.forEach((video, index) => {
                     if (index === 0) return; // 跳过originalVideo
@@ -1657,7 +1660,7 @@
 
             // 清理所有资源
             cleanupAllResources() {
-                this.closeCropDialog();
+                this.closeCropDialog({ restoreGridPlayback: false });
                 this.stopMemoryMonitoring();
                 this.stopVideoPlayMonitor();
                 this.cleanupVideos();
@@ -2350,7 +2353,7 @@
                 this.cropSourceIdentity = sourceIdentity;
                 this.cropRect = null;
                 this.cropDraftRect = null;
-                this.closeCropDialog();
+                this.closeCropDialog({ restoreGridPlayback: false });
                 this.resetTransformState();
                 this.syncCropUI();
             }
@@ -2378,8 +2381,39 @@
                 }
             }
 
+            pauseGridVideosForCrop() {
+                this.cropPausedGridVideos.clear();
+                document.querySelectorAll('#videoGrid video').forEach(video => {
+                    if (!video.paused && !video.ended) {
+                        this.cropPausedGridVideos.add(video);
+                    }
+                    video.pause();
+                });
+            }
+
+            resumeGridVideosAfterCrop() {
+                const grid = document.getElementById('videoGrid');
+                const videosToResume = [...this.cropPausedGridVideos];
+                this.cropPausedGridVideos.clear();
+
+                videosToResume.forEach(video => {
+                    const cell = video.closest('.grid-item');
+                    if (!grid?.contains(video) || cell?.classList.contains('hidden')) return;
+                    video.play().catch(e => console.log('自动播放被阻止:', e));
+                });
+            }
+
+            playGridVideo(video) {
+                if (this.cropDialogOpen) {
+                    this.cropPausedGridVideos.add(video);
+                    video.pause();
+                    return;
+                }
+                video.play().catch(e => console.log('自动播放被阻止:', e));
+            }
+
             openCropDialog() {
-                if (!this.originalVideo) return;
+                if (!this.originalVideo || this.cropDialogOpen) return;
 
                 const modal = document.getElementById('cropModal');
                 const cropVideo = document.getElementById('cropVideo');
@@ -2390,6 +2424,7 @@
                 this.cropSnappedEdges.clear();
                 this.cropDialogOpen = true;
                 this.cropOpenTime = this.clamp(this.currentStartTime, 0, this.originalVideo.duration || 0);
+                this.pauseGridVideosForCrop();
 
                 modal.classList.remove('is-hidden');
                 document.body.classList.add('crop-dialog-open');
@@ -2403,10 +2438,11 @@
                 });
             }
 
-            closeCropDialog() {
+            closeCropDialog({ restoreGridPlayback = true } = {}) {
                 const modal = document.getElementById('cropModal');
                 const cropVideo = document.getElementById('cropVideo');
                 const overlay = document.getElementById('cropOverlay');
+                const wasOpen = this.cropDialogOpen;
 
                 if (this.cropInteraction && overlay?.hasPointerCapture(this.cropInteraction.pointerId)) {
                     overlay.releasePointerCapture(this.cropInteraction.pointerId);
@@ -2423,6 +2459,12 @@
                     cropVideo.pause();
                     cropVideo.removeAttribute('src');
                     cropVideo.load();
+                }
+
+                if (wasOpen && restoreGridPlayback) {
+                    this.resumeGridVideosAfterCrop();
+                } else {
+                    this.cropPausedGridVideos.clear();
                 }
             }
 
@@ -2507,7 +2549,7 @@
                     pixels.width === this.originalVideo.videoWidth &&
                     pixels.height === this.originalVideo.videoHeight;
                 this.cropRect = isFullFrame ? null : { ...this.cropDraftRect };
-                this.closeCropDialog();
+                this.closeCropDialog({ restoreGridPlayback: false });
                 this.refreshAfterCropChange();
                 this.showNotification(isFullFrame ? '已恢复完整视频画面' : '裁剪区域已应用', false);
             }
@@ -3197,7 +3239,7 @@
                         this.addTrackedEventListener(thumbnailVideo, 'loadeddata', loadedDataHandler);
 
                         const seekedHandler = () => {
-                            thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
+                            this.playGridVideo(thumbnailVideo);
 
                             const loopHandler = () => {
                                 if (thumbnailVideo.currentTime >= endTime) {
@@ -3516,7 +3558,7 @@
                                         currentTimeOverlay.textContent = this.formatTime(video.currentTime);
                                     }
 
-                                    video.play().catch(e => console.log('自动播放被阻止:', e));
+                                    this.playGridVideo(video);
 
                                     const loopHandler = () => {
                                         if (video.currentTime >= endTime) {
@@ -3544,7 +3586,7 @@
                                         if (currentTimeOverlay) {
                                             currentTimeOverlay.textContent = this.formatTime(video.currentTime);
                                         }
-                                        video.play().catch(e => console.log('自动播放被阻止:', e));
+                                        this.playGridVideo(video);
 
                                         const loopHandler = () => {
                                             if (video.currentTime >= endTime) {
@@ -3831,7 +3873,7 @@
             clearVideoDisplay() {
                 this.cropSourceIdentity = null;
                 this.cropRect = null;
-                this.closeCropDialog();
+                this.closeCropDialog({ restoreGridPlayback: false });
                 document.getElementById('videoGrid').innerHTML = '';
                 document.getElementById('videoInfo').classList.add('hidden');
                 document.getElementById('videoInfo').classList.remove('visible');
