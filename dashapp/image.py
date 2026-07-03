@@ -7,6 +7,7 @@ import threading
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
+from urllib.parse import urlparse
 
 import dash
 from dash import ALL, Input, Output, Patch, State, callback, dcc, html
@@ -19,10 +20,14 @@ PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl.jpg"
 VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
 TRASH_FOLDER_PATH = "./static/img/.trash"
 JPG_FROM_WEBP_FOLDER = "jpg_from_webp"
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".avif", ".jfif"}
+VIDEO_EXTS = {".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v"}
+MEDIA_EXTS = IMG_EXTS | VIDEO_EXTS
 
 img_path_list = []
 browsed_img_list = []
 consecutive_pic_count = 0
+parsed_txt_files = set()
 
 show_folder_title = False
 show_moving_promote = False
@@ -34,6 +39,32 @@ lock = threading.Lock()
 converting_webp = []
 
 os.makedirs("./static/img", exist_ok=True)
+
+
+def is_remote(path):
+    return path.startswith(("http://", "https://"))
+
+
+def url_ext(path):
+    """获取扩展名；远程 URL 先剥离 query/fragment 再取，避免 v.mp4?t=1 被误判成图片"""
+    if is_remote(path):
+        path = urlparse(path).path
+    return os.path.splitext(path)[-1].lower()
+
+
+def extract_media_urls(txt_path):
+    """从 txt 文件中提取所有指向图片/视频的 http(s) 直链"""
+    urls = []
+    try:
+        with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"解析txt链接失败: {txt_path}, {e}")
+        return urls
+    for candidate in re.findall(r"""https?://[^\s"'<>()\[\],;]+""", content):
+        if url_ext(candidate) in MEDIA_EXTS:
+            urls.append(candidate)
+    return urls
 
 
 def get_txt_title_for_image(img_path):
@@ -91,7 +122,6 @@ def get_img_path_list(img_path_list: List[str]):
             if os.path.splitext(file_)[-1].lower() in [
                 ".htm",
                 ".html",
-                ".txt",
                 ".swf",
                 ".db",
                 ".css",
@@ -106,6 +136,12 @@ def get_img_path_list(img_path_list: List[str]):
             if os.path.dirname(os.path.abspath(os.path.join(root, file_))) == os.path.abspath(TRASH_FOLDER_PATH):
                 continue
             if os.path.basename(root) == JPG_FROM_WEBP_FOLDER:
+                continue
+            if os.path.splitext(file_)[-1].lower() == ".txt":
+                txt_abs = os.path.abspath(os.path.join(root, file_))
+                if txt_abs not in parsed_txt_files:
+                    parsed_txt_files.add(txt_abs)
+                    temp_img_list.extend(extract_media_urls(os.path.join(root, file_)))
                 continue
             if (
                 (os.path.splitext(file_)[-1].lower() == ".webp")
@@ -276,7 +312,7 @@ def popup_100_pics(n_clicks):
     for idx in range(page_capacity):
         try:
             img_path = img_path_list.pop(0)
-            file_ext = os.path.splitext(img_path)[-1].lower()
+            file_ext = url_ext(img_path)
             current_img_catalog = "〄 " + img_path.split("/")[-2].capitalize()
         except IndexError:
             break
@@ -303,17 +339,17 @@ def popup_100_pics(n_clicks):
             else html.A(
                 html.Img(
                     className=img_path,
-                    src=PRELOAD_IMG_URL,
+                    src=img_path if is_remote(img_path) else PRELOAD_IMG_URL,
                     style={"max-height": "380px", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
-                    title=get_txt_title_for_image(img_path),
+                    title=None if is_remote(img_path) else get_txt_title_for_image(img_path),
                 ),
                 href=os.path.join(
                     os.path.dirname(img_path),
                     JPG_FROM_WEBP_FOLDER,
                     os.path.basename(img_path).replace(".webp", ".jpg"),
                 )
-                if img_path.endswith(".webp")
+                if img_path.endswith(".webp") and not is_remote(img_path)
                 else img_path,
                 target="_blank",
             )
