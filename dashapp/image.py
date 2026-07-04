@@ -33,6 +33,7 @@ remote_url_order = {}
 show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
+slider_overdrive_mode = False
 
 exe_for_webp = ThreadPoolExecutor(max_workers=8)
 exe_for_zip = ThreadPoolExecutor(max_workers=1)
@@ -308,20 +309,33 @@ app.layout = html.Div(
                             html.Div(
                                 style={"padding": "0px 25px"},
                             ),
-                            dcc.Slider(
-                                min=4,
-                                max=100,
-                                step=1,
-                                value=12,  # 这里写12，是为了在按钮上能够显示正确数量
-                                updatemode="drag",
-                                id="slider1",
-                                marks={
-                                    4: "2",
-                                    48: "24",
-                                    90: "100",
-                                    100: "1000",
-                                },
-                                className="slider",
+                            html.Div(
+                                [
+                                    dcc.Slider(
+                                        min=4,
+                                        max=104,
+                                        step=1,
+                                        value=12,  # 这里写12，是为了在按钮上能够显示正确数量
+                                        updatemode="drag",
+                                        id="slider1",
+                                        marks={
+                                            4: "2",
+                                            48: "24",
+                                            90: {"label": "100", "style": {"transform": "translateX(-90%)"}},
+                                            100: {"label": "1000", "style": {"transform": "translateX(-85%)"}},
+                                            104: {"label": "∞", "style": {"transform": "translateX(-45%)", "fontWeight": "bold"}},
+                                        },
+                                        className="slider",
+                                    ),
+                                    html.Div(
+                                        [
+                                            dcc.Input(id="capacity_input", type="number", min=2),
+                                            html.Button("确认", id="capacity_confirm"),
+                                        ],
+                                        id="capacity_popup",
+                                    ),
+                                ],
+                                style={"position": "relative"},
                             ),
                             dcc.Slider(
                                 min=100,
@@ -461,10 +475,38 @@ def set_page_capacity(s_value):
 
         return 2 * round(out_value / 2)
 
-    global page_capacity
+    global page_capacity, slider_overdrive_mode
+    if s_value > 100:
+        # 超档位：滑块不再控制数量，浮层手动输入接管，数量保持不变直到输入确认
+        if not slider_overdrive_mode:
+            slider_overdrive_mode = True
+            dash.set_props("capacity_popup", {"className": "show"})
+            dash.set_props("capacity_input", {"value": page_capacity})
+        return "再来{}张！".format(page_capacity)
+    if slider_overdrive_mode:
+        slider_overdrive_mode = False
+        dash.set_props("capacity_popup", {"className": ""})
     page_capacity = _value_mapping(s_value)
     button_text = "再来{}张！".format(page_capacity)
     return button_text
+
+
+@callback(
+    Output("button_text", "children", allow_duplicate=True),
+    Input("capacity_confirm", "n_clicks"),
+    Input("capacity_input", "n_submit"),
+    State("capacity_input", "value"),
+    prevent_initial_call=True,
+)
+def confirm_manual_capacity(n_clicks, n_submit, input_value):
+    global page_capacity
+    try:
+        capacity = max(2, 2 * round(float(input_value) / 2))
+    except (TypeError, ValueError):
+        return dash.no_update
+    page_capacity = capacity
+    dash.set_props("capacity_input", {"value": capacity})
+    return "再来{}张！".format(page_capacity)
 
 
 @callback(

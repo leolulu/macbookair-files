@@ -120,3 +120,56 @@ button:hover {
     align-items: flex-end;
     margin-top: 100px;
 }
+
+#capacity_popup {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: white;
+    border: 1px solid #4CAF50;
+    border-radius: 999px;
+    padding: 3px 4px 3px 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0.3s;
+    z-index: 10;
+}
+
+#capacity_popup.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#capacity_input {
+    width: 55px;
+    height: 26px;
+    font-size: 18px;
+    text-align: center;
+    border: none;
+    outline: none;
+}
+
+#capacity_input::-webkit-outer-spin-button,
+#capacity_input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#capacity_confirm {
+    font-size: 14px;
+    padding: 4px 12px;
+    margin: 0;
+    border-width: 2px;
+    border-radius: 999px;
+}
+
+#slider1 .rc-slider-dot:last-child {
+    border-color: #FFA500;
+}
