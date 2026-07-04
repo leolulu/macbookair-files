@@ -28,6 +28,7 @@ img_path_list = []
 browsed_img_list = []
 consecutive_pic_count = 0
 parsed_txt_files = set()
+remote_url_order = {}
 
 show_folder_title = False
 show_moving_promote = False
@@ -52,19 +53,79 @@ def url_ext(path):
     return os.path.splitext(path)[-1].lower()
 
 
+def media_sort_key(path):
+    """本地文件按路径排在前；远程 URL 聚末尾，按 (来源txt路径, txt内出现顺序) 两级排序"""
+    if is_remote(path):
+        txt_key, idx = remote_url_order.get(path, (path, 0))
+        return (1, txt_key, idx)
+    return (0, path, 0)
+
+
+def extract_media_urls_from_text(content):
+    """从文本内容中提取所有指向图片/视频的 http(s) 直链"""
+    urls = []
+    for candidate in re.findall(r"""https?://[^\s"'<>()\[\],;]+""", content):
+        if url_ext(candidate) in MEDIA_EXTS:
+            urls.append(candidate)
+    return urls
+
+
 def extract_media_urls(txt_path):
     """从 txt 文件中提取所有指向图片/视频的 http(s) 直链"""
-    urls = []
     try:
         with open(txt_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
     except Exception as e:
         print(f"解析txt链接失败: {txt_path}, {e}")
-        return urls
-    for candidate in re.findall(r"""https?://[^\s"'<>()\[\],;]+""", content):
-        if url_ext(candidate) in MEDIA_EXTS:
-            urls.append(candidate)
-    return urls
+        return []
+    return extract_media_urls_from_text(content)
+
+
+def trash_remote_urls(urls_to_delete):
+    """
+    从 ./static/img 树下现存的所有 txt 中，把包含已看 URL 的整行移入回收站同名 txt（平铺，append 合并）
+    若某 txt 删除后不再含任何媒体链接，则删除该 txt 文件
+    """
+    url_set = set(urls_to_delete)
+    removed_line_count = 0
+    if not url_set:
+        return removed_line_count
+    os.makedirs(TRASH_FOLDER_PATH, exist_ok=True)
+    for root, dirs_, files_ in os.walk("./static/img"):
+        if os.path.abspath(root) == os.path.abspath(TRASH_FOLDER_PATH):
+            continue
+        for file_ in files_:
+            if os.path.splitext(file_)[-1].lower() != ".txt":
+                continue
+            txt_path = os.path.join(root, file_)
+            try:
+                with open(txt_path, "r", encoding="utf-8", errors="surrogateescape", newline="") as f:
+                    lines = f.readlines()
+            except Exception as e:
+                print(f"回收txt链接失败(读取): {txt_path}, {e}")
+                continue
+            kept_lines = []
+            trashed_lines = []
+            for line in lines:
+                if url_set.intersection(extract_media_urls_from_text(line)):
+                    trashed_lines.append(line)
+                else:
+                    kept_lines.append(line)
+            if not trashed_lines:
+                continue
+            try:
+                with open(os.path.join(TRASH_FOLDER_PATH, file_), "a", encoding="utf-8", errors="surrogateescape", newline="") as f:
+                    for line in trashed_lines:
+                        f.write(line if line.endswith("\n") else line + "\n")
+                if extract_media_urls_from_text("".join(kept_lines)):
+                    with open(txt_path, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
+                        f.writelines(kept_lines)
+                else:
+                    os.remove(txt_path)
+                removed_line_count += len(trashed_lines)
+            except Exception as e:
+                print(f"回收txt链接失败(写入): {txt_path}, {e}")
+    return removed_line_count
 
 
 def get_txt_title_for_image(img_path):
@@ -114,7 +175,7 @@ def clean_empty_folders(folder_paths=None):
 
 def get_img_path_list(img_path_list: List[str]):
     global browsed_img_list
-    browsed_img_list = [path for path in browsed_img_list if os.path.exists(path.replace("%23", "#"))]
+    browsed_img_list = [path for path in browsed_img_list if is_remote(path) or os.path.exists(path.replace("%23", "#"))]
 
     temp_img_list = []
     for root, dirs_, files_ in os.walk("./static/img"):
@@ -141,7 +202,11 @@ def get_img_path_list(img_path_list: List[str]):
                 txt_abs = os.path.abspath(os.path.join(root, file_))
                 if txt_abs not in parsed_txt_files:
                     parsed_txt_files.add(txt_abs)
-                    temp_img_list.extend(extract_media_urls(os.path.join(root, file_)))
+                    urls = extract_media_urls(os.path.join(root, file_))
+                    txt_key = os.path.join(root, file_).replace("\\", "/")
+                    for url_idx, url_ in enumerate(urls):
+                        remote_url_order.setdefault(url_, (txt_key, url_idx))
+                    temp_img_list.extend(urls)
                 continue
             if (
                 (os.path.splitext(file_)[-1].lower() == ".webp")
@@ -180,11 +245,11 @@ def get_img_path_list(img_path_list: List[str]):
                 exe_for_zip.submit(_task_for_zip, file_, root)
 
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
-    temp_img_list.sort()
+    temp_img_list.sort(key=media_sort_key)
     for temp_img in temp_img_list:
         if (temp_img not in img_path_list) and (temp_img not in browsed_img_list):
             img_path_list.append(temp_img)
-    img_path_list.sort()
+    img_path_list.sort(key=media_sort_key)
     return img_path_list
 
 
@@ -514,11 +579,14 @@ def toggle_delete_button_display(value):
     prevent_initial_call=True,
 )
 def delete_button_click(n_clicks):
+    global browsed_img_list
     if not os.path.exists(TRASH_FOLDER_PATH):
         os.makedirs(TRASH_FOLDER_PATH)
     count = 0
     parent_folders = []  # 收集被删文件的父文件夹路径
     for file_ in browsed_img_list:
+        if is_remote(file_):
+            continue
         try:
             file_path = file_.replace("%23", "#")
             shutil.move(file_path, TRASH_FOLDER_PATH)
@@ -534,10 +602,14 @@ def delete_button_click(n_clicks):
             except Exception as e:
                 print(f"删除失败: {e}")
     
+    # 已看过的远程链接：从所有 txt 中整行移入回收站同名 txt，并从 browsed 中清除
+    removed_link_count = trash_remote_urls([p for p in browsed_img_list if is_remote(p)])
+    browsed_img_list = [p for p in browsed_img_list if not is_remote(p)]
+
     # 清理空文件夹
     removed_dir_count = clean_empty_folders(parent_folders)
-    
-    return "删除成功{}张，清理空目录{}个".format(count, removed_dir_count)
+
+    return "删除成功{}张，移除链接{}条，清理空目录{}个".format(count, removed_link_count, removed_dir_count)
 
 
 @callback(
