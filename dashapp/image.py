@@ -316,7 +316,7 @@ app.layout = html.Div(
                                         max=104,
                                         step=1,
                                         value=12,  # 这里写12，是为了在按钮上能够显示正确数量
-                                        updatemode="drag",
+                                        updatemode="mouseup",
                                         id="slider1",
                                         marks={
                                             4: "2",
@@ -462,8 +462,17 @@ def popup_100_pics(n_clicks):
     return return_list, remain_count
 
 
-@app.callback(dash.dependencies.Output("button_text", "children"), dash.dependencies.Input("slider1", "value"))
-def set_page_capacity(s_value):
+@app.callback(
+    dash.dependencies.Output("button_text", "children"),
+    dash.dependencies.Input("slider1", "drag_value"),
+    dash.dependencies.Input("slider1", "value"),
+)
+def set_page_capacity(drag_value, s_value):
+    # updatemode=mouseup 下两者分离：拖动中用 drag_value 实时反馈，松手/吸附落定后用 value
+    triggered = dash.callback_context.triggered
+    if triggered and triggered[0]["prop_id"].endswith(".drag_value") and drag_value is not None:
+        s_value = drag_value
+
     def _value_mapping(in_value):
         out_value = float(in_value)
         if in_value <= 48:
@@ -507,6 +516,23 @@ def confirm_manual_capacity(n_clicks, n_submit, input_value):
     page_capacity = capacity
     dash.set_props("capacity_input", {"value": capacity})
     return "再来{}张！".format(page_capacity)
+
+
+# 超档"啪"吸附：updatemode=mouseup 下 value 仅在松手时更新，拖动全程跟手零回写——
+# 松手落在 101~103 不稳定区时，过中点(102)弹入 104，未过弹回 100，模拟机械跳档
+app.clientside_callback(
+    """
+    function(value) {
+        if (value > 100 && value < 104) {
+            return value >= 102 ? 104 : 100;
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("slider1", "value"),
+    Input("slider1", "value"),
+    prevent_initial_call=True,
+)
 
 
 @callback(
