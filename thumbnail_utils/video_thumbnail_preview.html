@@ -1583,7 +1583,7 @@
 
             // 启动视频播放状态检测器
             startVideoPlayMonitor() {
-                // 每10秒检查一次所有视频的播放状态
+                // 每10秒检查一次当前有效缩略视频的播放状态
                 this.playMonitorInterval = setInterval(() => {
                     this.checkVideosPlayState();
                 }, 10000);
@@ -1601,9 +1601,12 @@
             checkVideosPlayState() {
                 if (this.cropDialogOpen) return;
 
-                // 跳过originalVideo (index=0)，只检查缩略图视频
-                this.createdVideos.forEach((video, index) => {
-                    if (index === 0) return; // 跳过originalVideo
+                const grid = document.getElementById('videoGrid');
+                if (!grid) return;
+
+                // 只检查当前网格中未隐藏的缩略图视频
+                grid.querySelectorAll('.grid-item:not(.hidden) video').forEach(video => {
+                    const gridIndex = video.dataset.gridIndex;
 
                     try {
                         // 检查视频是否暂停或卡住
@@ -1614,11 +1617,9 @@
 
                         // 检查视频是否暂停
                         if (video.paused || video.ended) {
-                            console.log(`检测到视频暂停，尝试恢复播放: 格子${index - 1}`);
+                            console.log(`检测到视频暂停，尝试恢复播放: 格子${gridIndex}`);
                             video.play().catch(e => {
                                 console.log(`自动播放被阻止:`, e);
-                                // 如果播放被阻止，尝试通过用户交互方式触发
-                                this.requestPlayPermission(video);
                             });
                             return;
                         }
@@ -1628,10 +1629,9 @@
                         if (typeof video._lastCheckTime !== 'undefined' &&
                             Math.abs(currentTime - video._lastCheckTime) < 0.01) {
                             // 时间没有变化，可能是卡住了
-                            console.log(`检测到视频卡住，尝试重新播放: 格子${index - 1}`);
+                            console.log(`检测到视频卡住，尝试重新播放: 格子${gridIndex}`);
                             video.play().catch(e => {
                                 console.log(`重新播放被阻止:`, e);
-                                this.requestPlayPermission(video);
                             });
                         }
 
@@ -1642,20 +1642,6 @@
                         console.error(`检查视频播放状态失败:`, e);
                     }
                 });
-            }
-
-            // 请求播放权限（通过模拟用户交互）
-            requestPlayPermission(video) {
-                // 尝试通过静音来获得播放权限
-                if (video.muted === false) {
-                    video.muted = true;
-                    video.play().then(() => {
-                        // 播放成功后恢复静音状态
-                        video.muted = false;
-                    }).catch(e => {
-                        console.log(`静音播放也失败:`, e);
-                    });
-                }
             }
 
             // 清理所有资源
@@ -2628,6 +2614,21 @@
                 return { rows, cols, cellDuration, totalCells, pageDuration };
             }
 
+            // 获取指定页面实际包含的视频格子数
+            getValidCellCount(pageStartTime = this.currentStartTime) {
+                const { cellDuration, totalCells } = this.getPageConfig();
+                const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
+
+                if (!videoDuration || cellDuration <= 0 || totalCells <= 0) return 0;
+
+                let validCellCount = 0;
+                while (validCellCount < totalCells &&
+                    pageStartTime + validCellCount * cellDuration < videoDuration) {
+                    validCellCount++;
+                }
+                return validCellCount;
+            }
+
             // 判断是否需要重新创建网格
             needToRecreateGrid() {
                 const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
@@ -2809,24 +2810,6 @@
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
-
-                // 检查是否启用了远程视频翻页优化
-                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
-                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-
-                // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
-                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
-                    // 远程视频且未启用优化：强制重绘
-                    this.updatePreviewDebouncedWrapper();
-                } else if (this.gridState.isInitialized) {
-                    // 本地视频或远程视频已启用优化：只调整时间点
-                    this.updatePaginationUI();
-                    this.updateGridTimePoints();
-                    this.updateFileProgress();
-                } else {
-                    // 网格未初始化：完全重绘
-                    this.updatePreviewDebouncedWrapper();
-                }
             }
 
             nextPage() {
@@ -2836,24 +2819,6 @@
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = this.currentStartTime + pageDuration;
                 this.setPageStartTime(newStartTime);
-
-                // 检查是否启用了远程视频翻页优化
-                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
-                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-
-                // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
-                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
-                    // 远程视频且未启用优化：强制重绘
-                    this.updatePreviewDebouncedWrapper();
-                } else if (this.gridState.isInitialized) {
-                    // 本地视频或远程视频已启用优化：只调整时间点
-                    this.updatePaginationUI();
-                    this.updateGridTimePoints();
-                    this.updateFileProgress();
-                } else {
-                    // 网格未初始化：完全重绘
-                    this.updatePreviewDebouncedWrapper();
-                }
             }
 
             setPageStartTime(newStartTime) {
@@ -3166,16 +3131,22 @@
                     // 任何重建路径都应回到默认 transform，避免新节点与右侧控件状态不一致
                     this.resetTransformState();
 
-                    grid.innerHTML = '';
-
                     // 清理旧网格视频和事件，只保留 originalVideo (index=0)
                     this.cleanupEventListeners();
+                    this.createdVideos.slice(1).forEach(video => {
+                        try {
+                            video.pause();
+                        } catch (e) {
+                            console.warn('暂停旧网格视频失败:', e);
+                        }
+                    });
                     this.createdVideos.splice(1);
+                    grid.innerHTML = '';
 
                     // 清理预加载的视频元素
                     this.cleanupPreloadedVideos();
 
-                    const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                    const { rows, cols, cellDuration, pageDuration } = this.getPageConfig();
                     const videoAspectRatio = this.getEffectiveVideoAspectRatio();
                     const { width: finalCellWidth, height: finalCellHeight } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
 
@@ -3185,13 +3156,14 @@
                     // 重置状态计数器
                     this.cellLoadedCount = 0;
                     this.cellPlayingCount = 0;
-                    this.totalCellsInCurrentPage = totalCells;
 
 
                     const videoDuration = this.originalVideo.duration;
                     const pageStartTime = this.currentStartTime;
+                    const validCellCount = this.getValidCellCount(pageStartTime);
+                    this.totalCellsInCurrentPage = validCellCount;
 
-                    for (let i = 0; i < totalCells; i++) {
+                    for (let i = 0; i < validCellCount; i++) {
                         const cell = document.createElement('div');
                         cell.className = 'grid-item';
                         cell.dataset.gridIndex = i; // 添加网格索引标识
@@ -3213,12 +3185,6 @@
 
                         const startTime = pageStartTime + i * cellDuration;
                         const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
-
-                        if (startTime >= videoDuration) {
-                            cell.classList.add('hidden');
-                            grid.appendChild(cell);
-                            continue;
-                        }
 
                         const loadedMetadataHandler = () => {
                             thumbnailVideo.currentTime = startTime;
@@ -3507,6 +3473,17 @@
                     // 边界检查：确保时间参数有效
                     if (cellDuration <= 0 || totalCells <= 0 || pageDuration <= 0) {
                         console.warn('无效的网格配置参数');
+                        return;
+                    }
+
+                    const validCellCount = this.getValidCellCount(pageStartTime);
+                    this.totalCellsInCurrentPage = validCellCount;
+
+                    // 当前网格容量不足时重建，避免从最后一页返回后缺少格子
+                    const grid = document.getElementById('videoGrid');
+                    const renderedVideoCount = grid ? grid.querySelectorAll('.grid-item video').length : 0;
+                    if (validCellCount > renderedVideoCount) {
+                        this.createGridElements();
                         return;
                     }
 
