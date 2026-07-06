@@ -238,6 +238,9 @@
 
 
         .grid-item video {
+            position: absolute;
+            left: 0;
+            top: 0;
             width: 100%;
             height: 100%;
             object-fit: contain;
@@ -248,6 +251,15 @@
             cursor: grab;
             user-select: none;
             /* 性能优化：启用GPU硬件加速 */
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+
+        .video-transform-layer {
+            position: absolute;
+            inset: 0;
+            transform-origin: center center;
             will-change: transform;
             backface-visibility: hidden;
             -webkit-backface-visibility: hidden;
@@ -267,6 +279,8 @@
             border-radius: 4px;
             font-size: 12px;
             font-weight: bold;
+            z-index: 2;
+            pointer-events: none;
         }
 
         .current-time-overlay {
@@ -279,6 +293,8 @@
             border-radius: 4px;
             font-size: 12px;
             font-weight: bold;
+            z-index: 2;
+            pointer-events: none;
         }
 
         .loading {
@@ -788,6 +804,354 @@
             box-shadow: 0 1px 4px rgba(247, 193, 55, 0.3);
         }
 
+        /* 视频裁剪控件 */
+        .crop-control-title {
+            color: #cccccc;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .crop-action-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+        }
+
+        .btn-crop,
+        .btn-reset-crop {
+            border: none;
+            border-radius: 4px;
+            padding: 9px 12px;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn-crop {
+            background: #007acc;
+        }
+
+        .btn-crop:hover {
+            background: #005999;
+            box-shadow: 0 2px 8px rgba(0, 122, 204, 0.35);
+        }
+
+        .btn-reset-crop {
+            background: #555555;
+        }
+
+        .btn-reset-crop:hover {
+            background: #686868;
+        }
+
+        .crop-status {
+            margin-top: 8px;
+            color: #aaaaaa;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        body.crop-dialog-open {
+            overflow: hidden;
+        }
+
+        .crop-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 20000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(8, 10, 12, 0.82);
+            backdrop-filter: blur(5px);
+        }
+
+        .crop-modal.is-hidden {
+            display: none;
+        }
+
+        .crop-dialog {
+            width: min(1080px, calc(100vw - 48px));
+            max-height: calc(100vh - 48px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #2d2d2d;
+            border: 1px solid #555555;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+        }
+
+        .crop-dialog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid #484848;
+        }
+
+        .crop-dialog-heading {
+            min-width: 0;
+        }
+
+        .crop-dialog-title {
+            color: #ffffff;
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .crop-dialog-subtitle {
+            margin-top: 3px;
+            color: #999999;
+            font-size: 12px;
+        }
+
+        .crop-dialog-close {
+            width: 32px;
+            height: 32px;
+            flex: 0 0 auto;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            background: transparent;
+            color: #bbbbbb;
+            cursor: pointer;
+            font-size: 24px;
+            line-height: 26px;
+        }
+
+        .crop-dialog-close:hover {
+            color: #ffffff;
+            border-color: #555555;
+            background: #3a3a3a;
+        }
+
+        .crop-dialog-body {
+            min-height: 0;
+            overflow-y: auto;
+            padding: 14px 16px 16px;
+        }
+
+        .crop-stage {
+            position: relative;
+            width: 100%;
+            height: min(62vh, 620px);
+            min-height: 260px;
+            overflow: hidden;
+            background-color: #111111;
+            background-image:
+                linear-gradient(45deg, #181818 25%, transparent 25%),
+                linear-gradient(-45deg, #181818 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #181818 75%),
+                linear-gradient(-45deg, transparent 75%, #181818 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+            border: 1px solid #444444;
+            border-radius: 7px;
+        }
+
+        #cropVideo {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        .crop-overlay {
+            position: absolute;
+            overflow: hidden;
+            cursor: crosshair;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .crop-selection {
+            position: absolute;
+            border: 2px solid #29a8ff;
+            border-radius: 2px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58), 0 0 14px rgba(41, 168, 255, 0.55);
+            cursor: move;
+        }
+
+        .crop-selection::before,
+        .crop-selection::after {
+            content: '';
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.45;
+        }
+
+        .crop-selection::before {
+            left: 33.333%;
+            top: 0;
+            bottom: 0;
+            width: 33.333%;
+            border-left: 1px dashed rgba(255, 255, 255, 0.7);
+            border-right: 1px dashed rgba(255, 255, 255, 0.7);
+        }
+
+        .crop-selection::after {
+            top: 33.333%;
+            left: 0;
+            right: 0;
+            height: 33.333%;
+            border-top: 1px dashed rgba(255, 255, 255, 0.7);
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.7);
+        }
+
+        .crop-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            z-index: 2;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            background: #007acc;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+        }
+
+        .crop-handle[data-crop-handle="nw"] { left: 0; top: 0; transform: translate(-50%, -50%); cursor: nwse-resize; }
+        .crop-handle[data-crop-handle="n"] { left: 50%; top: 0; transform: translate(-50%, -50%); cursor: ns-resize; }
+        .crop-handle[data-crop-handle="ne"] { right: 0; top: 0; transform: translate(50%, -50%); cursor: nesw-resize; }
+        .crop-handle[data-crop-handle="e"] { right: 0; top: 50%; transform: translate(50%, -50%); cursor: ew-resize; }
+        .crop-handle[data-crop-handle="se"] { right: 0; bottom: 0; transform: translate(50%, 50%); cursor: nwse-resize; }
+        .crop-handle[data-crop-handle="s"] { left: 50%; bottom: 0; transform: translate(-50%, 50%); cursor: ns-resize; }
+        .crop-handle[data-crop-handle="sw"] { left: 0; bottom: 0; transform: translate(-50%, 50%); cursor: nesw-resize; }
+        .crop-handle[data-crop-handle="w"] { left: 0; top: 50%; transform: translate(-50%, -50%); cursor: ew-resize; }
+
+        .crop-empty-hint {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            padding: 9px 12px;
+            border-radius: 5px;
+            color: #eeeeee;
+            background: rgba(0, 0, 0, 0.68);
+            font-size: 13px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .crop-snap-line {
+            position: absolute;
+            z-index: 3;
+            opacity: 0;
+            pointer-events: none;
+            background: #F7C137;
+            box-shadow: 0 0 8px rgba(247, 193, 55, 0.8);
+        }
+
+        .crop-snap-line.left,
+        .crop-snap-line.right {
+            top: 0;
+            bottom: 0;
+            width: 2px;
+        }
+
+        .crop-snap-line.top,
+        .crop-snap-line.bottom {
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+
+        .crop-snap-line.left { left: 0; }
+        .crop-snap-line.right { right: 0; }
+        .crop-snap-line.top { top: 0; }
+        .crop-snap-line.bottom { bottom: 0; }
+        .crop-snap-line.active { opacity: 1; }
+
+        .crop-timeline-row {
+            display: grid;
+            grid-template-columns: 74px minmax(0, 1fr) 74px;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .crop-timeline-label {
+            color: #aaaaaa;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .crop-timeline-label:last-child {
+            text-align: right;
+        }
+
+        #cropTimeline {
+            width: 100%;
+            accent-color: #007acc;
+            cursor: pointer;
+        }
+
+        .crop-selection-info {
+            min-height: 20px;
+            margin-top: 8px;
+            color: #cccccc;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .crop-dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 9px;
+            margin-top: 12px;
+        }
+
+        .crop-dialog-action {
+            min-width: 92px;
+            padding: 9px 16px;
+            border: none;
+            border-radius: 5px;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .crop-dialog-action.secondary {
+            background: #4a4a4a;
+        }
+
+        .crop-dialog-action.primary {
+            background: #007acc;
+        }
+
+        .crop-dialog-action:hover:not(:disabled) {
+            filter: brightness(1.12);
+        }
+
+        .crop-dialog-action:disabled {
+            color: #888888;
+            background: #3c3c3c;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 760px) {
+            .crop-modal {
+                padding: 10px;
+            }
+
+            .crop-dialog {
+                width: calc(100vw - 20px);
+                max-height: calc(100vh - 20px);
+            }
+
+            .crop-stage {
+                height: 52vh;
+                min-height: 220px;
+            }
+
+            .crop-dialog-subtitle {
+                display: none;
+            }
+        }
+
         /* 强制清理内存按钮样式 */
         .btn-force-cleanup {
             background: #ff6b6b;
@@ -1012,6 +1376,15 @@
             </div>
         </div>
 
+        <div class="control-section is-hidden" id="cropSection">
+            <div class="crop-control-title">画面裁剪</div>
+            <div class="crop-action-row">
+                <button class="btn-crop" id="cropButton" onclick="app.openCropDialog()">裁剪画面</button>
+                <button class="btn-reset-crop is-hidden" id="resetCropButton" onclick="app.resetCrop()">重置</button>
+            </div>
+            <div class="crop-status" id="cropStatus">使用完整视频画面</div>
+        </div>
+
         <div class="control-section is-hidden" id="resetTransformSection">
             <div class="control-group">
                 <button class="btn-reset-transform" onclick="app.resetVideoTransform()">重置缩放和位置</button>
@@ -1033,6 +1406,50 @@
 
     <!-- 漫画气泡工具提示 -->
     <div id="comicBubbleTooltip"></div>
+
+    <div class="crop-modal is-hidden" id="cropModal" role="dialog" aria-modal="true" aria-labelledby="cropDialogTitle">
+        <div class="crop-dialog">
+            <div class="crop-dialog-header">
+                <div class="crop-dialog-heading">
+                    <div class="crop-dialog-title" id="cropDialogTitle">选择视频完整区域</div>
+                    <div class="crop-dialog-subtitle">拖动创建选区；可移动选区或使用边缘控制点调整，靠近视频边缘时自动吸附</div>
+                </div>
+                <button class="crop-dialog-close" type="button" aria-label="取消裁剪" onclick="app.closeCropDialog()">×</button>
+            </div>
+            <div class="crop-dialog-body">
+                <div class="crop-stage" id="cropStage">
+                    <video id="cropVideo" muted preload="metadata"></video>
+                    <div class="crop-overlay" id="cropOverlay">
+                        <div class="crop-selection is-hidden" id="cropSelection">
+                            <span class="crop-handle" data-crop-handle="nw"></span>
+                            <span class="crop-handle" data-crop-handle="n"></span>
+                            <span class="crop-handle" data-crop-handle="ne"></span>
+                            <span class="crop-handle" data-crop-handle="e"></span>
+                            <span class="crop-handle" data-crop-handle="se"></span>
+                            <span class="crop-handle" data-crop-handle="s"></span>
+                            <span class="crop-handle" data-crop-handle="sw"></span>
+                            <span class="crop-handle" data-crop-handle="w"></span>
+                        </div>
+                        <div class="crop-empty-hint" id="cropEmptyHint">在画面上拖动以创建裁剪区域</div>
+                        <span class="crop-snap-line left" data-snap-edge="left"></span>
+                        <span class="crop-snap-line right" data-snap-edge="right"></span>
+                        <span class="crop-snap-line top" data-snap-edge="top"></span>
+                        <span class="crop-snap-line bottom" data-snap-edge="bottom"></span>
+                    </div>
+                </div>
+                <div class="crop-timeline-row">
+                    <span class="crop-timeline-label" id="cropCurrentTime">00:00</span>
+                    <input type="range" id="cropTimeline" min="0" max="0" step="0.01" value="0" aria-label="选择裁剪参考画面">
+                    <span class="crop-timeline-label" id="cropTotalTime">00:00</span>
+                </div>
+                <div class="crop-selection-info" id="cropSelectionInfo">拖动选择一个区域</div>
+                <div class="crop-dialog-actions">
+                    <button class="crop-dialog-action secondary" type="button" onclick="app.closeCropDialog()">取消</button>
+                    <button class="crop-dialog-action primary" id="confirmCropButton" type="button" onclick="app.confirmCrop()" disabled>确认裁剪</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         class VideoThumbnailPreview {
@@ -1061,10 +1478,20 @@
                 this.hasMoved = false;
                 this.hasTransformed = false; // 标记是否发生过缩放或拖动
 
+                // 当前视频的逻辑裁剪区域（归一化坐标）；与缩放/位移状态相互独立
+                this.cropRect = null;
+                this.cropDraftRect = null;
+                this.cropSourceIdentity = null;
+                this.cropDialogOpen = false;
+                this.cropInteraction = null;
+                this.cropSnappedEdges = new Set();
+                this.cropPausedGridVideos = new Set();
+
                 // 资源跟踪
                 this.createdURLs = new Set();
                 this.createdVideos = [];
                 this.eventListeners = [];
+                this.gridVideoPlaybackStates = new WeakMap();
 
                 // 格子状态跟踪
                 this.cellLoadedCount = 0;  // 已进入"加载中"状态的格子数量
@@ -1081,7 +1508,8 @@
                     cols: 0,
                     totalCells: 0,
                     cellDuration: 0,
-                    videoFile: null
+                    videoFile: null,
+                    cropSignature: 'full'
                 };
 
                 // 预加载控制器
@@ -1099,6 +1527,7 @@
                 this.initDragAndDrop();
                 this.initKeyboardEvents();
                 this.initWindowResizeListener();
+                this.initCropControls();
                 // 移除剪贴板监听功能
 
                 // 页面卸载时清理资源
@@ -1155,7 +1584,7 @@
 
             // 启动视频播放状态检测器
             startVideoPlayMonitor() {
-                // 每10秒检查一次所有视频的播放状态
+                // 每10秒检查一次当前有效缩略视频的播放状态
                 this.playMonitorInterval = setInterval(() => {
                     this.checkVideosPlayState();
                 }, 10000);
@@ -1171,9 +1600,14 @@
 
             // 检查所有视频的播放状态
             checkVideosPlayState() {
-                // 跳过originalVideo (index=0)，只检查缩略图视频
-                this.createdVideos.forEach((video, index) => {
-                    if (index === 0) return; // 跳过originalVideo
+                if (this.cropDialogOpen) return;
+
+                const grid = document.getElementById('videoGrid');
+                if (!grid) return;
+
+                // 只检查当前网格中未隐藏的缩略图视频
+                grid.querySelectorAll('.grid-item:not(.hidden) video').forEach(video => {
+                    const gridIndex = video.dataset.gridIndex;
 
                     try {
                         // 检查视频是否暂停或卡住
@@ -1184,11 +1618,9 @@
 
                         // 检查视频是否暂停
                         if (video.paused || video.ended) {
-                            console.log(`检测到视频暂停，尝试恢复播放: 格子${index - 1}`);
+                            console.log(`检测到视频暂停，尝试恢复播放: 格子${gridIndex}`);
                             video.play().catch(e => {
                                 console.log(`自动播放被阻止:`, e);
-                                // 如果播放被阻止，尝试通过用户交互方式触发
-                                this.requestPlayPermission(video);
                             });
                             return;
                         }
@@ -1198,10 +1630,9 @@
                         if (typeof video._lastCheckTime !== 'undefined' &&
                             Math.abs(currentTime - video._lastCheckTime) < 0.01) {
                             // 时间没有变化，可能是卡住了
-                            console.log(`检测到视频卡住，尝试重新播放: 格子${index - 1}`);
+                            console.log(`检测到视频卡住，尝试重新播放: 格子${gridIndex}`);
                             video.play().catch(e => {
                                 console.log(`重新播放被阻止:`, e);
-                                this.requestPlayPermission(video);
                             });
                         }
 
@@ -1214,22 +1645,9 @@
                 });
             }
 
-            // 请求播放权限（通过模拟用户交互）
-            requestPlayPermission(video) {
-                // 尝试通过静音来获得播放权限
-                if (video.muted === false) {
-                    video.muted = true;
-                    video.play().then(() => {
-                        // 播放成功后恢复静音状态
-                        video.muted = false;
-                    }).catch(e => {
-                        console.log(`静音播放也失败:`, e);
-                    });
-                }
-            }
-
             // 清理所有资源
             cleanupAllResources() {
+                this.closeCropDialog({ restoreGridPlayback: false });
                 this.stopMemoryMonitoring();
                 this.stopVideoPlayMonitor();
                 this.cleanupVideos();
@@ -1316,6 +1734,7 @@
                     }
                 });
                 this.eventListeners = [];
+                this.gridVideoPlaybackStates = new WeakMap();
             }
 
             // 清理缓存
@@ -1338,6 +1757,17 @@
             // 初始化键盘事件
             initKeyboardEvents() {
                 document.addEventListener('keydown', (e) => {
+                    if (this.cropDialogOpen) {
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            this.closeCropDialog();
+                        } else if (e.key === 'Enter' && this.cropDraftRect) {
+                            e.preventDefault();
+                            this.confirmCrop();
+                        }
+                        return;
+                    }
+
                     // 检查是否有输入框获得了焦点
                     if (document.activeElement &&
                         (document.activeElement.tagName === 'INPUT' ||
@@ -1541,17 +1971,11 @@
                 this.showLoading(true);
                 this.clearError();
 
-                // 清理之前的资源
-                this.cleanupVideos();
-                this.cleanupPreloadedVideos();  // 清理预加载视频
-                this.cleanupURLs();
-
+                let videoURL = null;
                 try {
-                    const videoURL = URL.createObjectURL(this.currentVideo);
-                    this.createdURLs.add(videoURL);
+                    videoURL = URL.createObjectURL(this.currentVideo);
 
                     const video = document.createElement('video');
-                    this.createdVideos.push(video);
 
                     await new Promise((resolve, reject) => {
                         video.onloadedmetadata = resolve;
@@ -1559,7 +1983,14 @@
                         video.src = videoURL;
                     });
 
+                    // 新文件成功加载后再释放旧资源，失败时保留当前预览状态
+                    this.cleanupVideos();
+                    this.cleanupPreloadedVideos();
+                    this.cleanupURLs();
+                    this.createdURLs.add(videoURL);
+                    this.createdVideos.push(video);
                     this.originalVideo = video;
+                    this.activateCropSource(this.currentVideo);
                     this.updateVideoInfo();
                     // 确保在第一次加载时也正确应用缩放计算
                     setTimeout(() => {
@@ -1569,6 +2000,9 @@
                     // 启动垂直进度标识线更新
                     this.startProgressIndicator();
                 } catch (error) {
+                    if (videoURL && !this.createdURLs.has(videoURL)) {
+                        URL.revokeObjectURL(videoURL);
+                    }
                     console.error('视频加载失败:', error);
                     this.showError('视频加载失败，请检查文件格式');
                     this.showNotification('视频加载失败，请检查文件格式', true);
@@ -1629,6 +2063,561 @@
                 if (checkbox && checkbox.checked) {
                     calculateAndSetCols();
                 }
+
+                this.syncCropUI();
+            }
+
+            initCropControls() {
+                const overlay = document.getElementById('cropOverlay');
+                const timeline = document.getElementById('cropTimeline');
+                const cropVideo = document.getElementById('cropVideo');
+
+                if (!overlay || !timeline || !cropVideo) return;
+
+                overlay.addEventListener('pointerdown', (event) => {
+                    if (!this.cropDialogOpen || event.button !== 0) return;
+
+                    const point = this.getCropPointerPoint(event);
+                    const handle = event.target.closest('[data-crop-handle]');
+                    const selection = event.target.closest('#cropSelection');
+
+                    if (handle && this.cropDraftRect) {
+                        this.cropInteraction = {
+                            type: 'resize',
+                            handle: handle.dataset.cropHandle,
+                            startPoint: point,
+                            startRect: { ...this.cropDraftRect },
+                            pointerId: event.pointerId
+                        };
+                    } else if (selection && this.cropDraftRect) {
+                        this.cropInteraction = {
+                            type: 'move',
+                            startPoint: point,
+                            startRect: { ...this.cropDraftRect },
+                            pointerId: event.pointerId
+                        };
+                    } else {
+                        this.cropDraftRect = { x: point.x, y: point.y, width: 0, height: 0 };
+                        this.cropInteraction = {
+                            type: 'create',
+                            startPoint: point,
+                            startRect: { ...this.cropDraftRect },
+                            pointerId: event.pointerId
+                        };
+                    }
+
+                    this.cropSnappedEdges.clear();
+                    overlay.setPointerCapture(event.pointerId);
+                    event.preventDefault();
+                    this.renderCropSelection();
+                });
+
+                overlay.addEventListener('pointermove', (event) => {
+                    if (!this.cropInteraction || this.cropInteraction.pointerId !== event.pointerId) return;
+
+                    const point = this.getCropPointerPoint(event);
+                    const interaction = this.cropInteraction;
+                    const overlayWidth = Math.max(1, overlay.clientWidth);
+                    const overlayHeight = Math.max(1, overlay.clientHeight);
+                    const minWidth = Math.min(1, 5 / overlayWidth);
+                    const minHeight = Math.min(1, 5 / overlayHeight);
+                    this.cropSnappedEdges.clear();
+
+                    if (interaction.type === 'create') {
+                        const left = Math.min(interaction.startPoint.x, point.x);
+                        const top = Math.min(interaction.startPoint.y, point.y);
+                        const right = Math.max(interaction.startPoint.x, point.x);
+                        const bottom = Math.max(interaction.startPoint.y, point.y);
+                        this.cropDraftRect = this.snapCropRect({
+                            x: left,
+                            y: top,
+                            width: right - left,
+                            height: bottom - top
+                        }, ['left', 'right', 'top', 'bottom']);
+                    } else if (interaction.type === 'move') {
+                        const deltaX = point.x - interaction.startPoint.x;
+                        const deltaY = point.y - interaction.startPoint.y;
+                        const startRect = interaction.startRect;
+                        const movedRect = {
+                            x: this.clamp(startRect.x + deltaX, 0, 1 - startRect.width),
+                            y: this.clamp(startRect.y + deltaY, 0, 1 - startRect.height),
+                            width: startRect.width,
+                            height: startRect.height
+                        };
+                        this.cropDraftRect = this.snapMovedCropRect(movedRect);
+                    } else if (interaction.type === 'resize') {
+                        const startRect = interaction.startRect;
+                        const handle = interaction.handle;
+                        let left = startRect.x;
+                        let top = startRect.y;
+                        let right = startRect.x + startRect.width;
+                        let bottom = startRect.y + startRect.height;
+
+                        if (handle.includes('w')) left = Math.min(point.x, right - minWidth);
+                        if (handle.includes('e')) right = Math.max(point.x, left + minWidth);
+                        if (handle.includes('n')) top = Math.min(point.y, bottom - minHeight);
+                        if (handle.includes('s')) bottom = Math.max(point.y, top + minHeight);
+
+                        left = this.clamp(left, 0, right - minWidth);
+                        right = this.clamp(right, left + minWidth, 1);
+                        top = this.clamp(top, 0, bottom - minHeight);
+                        bottom = this.clamp(bottom, top + minHeight, 1);
+
+                        const edges = [];
+                        if (handle.includes('w')) edges.push('left');
+                        if (handle.includes('e')) edges.push('right');
+                        if (handle.includes('n')) edges.push('top');
+                        if (handle.includes('s')) edges.push('bottom');
+
+                        this.cropDraftRect = this.snapCropRect({
+                            x: left,
+                            y: top,
+                            width: right - left,
+                            height: bottom - top
+                        }, edges);
+                    }
+
+                    event.preventDefault();
+                    this.renderCropSelection();
+                });
+
+                const finishInteraction = (event) => {
+                    if (!this.cropInteraction || this.cropInteraction.pointerId !== event.pointerId) return;
+
+                    const minWidth = 5 / Math.max(1, overlay.clientWidth);
+                    const minHeight = 5 / Math.max(1, overlay.clientHeight);
+                    if (this.cropDraftRect &&
+                        (this.cropDraftRect.width < minWidth || this.cropDraftRect.height < minHeight)) {
+                        this.cropDraftRect = null;
+                    }
+
+                    if (overlay.hasPointerCapture(event.pointerId)) {
+                        overlay.releasePointerCapture(event.pointerId);
+                    }
+                    this.cropInteraction = null;
+                    this.cropSnappedEdges.clear();
+                    this.renderCropSelection();
+                };
+
+                overlay.addEventListener('pointerup', finishInteraction);
+                overlay.addEventListener('pointercancel', finishInteraction);
+
+                timeline.addEventListener('input', () => {
+                    const nextTime = Number(timeline.value);
+                    if (Number.isFinite(nextTime) && cropVideo.readyState >= 1) {
+                        cropVideo.currentTime = nextTime;
+                        this.syncCropTimeline();
+                    }
+                });
+
+                cropVideo.addEventListener('loadedmetadata', () => {
+                    const duration = Number.isFinite(cropVideo.duration) ? cropVideo.duration : 0;
+                    const targetTime = this.clamp(this.cropOpenTime || 0, 0, duration);
+                    timeline.max = String(duration);
+                    timeline.value = String(targetTime);
+                    cropVideo.currentTime = targetTime;
+                    this.syncCropTimeline();
+                    requestAnimationFrame(() => this.syncCropOverlayBounds());
+                });
+
+                cropVideo.addEventListener('seeked', () => this.syncCropTimeline());
+                window.addEventListener('resize', () => {
+                    if (this.cropDialogOpen) {
+                        requestAnimationFrame(() => this.syncCropOverlayBounds());
+                    }
+                });
+            }
+
+            clamp(value, min, max) {
+                return Math.min(max, Math.max(min, value));
+            }
+
+            getCropPointerPoint(event) {
+                const overlay = document.getElementById('cropOverlay');
+                const bounds = overlay.getBoundingClientRect();
+                return {
+                    x: this.clamp((event.clientX - bounds.left) / Math.max(1, bounds.width), 0, 1),
+                    y: this.clamp((event.clientY - bounds.top) / Math.max(1, bounds.height), 0, 1)
+                };
+            }
+
+            snapCropRect(rect, enabledEdges) {
+                const snapped = { ...rect };
+                const threshold = 0.02;
+                const right = () => snapped.x + snapped.width;
+                const bottom = () => snapped.y + snapped.height;
+
+                if (enabledEdges.includes('left') && snapped.x < threshold) {
+                    snapped.width = right();
+                    snapped.x = 0;
+                    this.cropSnappedEdges.add('left');
+                }
+                if (enabledEdges.includes('right') && 1 - right() < threshold) {
+                    snapped.width = 1 - snapped.x;
+                    this.cropSnappedEdges.add('right');
+                }
+                if (enabledEdges.includes('top') && snapped.y < threshold) {
+                    snapped.height = bottom();
+                    snapped.y = 0;
+                    this.cropSnappedEdges.add('top');
+                }
+                if (enabledEdges.includes('bottom') && 1 - bottom() < threshold) {
+                    snapped.height = 1 - snapped.y;
+                    this.cropSnappedEdges.add('bottom');
+                }
+
+                return snapped;
+            }
+
+            snapMovedCropRect(rect) {
+                const snapped = { ...rect };
+                const threshold = 0.02;
+
+                if (snapped.x < threshold) {
+                    snapped.x = 0;
+                    this.cropSnappedEdges.add('left');
+                } else if (1 - (snapped.x + snapped.width) < threshold) {
+                    snapped.x = 1 - snapped.width;
+                    this.cropSnappedEdges.add('right');
+                }
+
+                if (snapped.y < threshold) {
+                    snapped.y = 0;
+                    this.cropSnappedEdges.add('top');
+                } else if (1 - (snapped.y + snapped.height) < threshold) {
+                    snapped.y = 1 - snapped.height;
+                    this.cropSnappedEdges.add('bottom');
+                }
+
+                return snapped;
+            }
+
+            getEffectiveCropRect() {
+                return this.cropRect || { x: 0, y: 0, width: 1, height: 1 };
+            }
+
+            hasActiveCrop() {
+                return Boolean(this.cropRect);
+            }
+
+            getCropPixelRect(rect = this.getEffectiveCropRect()) {
+                if (!this.originalVideo) return { x: 0, y: 0, width: 0, height: 0 };
+
+                const videoWidth = this.originalVideo.videoWidth;
+                const videoHeight = this.originalVideo.videoHeight;
+                const left = Math.round(rect.x * videoWidth);
+                const top = Math.round(rect.y * videoHeight);
+                const right = Math.round((rect.x + rect.width) * videoWidth);
+                const bottom = Math.round((rect.y + rect.height) * videoHeight);
+
+                return {
+                    x: left,
+                    y: top,
+                    width: Math.max(1, right - left),
+                    height: Math.max(1, bottom - top)
+                };
+            }
+
+            getEffectiveVideoAspectRatio() {
+                if (!this.originalVideo || !this.originalVideo.videoWidth || !this.originalVideo.videoHeight) return 1;
+                const crop = this.getEffectiveCropRect();
+                return (this.originalVideo.videoWidth * crop.width) /
+                    (this.originalVideo.videoHeight * crop.height);
+            }
+
+            getCropSignature() {
+                if (!this.cropRect) return 'full';
+                return [this.cropRect.x, this.cropRect.y, this.cropRect.width, this.cropRect.height]
+                    .map(value => value.toFixed(6))
+                    .join(':');
+            }
+
+            activateCropSource(sourceIdentity) {
+                if (this.cropSourceIdentity === sourceIdentity) {
+                    this.syncCropUI();
+                    return;
+                }
+
+                this.cropSourceIdentity = sourceIdentity;
+                this.cropRect = null;
+                this.cropDraftRect = null;
+                this.closeCropDialog({ restoreGridPlayback: false });
+                this.resetTransformState();
+                this.syncCropUI();
+            }
+
+            syncCropUI() {
+                const section = document.getElementById('cropSection');
+                const button = document.getElementById('cropButton');
+                const resetButton = document.getElementById('resetCropButton');
+                const status = document.getElementById('cropStatus');
+                if (!section || !button || !resetButton || !status) return;
+
+                const hasVideo = Boolean(this.originalVideo && this.originalVideo.videoWidth && this.originalVideo.videoHeight);
+                section.classList.toggle('is-hidden', !hasVideo);
+                if (!hasVideo) return;
+
+                if (this.cropRect) {
+                    const pixels = this.getCropPixelRect(this.cropRect);
+                    button.textContent = '调整裁剪';
+                    resetButton.classList.remove('is-hidden');
+                    status.textContent = `当前区域：${pixels.width}×${pixels.height} · 宽高比 ${(pixels.width / pixels.height).toFixed(2)}:1`;
+                } else {
+                    button.textContent = '裁剪画面';
+                    resetButton.classList.add('is-hidden');
+                    status.textContent = `使用完整视频画面：${this.originalVideo.videoWidth}×${this.originalVideo.videoHeight}`;
+                }
+            }
+
+            pauseGridVideosForCrop() {
+                this.cropPausedGridVideos.clear();
+                document.querySelectorAll('#videoGrid video').forEach(video => {
+                    if (!video.paused && !video.ended) {
+                        this.cropPausedGridVideos.add(video);
+                    }
+                    video.pause();
+                    delete video._lastCheckTime;
+                });
+            }
+
+            resumeGridVideosAfterCrop() {
+                const grid = document.getElementById('videoGrid');
+                const videosToResume = [...this.cropPausedGridVideos];
+                this.cropPausedGridVideos.clear();
+
+                videosToResume.forEach(video => {
+                    const cell = video.closest('.grid-item');
+                    if (!grid?.contains(video) || cell?.classList.contains('hidden')) return;
+                    video.play().catch(e => console.log('自动播放被阻止:', e));
+                });
+            }
+
+            playGridVideo(video) {
+                if (this.cropDialogOpen) {
+                    this.cropPausedGridVideos.add(video);
+                    video.pause();
+                    return;
+                }
+                if (video.paused) {
+                    video.play().catch(e => console.log('自动播放被阻止:', e));
+                }
+            }
+
+            // 每个网格视频只绑定一套播放监听器；翻页时仅更新可变的时间范围状态
+            configureGridVideoPlayback(video, startTime, endTime, currentTimeOverlay) {
+                let playbackState = this.gridVideoPlaybackStates.get(video);
+
+                if (!playbackState) {
+                    playbackState = {
+                        startTime,
+                        endTime,
+                        currentTimeOverlay
+                    };
+
+                    const seekedHandler = () => {
+                        const cell = video.closest('.grid-item');
+                        if (!cell || cell.classList.contains('hidden')) return;
+
+                        if (playbackState.currentTimeOverlay) {
+                            playbackState.currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                        }
+                        this.playGridVideo(video);
+                    };
+
+                    const timeUpdateHandler = () => {
+                        const cell = video.closest('.grid-item');
+                        if (!cell || cell.classList.contains('hidden')) return;
+
+                        if (video.currentTime >= playbackState.endTime) {
+                            video.currentTime = playbackState.startTime;
+                        }
+
+                        if (playbackState.currentTimeOverlay) {
+                            playbackState.currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                        }
+                    };
+
+                    this.addTrackedEventListener(video, 'seeked', seekedHandler);
+                    this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
+                    this.gridVideoPlaybackStates.set(video, playbackState);
+                    return;
+                }
+
+                playbackState.startTime = startTime;
+                playbackState.endTime = endTime;
+                playbackState.currentTimeOverlay = currentTimeOverlay;
+            }
+
+            openCropDialog() {
+                if (!this.originalVideo || this.cropDialogOpen) return;
+
+                const modal = document.getElementById('cropModal');
+                const cropVideo = document.getElementById('cropVideo');
+                if (!modal || !cropVideo) return;
+
+                this.cropDraftRect = this.cropRect ? { ...this.cropRect } : null;
+                this.cropInteraction = null;
+                this.cropSnappedEdges.clear();
+                this.cropDialogOpen = true;
+                this.cropOpenTime = this.clamp(this.currentStartTime, 0, this.originalVideo.duration || 0);
+                this.pauseGridVideosForCrop();
+
+                modal.classList.remove('is-hidden');
+                document.body.classList.add('crop-dialog-open');
+                cropVideo.src = this.originalVideo.currentSrc || this.originalVideo.src;
+                cropVideo.load();
+                this.renderCropSelection();
+
+                requestAnimationFrame(() => {
+                    this.syncCropOverlayBounds();
+                    modal.querySelector('.crop-dialog-close')?.focus();
+                });
+            }
+
+            closeCropDialog({ restoreGridPlayback = true } = {}) {
+                const modal = document.getElementById('cropModal');
+                const cropVideo = document.getElementById('cropVideo');
+                const overlay = document.getElementById('cropOverlay');
+                const wasOpen = this.cropDialogOpen;
+
+                if (this.cropInteraction && overlay?.hasPointerCapture(this.cropInteraction.pointerId)) {
+                    overlay.releasePointerCapture(this.cropInteraction.pointerId);
+                }
+
+                this.cropDialogOpen = false;
+                this.cropDraftRect = null;
+                this.cropInteraction = null;
+                this.cropSnappedEdges.clear();
+                modal?.classList.add('is-hidden');
+                document.body.classList.remove('crop-dialog-open');
+
+                if (cropVideo) {
+                    cropVideo.pause();
+                    cropVideo.removeAttribute('src');
+                    cropVideo.load();
+                }
+
+                if (wasOpen && restoreGridPlayback) {
+                    this.resumeGridVideosAfterCrop();
+                } else {
+                    this.cropPausedGridVideos.clear();
+                }
+            }
+
+            syncCropOverlayBounds() {
+                if (!this.cropDialogOpen || !this.originalVideo) return;
+
+                const stage = document.getElementById('cropStage');
+                const overlay = document.getElementById('cropOverlay');
+                if (!stage || !overlay) return;
+
+                const stageWidth = stage.clientWidth;
+                const stageHeight = stage.clientHeight;
+                const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
+                const stageAspectRatio = stageWidth / Math.max(1, stageHeight);
+                let displayWidth;
+                let displayHeight;
+
+                if (stageAspectRatio > videoAspectRatio) {
+                    displayHeight = stageHeight;
+                    displayWidth = displayHeight * videoAspectRatio;
+                } else {
+                    displayWidth = stageWidth;
+                    displayHeight = displayWidth / videoAspectRatio;
+                }
+
+                overlay.style.left = `${(stageWidth - displayWidth) / 2}px`;
+                overlay.style.top = `${(stageHeight - displayHeight) / 2}px`;
+                overlay.style.width = `${displayWidth}px`;
+                overlay.style.height = `${displayHeight}px`;
+                this.renderCropSelection();
+            }
+
+            syncCropTimeline() {
+                const cropVideo = document.getElementById('cropVideo');
+                const timeline = document.getElementById('cropTimeline');
+                const current = document.getElementById('cropCurrentTime');
+                const total = document.getElementById('cropTotalTime');
+                if (!cropVideo || !timeline || !current || !total) return;
+
+                const duration = Number.isFinite(cropVideo.duration) ? cropVideo.duration : 0;
+                const currentTime = Number.isFinite(cropVideo.currentTime) ? cropVideo.currentTime : 0;
+                timeline.max = String(duration);
+                timeline.value = String(currentTime);
+                current.textContent = this.formatTime(currentTime);
+                total.textContent = this.formatTime(duration);
+            }
+
+            renderCropSelection() {
+                const selection = document.getElementById('cropSelection');
+                const emptyHint = document.getElementById('cropEmptyHint');
+                const info = document.getElementById('cropSelectionInfo');
+                const confirmButton = document.getElementById('confirmCropButton');
+                if (!selection || !emptyHint || !info || !confirmButton) return;
+
+                const rect = this.cropDraftRect;
+                const hasSelection = Boolean(rect && rect.width > 0 && rect.height > 0);
+                selection.classList.toggle('is-hidden', !hasSelection);
+                emptyHint.classList.toggle('is-hidden', hasSelection);
+                confirmButton.disabled = !hasSelection;
+
+                if (hasSelection) {
+                    selection.style.left = `${rect.x * 100}%`;
+                    selection.style.top = `${rect.y * 100}%`;
+                    selection.style.width = `${rect.width * 100}%`;
+                    selection.style.height = `${rect.height * 100}%`;
+                    const pixels = this.getCropPixelRect(rect);
+                    info.textContent = `选区：${pixels.width}×${pixels.height} · 起点 (${pixels.x}, ${pixels.y}) · 宽高比 ${(pixels.width / pixels.height).toFixed(2)}:1`;
+                } else {
+                    info.textContent = '拖动选择一个区域';
+                }
+
+                document.querySelectorAll('[data-snap-edge]').forEach(line => {
+                    line.classList.toggle('active', this.cropSnappedEdges.has(line.dataset.snapEdge));
+                });
+            }
+
+            confirmCrop() {
+                if (!this.cropDraftRect || !this.originalVideo) return;
+
+                const pixels = this.getCropPixelRect(this.cropDraftRect);
+                const isFullFrame = pixels.x === 0 && pixels.y === 0 &&
+                    pixels.width === this.originalVideo.videoWidth &&
+                    pixels.height === this.originalVideo.videoHeight;
+                this.cropRect = isFullFrame ? null : { ...this.cropDraftRect };
+                this.closeCropDialog({ restoreGridPlayback: false });
+                this.refreshAfterCropChange();
+                this.showNotification(isFullFrame ? '已恢复完整视频画面' : '裁剪区域已应用', false);
+            }
+
+            resetCrop() {
+                if (!this.cropRect) return;
+
+                this.cropRect = null;
+                this.refreshAfterCropChange();
+                this.showNotification('裁剪区域已重置', false);
+            }
+
+            refreshAfterCropChange() {
+                // 保留 currentStartTime：裁剪只重新安排左上角之后的格子
+                this.resetTransformState();
+                const autoCalculateCols = document.getElementById('autoCalculateCols');
+                if (autoCalculateCols?.checked) {
+                    calculateAndSetCols();
+                }
+                this.updateGridDisplay();
+                this.resetGridState();
+                this.syncCropUI();
+                this.updatePreview();
+            }
+
+            applyCropProjection(video) {
+                const crop = this.getEffectiveCropRect();
+                video.style.width = `${100 / crop.width}%`;
+                video.style.height = `${100 / crop.height}%`;
+                video.style.left = `${-100 * crop.x / crop.width}%`;
+                video.style.top = `${-100 * crop.y / crop.height}%`;
+                video.style.objectFit = 'fill';
             }
 
             async updatePreview() {
@@ -1675,6 +2664,21 @@
                 return { rows, cols, cellDuration, totalCells, pageDuration };
             }
 
+            // 获取指定页面实际包含的视频格子数
+            getValidCellCount(pageStartTime = this.currentStartTime) {
+                const { cellDuration, totalCells } = this.getPageConfig();
+                const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
+
+                if (!videoDuration || cellDuration <= 0 || totalCells <= 0) return 0;
+
+                let validCellCount = 0;
+                while (validCellCount < totalCells &&
+                    pageStartTime + validCellCount * cellDuration < videoDuration) {
+                    validCellCount++;
+                }
+                return validCellCount;
+            }
+
             // 判断是否需要重新创建网格
             needToRecreateGrid() {
                 const { rows, cols, cellDuration, totalCells } = this.getPageConfig();
@@ -1692,6 +2696,7 @@
                     this.gridState.cellDuration !== cellDuration ||
                     this.gridState.totalCells !== totalCells ||
                     this.gridState.videoFile !== this.currentVideo ||
+                    this.gridState.cropSignature !== this.getCropSignature() ||
                     shouldForceRebuildForRemote;  // 远程视频根据优化设置决定是否重建
             }
 
@@ -1705,7 +2710,8 @@
                     cols,
                     totalCells,
                     cellDuration,
-                    videoFile: this.currentVideo
+                    videoFile: this.currentVideo,
+                    cropSignature: this.getCropSignature()
                 };
             }
 
@@ -1717,7 +2723,8 @@
                     cols: 0,
                     totalCells: 0,
                     cellDuration: 0,
-                    videoFile: null
+                    videoFile: null,
+                    cropSignature: 'full'
                 };
                 this.resetTransformState();
             }
@@ -1853,24 +2860,6 @@
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = Math.max(0, this.currentStartTime - pageDuration);
                 this.setPageStartTime(newStartTime);
-
-                // 检查是否启用了远程视频翻页优化
-                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
-                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-
-                // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
-                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
-                    // 远程视频且未启用优化：强制重绘
-                    this.updatePreviewDebouncedWrapper();
-                } else if (this.gridState.isInitialized) {
-                    // 本地视频或远程视频已启用优化：只调整时间点
-                    this.updatePaginationUI();
-                    this.updateGridTimePoints();
-                    this.updateFileProgress();
-                } else {
-                    // 网格未初始化：完全重绘
-                    this.updatePreviewDebouncedWrapper();
-                }
             }
 
             nextPage() {
@@ -1880,24 +2869,6 @@
                 const { pageDuration } = this.getPageConfig();
                 const newStartTime = this.currentStartTime + pageDuration;
                 this.setPageStartTime(newStartTime);
-
-                // 检查是否启用了远程视频翻页优化
-                const remoteOptimizationCheckbox = document.getElementById('remoteVideoOptimization');
-                const remoteOptimizationEnabled = remoteOptimizationCheckbox && remoteOptimizationCheckbox.checked;
-
-                // 远程视频根据优化设置决定是否重绘，本地保持非重绘优化
-                if (this.currentVideoUrl && !remoteOptimizationEnabled) {
-                    // 远程视频且未启用优化：强制重绘
-                    this.updatePreviewDebouncedWrapper();
-                } else if (this.gridState.isInitialized) {
-                    // 本地视频或远程视频已启用优化：只调整时间点
-                    this.updatePaginationUI();
-                    this.updateGridTimePoints();
-                    this.updateFileProgress();
-                } else {
-                    // 网格未初始化：完全重绘
-                    this.updatePreviewDebouncedWrapper();
-                }
             }
 
             setPageStartTime(newStartTime) {
@@ -2178,8 +3149,11 @@
                     }
                 }
 
-                finalCellHeight = Math.max(120, finalCellHeight);
-                finalCellWidth = Math.max(120 * videoAspectRatio, finalCellWidth);
+                // 裁剪后的比例可能非常极端，此时优先保证整个网格仍能完整放入容器
+                if (!this.hasActiveCrop()) {
+                    finalCellHeight = Math.max(120, finalCellHeight);
+                    finalCellWidth = Math.max(120 * videoAspectRatio, finalCellWidth);
+                }
 
                 return { width: finalCellWidth, height: finalCellHeight };
             }
@@ -2207,17 +3181,23 @@
                     // 任何重建路径都应回到默认 transform，避免新节点与右侧控件状态不一致
                     this.resetTransformState();
 
-                    grid.innerHTML = '';
-
                     // 清理旧网格视频和事件，只保留 originalVideo (index=0)
                     this.cleanupEventListeners();
+                    this.createdVideos.slice(1).forEach(video => {
+                        try {
+                            video.pause();
+                        } catch (e) {
+                            console.warn('暂停旧网格视频失败:', e);
+                        }
+                    });
                     this.createdVideos.splice(1);
+                    grid.innerHTML = '';
 
                     // 清理预加载的视频元素
                     this.cleanupPreloadedVideos();
 
-                    const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
-                    const videoAspectRatio = this.originalVideo.videoWidth / this.originalVideo.videoHeight;
+                    const { rows, cols, cellDuration, pageDuration } = this.getPageConfig();
+                    const videoAspectRatio = this.getEffectiveVideoAspectRatio();
                     const { width: finalCellWidth, height: finalCellHeight } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
 
                     grid.classList.add('video-grid-dynamic');
@@ -2226,13 +3206,14 @@
                     // 重置状态计数器
                     this.cellLoadedCount = 0;
                     this.cellPlayingCount = 0;
-                    this.totalCellsInCurrentPage = totalCells;
 
 
                     const videoDuration = this.originalVideo.duration;
                     const pageStartTime = this.currentStartTime;
+                    const validCellCount = this.getValidCellCount(pageStartTime);
+                    this.totalCellsInCurrentPage = validCellCount;
 
-                    for (let i = 0; i < totalCells; i++) {
+                    for (let i = 0; i < validCellCount; i++) {
                         const cell = document.createElement('div');
                         cell.className = 'grid-item';
                         cell.dataset.gridIndex = i; // 添加网格索引标识
@@ -2244,17 +3225,26 @@
                         thumbnailVideo.controls = false;
                         thumbnailVideo.classList.add('video-element');
                         thumbnailVideo.dataset.gridIndex = i; // 添加网格索引标识
+                        this.applyCropProjection(thumbnailVideo);
+
+                        const transformLayer = document.createElement('div');
+                        transformLayer.className = 'video-transform-layer';
+                        transformLayer.appendChild(thumbnailVideo);
 
                         this.createdVideos.push(thumbnailVideo);
 
                         const startTime = pageStartTime + i * cellDuration;
                         const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
 
-                        if (startTime >= videoDuration) {
-                            cell.classList.add('hidden');
-                            grid.appendChild(cell);
-                            continue;
-                        }
+                        const currentTimeOverlay = document.createElement('div');
+                        currentTimeOverlay.className = 'current-time-overlay';
+                        currentTimeOverlay.textContent = this.formatTime(startTime);
+
+                        const timeRangeOverlay = document.createElement('div');
+                        timeRangeOverlay.className = 'time-range-overlay';
+                        timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
+
+                        this.configureGridVideoPlayback(thumbnailVideo, startTime, endTime, currentTimeOverlay);
 
                         const loadedMetadataHandler = () => {
                             thumbnailVideo.currentTime = startTime;
@@ -2274,18 +3264,6 @@
                         };
                         this.addTrackedEventListener(thumbnailVideo, 'loadeddata', loadedDataHandler);
 
-                        const seekedHandler = () => {
-                            thumbnailVideo.play().catch(e => console.log('自动播放被阻止:', e));
-
-                            const loopHandler = () => {
-                                if (thumbnailVideo.currentTime >= endTime) {
-                                    thumbnailVideo.currentTime = startTime;
-                                }
-                            };
-                            this.addTrackedEventListener(thumbnailVideo, 'timeupdate', loopHandler);
-                        };
-                        this.addTrackedEventListener(thumbnailVideo, 'seeked', seekedHandler);
-
                         // 状态监听: 播放中 - 视频开始播放
                         const playHandler = () => {
 
@@ -2302,20 +3280,7 @@
                         };
                         this.addTrackedEventListener(thumbnailVideo, 'play', playHandler);
 
-                        const currentTimeOverlay = document.createElement('div');
-                        currentTimeOverlay.className = 'current-time-overlay';
-                        currentTimeOverlay.textContent = this.formatTime(startTime);
-
-                        const timeUpdateHandler = () => {
-                            currentTimeOverlay.textContent = this.formatTime(thumbnailVideo.currentTime);
-                        };
-                        this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
-
-                        const timeRangeOverlay = document.createElement('div');
-                        timeRangeOverlay.className = 'time-range-overlay';
-                        timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
-
-                        cell.appendChild(thumbnailVideo);
+                        cell.appendChild(transformLayer);
                         cell.appendChild(currentTimeOverlay);
                         cell.appendChild(timeRangeOverlay);
 
@@ -2419,7 +3384,7 @@
                     e.preventDefault();
 
                     // 获取格子容器和鼠标位置
-                    const cell = video.parentElement;
+                    const cell = video.closest('.grid-item');
                     const cellRect = cell.getBoundingClientRect();
                     const cellCenterX = cellRect.width / 2;
                     const cellCenterY = cellRect.height / 2;
@@ -2485,9 +3450,9 @@
 
             // 同步应用变换到所有格子的视频
             applyVideoTransformToAll() {
-                const videos = document.querySelectorAll('.grid-item video');
-                videos.forEach(video => {
-                    video.style.transform = `translate(${this.videoTranslateX}px, ${this.videoTranslateY}px) scale(${this.videoScale})`;
+                const transformLayers = document.querySelectorAll('.grid-item .video-transform-layer');
+                transformLayers.forEach(layer => {
+                    layer.style.transform = `translate(${this.videoTranslateX}px, ${this.videoTranslateY}px) scale(${this.videoScale})`;
                 });
             }
 
@@ -2546,6 +3511,17 @@
                         return;
                     }
 
+                    const validCellCount = this.getValidCellCount(pageStartTime);
+                    this.totalCellsInCurrentPage = validCellCount;
+
+                    // 当前网格容量不足时重建，避免从最后一页返回后缺少格子
+                    const grid = document.getElementById('videoGrid');
+                    const renderedVideoCount = grid ? grid.querySelectorAll('.grid-item video').length : 0;
+                    if (validCellCount > renderedVideoCount) {
+                        this.createGridElements();
+                        return;
+                    }
+
                     // 遍历现有的视频元素，只更新时间相关属性
                     this.createdVideos.forEach((video, index) => {
                         if (index === 0) return; // 跳过originalVideo
@@ -2558,7 +3534,7 @@
                         const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
 
                         // 获取对应的单元格和覆盖层元素
-                        const cell = video.parentElement;
+                        const cell = video.closest('.grid-item');
                         if (!cell) {
                             console.warn(`找不到网格索引 ${gridIndex} 的单元格`);
                             return;
@@ -2575,9 +3551,6 @@
                             cell.classList.remove('hidden');
 
                             try {
-                                // 移除旧的时间更新事件监听器
-                                this.removeVideoTimeUpdateListeners(video);
-
                                 // 更新时间显示覆盖层 - 显示在整个视频中的实际时间
                                 if (currentTimeOverlay) {
                                     currentTimeOverlay.textContent = this.formatTime(startTime);
@@ -2587,62 +3560,12 @@
                                     timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
                                 }
 
-                                // 重新绑定循环播放逻辑和时间更新
-                                const seekedHandler = () => {
-                                    // 确保时间显示正确
-                                    if (currentTimeOverlay) {
-                                        currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                    }
+                                // 播放监听器与视频生命周期一致，翻页时只更新时间范围状态
+                                this.configureGridVideoPlayback(video, startTime, endTime, currentTimeOverlay);
+                                video.currentTime = startTime;
 
-                                    video.play().catch(e => console.log('自动播放被阻止:', e));
-
-                                    const loopHandler = () => {
-                                        if (video.currentTime >= endTime) {
-                                            video.currentTime = startTime;
-                                        }
-                                    };
-                                    this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-
-                                    // 添加时间更新处理器
-                                    if (currentTimeOverlay) {
-                                        const timeUpdateHandler = () => {
-                                            currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                        };
-                                        this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
-                                    }
-                                };
-
-                                // 设置视频时间点并等待seeked事件
                                 if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-                                    // 如果视频已经准备好，直接设置时间点
-                                    video.currentTime = startTime;
-
-                                    // 等待一小段时间确保seek完成，然后播放
-                                    setTimeout(() => {
-                                        if (currentTimeOverlay) {
-                                            currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                        }
-                                        video.play().catch(e => console.log('自动播放被阻止:', e));
-
-                                        const loopHandler = () => {
-                                            if (video.currentTime >= endTime) {
-                                                video.currentTime = startTime;
-                                            }
-                                        };
-                                        this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-
-                                        // 添加时间更新处理器
-                                        if (currentTimeOverlay) {
-                                            const timeUpdateHandler = () => {
-                                                currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                            };
-                                            this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
-                                        }
-                                    }, 50);
-                                } else {
-                                    // 如果视频还没准备好，等待seeked事件
-                                    this.addTrackedEventListener(video, 'seeked', seekedHandler);
-                                    video.currentTime = startTime;
+                                    this.playGridVideo(video);
                                 }
                             } catch (e) {
                                 console.error(`更新网格索引 ${gridIndex} 的时间点失败:`, e);
@@ -2662,33 +3585,6 @@
                 } catch (error) {
                     console.error('更新网格时间点失败:', error);
                     this.showNotification('更新视频预览点失败，请稍后重试', true);
-                }
-            }
-
-            // 移除特定视频的时间更新事件监听器
-            removeVideoTimeUpdateListeners(video) {
-                if (!video) {
-                    console.warn('尝试移除空视频的事件监听器');
-                    return;
-                }
-
-                try {
-                    // 找到并移除与该视频相关的所有事件监听器（不仅仅是timeupdate）
-                    const listenersToRemove = this.eventListeners.filter(({ element }) => element === video);
-
-                    listenersToRemove.forEach(({ element, event, handler }) => {
-                        try {
-                            element.removeEventListener(event, handler);
-                        } catch (e) {
-                            console.warn(`移除事件监听器失败 (${event}):`, e);
-                        }
-                    });
-
-                    // 从数组中移除所有相关的事件监听器
-                    this.eventListeners = this.eventListeners.filter(({ element }) => element !== video);
-
-                } catch (e) {
-                    console.error('移除视频事件监听器失败:', e);
                 }
             }
 
@@ -2907,11 +3803,15 @@
 
             // 清空视频显示
             clearVideoDisplay() {
+                this.cropSourceIdentity = null;
+                this.cropRect = null;
+                this.closeCropDialog({ restoreGridPlayback: false });
                 document.getElementById('videoGrid').innerHTML = '';
                 document.getElementById('videoInfo').classList.add('hidden');
                 document.getElementById('videoInfo').classList.remove('visible');
                 document.getElementById('pagination').classList.add('hidden');
                 document.getElementById('pagination').classList.remove('visible');
+                this.syncCropUI();
             }
 
             // 更新文件列表中的进度条
@@ -3225,6 +4125,7 @@
 
                             this.originalVideo = video;
                             this.createdVideos.push(video);
+                            this.activateCropSource(`remote:${url}`);
                             resolve();
                         };
                         video.onerror = () => {
@@ -3363,8 +4264,8 @@
             const containerWidth = container.clientWidth || 800;
             const containerHeight = container.clientHeight || 600;
 
-            // 计算视频宽高比
-            const videoAspectRatio = videoWidth / videoHeight;
+            // 裁剪生效后，以裁剪区域作为当前视频的完整画面
+            const videoAspectRatio = app.getEffectiveVideoAspectRatio();
 
             // 计算能够最大化显示面积的列数
             const optimalCols = calculateOptimalCols(rows, videoAspectRatio, containerWidth, containerHeight);
