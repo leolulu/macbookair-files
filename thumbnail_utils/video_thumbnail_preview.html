@@ -1491,6 +1491,7 @@
                 this.createdURLs = new Set();
                 this.createdVideos = [];
                 this.eventListeners = [];
+                this.gridVideoPlaybackStates = new WeakMap();
 
                 // 格子状态跟踪
                 this.cellLoadedCount = 0;  // 已进入"加载中"状态的格子数量
@@ -1733,6 +1734,7 @@
                     }
                 });
                 this.eventListeners = [];
+                this.gridVideoPlaybackStates = new WeakMap();
             }
 
             // 清理缓存
@@ -2396,7 +2398,54 @@
                     video.pause();
                     return;
                 }
-                video.play().catch(e => console.log('自动播放被阻止:', e));
+                if (video.paused) {
+                    video.play().catch(e => console.log('自动播放被阻止:', e));
+                }
+            }
+
+            // 每个网格视频只绑定一套播放监听器；翻页时仅更新可变的时间范围状态
+            configureGridVideoPlayback(video, startTime, endTime, currentTimeOverlay) {
+                let playbackState = this.gridVideoPlaybackStates.get(video);
+
+                if (!playbackState) {
+                    playbackState = {
+                        startTime,
+                        endTime,
+                        currentTimeOverlay
+                    };
+
+                    const seekedHandler = () => {
+                        const cell = video.closest('.grid-item');
+                        if (!cell || cell.classList.contains('hidden')) return;
+
+                        if (playbackState.currentTimeOverlay) {
+                            playbackState.currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                        }
+                        this.playGridVideo(video);
+                    };
+
+                    const timeUpdateHandler = () => {
+                        const cell = video.closest('.grid-item');
+                        if (!cell || cell.classList.contains('hidden')) return;
+
+                        if (video.currentTime >= playbackState.endTime) {
+                            video.currentTime = playbackState.startTime;
+                        }
+
+                        if (playbackState.currentTimeOverlay) {
+                            playbackState.currentTimeOverlay.textContent = this.formatTime(video.currentTime);
+                        }
+                    };
+
+                    this.addTrackedEventListener(video, 'seeked', seekedHandler);
+                    this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
+                    this.gridVideoPlaybackStates.set(video, playbackState);
+                    return;
+                }
+
+                playbackState.startTime = startTime;
+                playbackState.endTime = endTime;
+                playbackState.currentTimeOverlay = currentTimeOverlay;
             }
 
             openCropDialog() {
@@ -3187,6 +3236,16 @@
                         const startTime = pageStartTime + i * cellDuration;
                         const endTime = Math.min(startTime + cellDuration, Math.min(pageStartTime + pageDuration, videoDuration));
 
+                        const currentTimeOverlay = document.createElement('div');
+                        currentTimeOverlay.className = 'current-time-overlay';
+                        currentTimeOverlay.textContent = this.formatTime(startTime);
+
+                        const timeRangeOverlay = document.createElement('div');
+                        timeRangeOverlay.className = 'time-range-overlay';
+                        timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
+
+                        this.configureGridVideoPlayback(thumbnailVideo, startTime, endTime, currentTimeOverlay);
+
                         const loadedMetadataHandler = () => {
                             thumbnailVideo.currentTime = startTime;
                         };
@@ -3205,18 +3264,6 @@
                         };
                         this.addTrackedEventListener(thumbnailVideo, 'loadeddata', loadedDataHandler);
 
-                        const seekedHandler = () => {
-                            this.playGridVideo(thumbnailVideo);
-
-                            const loopHandler = () => {
-                                if (thumbnailVideo.currentTime >= endTime) {
-                                    thumbnailVideo.currentTime = startTime;
-                                }
-                            };
-                            this.addTrackedEventListener(thumbnailVideo, 'timeupdate', loopHandler);
-                        };
-                        this.addTrackedEventListener(thumbnailVideo, 'seeked', seekedHandler);
-
                         // 状态监听: 播放中 - 视频开始播放
                         const playHandler = () => {
 
@@ -3232,19 +3279,6 @@
                             }
                         };
                         this.addTrackedEventListener(thumbnailVideo, 'play', playHandler);
-
-                        const currentTimeOverlay = document.createElement('div');
-                        currentTimeOverlay.className = 'current-time-overlay';
-                        currentTimeOverlay.textContent = this.formatTime(startTime);
-
-                        const timeUpdateHandler = () => {
-                            currentTimeOverlay.textContent = this.formatTime(thumbnailVideo.currentTime);
-                        };
-                        this.addTrackedEventListener(thumbnailVideo, 'timeupdate', timeUpdateHandler);
-
-                        const timeRangeOverlay = document.createElement('div');
-                        timeRangeOverlay.className = 'time-range-overlay';
-                        timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
 
                         cell.appendChild(transformLayer);
                         cell.appendChild(currentTimeOverlay);
@@ -3517,9 +3551,6 @@
                             cell.classList.remove('hidden');
 
                             try {
-                                // 移除旧的时间更新事件监听器
-                                this.removeVideoTimeUpdateListeners(video);
-
                                 // 更新时间显示覆盖层 - 显示在整个视频中的实际时间
                                 if (currentTimeOverlay) {
                                     currentTimeOverlay.textContent = this.formatTime(startTime);
@@ -3529,62 +3560,12 @@
                                     timeRangeOverlay.textContent = `${this.formatTime(startTime)}-${this.formatTime(endTime)}`;
                                 }
 
-                                // 重新绑定循环播放逻辑和时间更新
-                                const seekedHandler = () => {
-                                    // 确保时间显示正确
-                                    if (currentTimeOverlay) {
-                                        currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                    }
+                                // 播放监听器与视频生命周期一致，翻页时只更新时间范围状态
+                                this.configureGridVideoPlayback(video, startTime, endTime, currentTimeOverlay);
+                                video.currentTime = startTime;
 
-                                    this.playGridVideo(video);
-
-                                    const loopHandler = () => {
-                                        if (video.currentTime >= endTime) {
-                                            video.currentTime = startTime;
-                                        }
-                                    };
-                                    this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-
-                                    // 添加时间更新处理器
-                                    if (currentTimeOverlay) {
-                                        const timeUpdateHandler = () => {
-                                            currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                        };
-                                        this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
-                                    }
-                                };
-
-                                // 设置视频时间点并等待seeked事件
                                 if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-                                    // 如果视频已经准备好，直接设置时间点
-                                    video.currentTime = startTime;
-
-                                    // 等待一小段时间确保seek完成，然后播放
-                                    setTimeout(() => {
-                                        if (currentTimeOverlay) {
-                                            currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                        }
-                                        this.playGridVideo(video);
-
-                                        const loopHandler = () => {
-                                            if (video.currentTime >= endTime) {
-                                                video.currentTime = startTime;
-                                            }
-                                        };
-                                        this.addTrackedEventListener(video, 'timeupdate', loopHandler);
-
-                                        // 添加时间更新处理器
-                                        if (currentTimeOverlay) {
-                                            const timeUpdateHandler = () => {
-                                                currentTimeOverlay.textContent = this.formatTime(video.currentTime);
-                                            };
-                                            this.addTrackedEventListener(video, 'timeupdate', timeUpdateHandler);
-                                        }
-                                    }, 50);
-                                } else {
-                                    // 如果视频还没准备好，等待seeked事件
-                                    this.addTrackedEventListener(video, 'seeked', seekedHandler);
-                                    video.currentTime = startTime;
+                                    this.playGridVideo(video);
                                 }
                             } catch (e) {
                                 console.error(`更新网格索引 ${gridIndex} 的时间点失败:`, e);
@@ -3604,33 +3585,6 @@
                 } catch (error) {
                     console.error('更新网格时间点失败:', error);
                     this.showNotification('更新视频预览点失败，请稍后重试', true);
-                }
-            }
-
-            // 移除特定视频的时间更新事件监听器
-            removeVideoTimeUpdateListeners(video) {
-                if (!video) {
-                    console.warn('尝试移除空视频的事件监听器');
-                    return;
-                }
-
-                try {
-                    // 找到并移除与该视频相关的所有事件监听器（不仅仅是timeupdate）
-                    const listenersToRemove = this.eventListeners.filter(({ element }) => element === video);
-
-                    listenersToRemove.forEach(({ element, event, handler }) => {
-                        try {
-                            element.removeEventListener(event, handler);
-                        } catch (e) {
-                            console.warn(`移除事件监听器失败 (${event}):`, e);
-                        }
-                    });
-
-                    // 从数组中移除所有相关的事件监听器
-                    this.eventListeners = this.eventListeners.filter(({ element }) => element !== video);
-
-                } catch (e) {
-                    console.error('移除视频事件监听器失败:', e);
                 }
             }
 
