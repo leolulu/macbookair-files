@@ -2374,6 +2374,7 @@
                         this.cropPausedGridVideos.add(video);
                     }
                     video.pause();
+                    delete video._lastCheckTime;
                 });
             }
 
