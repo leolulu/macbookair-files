@@ -820,12 +820,190 @@
             border-radius: 10px;
             box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
             z-index: 900;
-            resize: both;
+            box-sizing: border-box;
+            resize: none;
             overflow: hidden;
+            transition: box-shadow 0.16s ease;
         }
 
         .ai-chat-window[hidden] {
             display: none;
+        }
+
+        .ai-chat-window.ai-chat-resizing {
+            box-shadow: 0 14px 38px rgba(0, 0, 0, 0.26), 0 0 0 1px rgba(77, 141, 255, 0.2);
+        }
+
+        .ai-chat-resize-handle {
+            position: absolute;
+            z-index: 10;
+            touch-action: none;
+        }
+
+        .ai-chat-resize-handle::after {
+            content: "";
+            position: absolute;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.14s ease, box-shadow 0.14s ease;
+        }
+
+        .ai-chat-resize-n,
+        .ai-chat-resize-s {
+            left: 14px;
+            right: 14px;
+            height: 8px;
+            cursor: ns-resize;
+        }
+
+        .ai-chat-resize-n {
+            top: 0;
+        }
+
+        .ai-chat-resize-s {
+            bottom: 0;
+        }
+
+        .ai-chat-resize-n::after,
+        .ai-chat-resize-s::after {
+            left: 50%;
+            width: 42px;
+            height: 2px;
+            border-radius: 2px;
+            background: #4d8dff;
+            transform: translateX(-50%);
+        }
+
+        .ai-chat-resize-n::after {
+            top: 1px;
+        }
+
+        .ai-chat-resize-s::after {
+            bottom: 1px;
+        }
+
+        .ai-chat-resize-e,
+        .ai-chat-resize-w {
+            top: 14px;
+            bottom: 14px;
+            width: 8px;
+            cursor: ew-resize;
+        }
+
+        .ai-chat-resize-e {
+            right: 0;
+        }
+
+        .ai-chat-resize-w {
+            left: 0;
+        }
+
+        .ai-chat-resize-e::after,
+        .ai-chat-resize-w::after {
+            top: 50%;
+            width: 2px;
+            height: 42px;
+            border-radius: 2px;
+            background: #4d8dff;
+            transform: translateY(-50%);
+        }
+
+        .ai-chat-resize-e::after {
+            right: 1px;
+        }
+
+        .ai-chat-resize-w::after {
+            left: 1px;
+        }
+
+        .ai-chat-resize-ne,
+        .ai-chat-resize-se,
+        .ai-chat-resize-sw,
+        .ai-chat-resize-nw {
+            width: 14px;
+            height: 14px;
+        }
+
+        .ai-chat-resize-ne {
+            top: 0;
+            right: 0;
+            cursor: nesw-resize;
+        }
+
+        .ai-chat-resize-se {
+            right: 0;
+            bottom: 0;
+            cursor: nwse-resize;
+        }
+
+        .ai-chat-resize-sw {
+            bottom: 0;
+            left: 0;
+            cursor: nesw-resize;
+        }
+
+        .ai-chat-resize-nw {
+            top: 0;
+            left: 0;
+            cursor: nwse-resize;
+        }
+
+        .ai-chat-resize-ne::after,
+        .ai-chat-resize-se::after,
+        .ai-chat-resize-sw::after,
+        .ai-chat-resize-nw::after {
+            width: 7px;
+            height: 7px;
+        }
+
+        .ai-chat-resize-ne::after {
+            top: 2px;
+            right: 2px;
+            border-top: 2px solid #4d8dff;
+            border-right: 2px solid #4d8dff;
+            border-radius: 0 3px 0 0;
+        }
+
+        .ai-chat-resize-se::after {
+            right: 2px;
+            bottom: 2px;
+            border-right: 2px solid #4d8dff;
+            border-bottom: 2px solid #4d8dff;
+            border-radius: 0 0 3px 0;
+        }
+
+        .ai-chat-resize-sw::after {
+            bottom: 2px;
+            left: 2px;
+            border-bottom: 2px solid #4d8dff;
+            border-left: 2px solid #4d8dff;
+            border-radius: 0 0 0 3px;
+        }
+
+        .ai-chat-resize-nw::after {
+            top: 2px;
+            left: 2px;
+            border-top: 2px solid #4d8dff;
+            border-left: 2px solid #4d8dff;
+            border-radius: 3px 0 0 0;
+        }
+
+        .ai-chat-resize-handle:hover::after,
+        .ai-chat-resize-handle.is-active::after {
+            opacity: 0.85;
+            box-shadow: 0 0 7px rgba(77, 141, 255, 0.42);
+        }
+
+        .ai-chat-resize-handle.is-active::after {
+            opacity: 1;
+        }
+
+        body.ai-chat-resizing {
+            user-select: none;
+        }
+
+        body.ai-chat-resizing * {
+            cursor: inherit !important;
         }
 
         .ai-chat-header {
@@ -1239,6 +1417,10 @@
                 height: 96vh !important;
                 resize: none;
             }
+
+            .ai-chat-resize-handle {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -1405,6 +1587,14 @@
     <div id="toastContainer"></div>
 
     <div id="aiChatWindow" class="ai-chat-window" hidden>
+        <span class="ai-chat-resize-handle ai-chat-resize-n" data-resize-direction="n" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-e" data-resize-direction="e" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-s" data-resize-direction="s" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-w" data-resize-direction="w" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-ne" data-resize-direction="ne" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-se" data-resize-direction="se" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-sw" data-resize-direction="sw" aria-hidden="true"></span>
+        <span class="ai-chat-resize-handle ai-chat-resize-nw" data-resize-direction="nw" aria-hidden="true"></span>
         <div id="aiChatHeader" class="ai-chat-header">
             <span class="ai-chat-title">AI对话</span>
             <span class="ai-chat-header-actions">
@@ -5960,6 +6150,114 @@
                 });
 
                 closeButton.addEventListener('click', closeChatWindow);
+
+                chatWindow.querySelectorAll('.ai-chat-resize-handle').forEach(function (handle) {
+                    handle.addEventListener('pointerdown', function (event) {
+                        if (isSmallScreen() || (event.pointerType === 'mouse' && event.button !== 0)) {
+                            return;
+                        }
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        var direction = handle.dataset.resizeDirection;
+                        var rect = chatWindow.getBoundingClientRect();
+                        var computedStyle = window.getComputedStyle(chatWindow);
+                        var minWidth = parseFloat(computedStyle.minWidth) || 300;
+                        var minHeight = parseFloat(computedStyle.minHeight) || 260;
+                        var cssMaxWidth = parseFloat(computedStyle.maxWidth) || window.innerWidth;
+                        var cssMaxHeight = parseFloat(computedStyle.maxHeight) || window.innerHeight;
+                        var maxWidth = Math.min(cssMaxWidth, window.innerWidth - 16);
+                        var maxHeight = Math.min(cssMaxHeight, window.innerHeight - 16);
+                        var startX = event.clientX;
+                        var startY = event.clientY;
+                        var pointerId = event.pointerId;
+                        var previousBodyCursor = document.body.style.cursor;
+
+                        if (direction.indexOf('e') !== -1) {
+                            maxWidth = Math.min(maxWidth, window.innerWidth - 8 - rect.left);
+                        } else if (direction.indexOf('w') !== -1) {
+                            maxWidth = Math.min(maxWidth, rect.right - 8);
+                        }
+                        if (direction.indexOf('s') !== -1) {
+                            maxHeight = Math.min(maxHeight, window.innerHeight - 8 - rect.top);
+                        } else if (direction.indexOf('n') !== -1) {
+                            maxHeight = Math.min(maxHeight, rect.bottom);
+                        }
+                        maxWidth = Math.max(minWidth, maxWidth);
+                        maxHeight = Math.max(minHeight, maxHeight);
+
+                        chatWindow.style.left = rect.left + 'px';
+                        chatWindow.style.top = rect.top + 'px';
+                        chatWindow.style.width = rect.width + 'px';
+                        chatWindow.style.height = rect.height + 'px';
+                        chatWindow.style.right = 'auto';
+                        chatWindow.style.bottom = 'auto';
+                        chatWindow.classList.add('ai-chat-resizing');
+                        handle.classList.add('is-active');
+                        document.body.classList.add('ai-chat-resizing');
+                        document.body.style.cursor = window.getComputedStyle(handle).cursor;
+                        try {
+                            handle.setPointerCapture(pointerId);
+                        } catch (err) { }
+
+                        function clamp(value, min, max) {
+                            return Math.min(Math.max(value, min), max);
+                        }
+
+                        function onPointerMove(ev) {
+                            if (ev.pointerId !== pointerId) {
+                                return;
+                            }
+                            ev.preventDefault();
+                            var deltaX = ev.clientX - startX;
+                            var deltaY = ev.clientY - startY;
+                            var width = rect.width;
+                            var height = rect.height;
+                            var left = rect.left;
+                            var top = rect.top;
+
+                            if (direction.indexOf('e') !== -1) {
+                                width = clamp(rect.width + deltaX, minWidth, maxWidth);
+                            } else if (direction.indexOf('w') !== -1) {
+                                width = clamp(rect.width - deltaX, minWidth, maxWidth);
+                                left = rect.right - width;
+                            }
+                            if (direction.indexOf('s') !== -1) {
+                                height = clamp(rect.height + deltaY, minHeight, maxHeight);
+                            } else if (direction.indexOf('n') !== -1) {
+                                height = clamp(rect.height - deltaY, minHeight, maxHeight);
+                                top = rect.bottom - height;
+                            }
+
+                            chatWindow.style.width = width + 'px';
+                            chatWindow.style.height = height + 'px';
+                            chatWindow.style.left = left + 'px';
+                            chatWindow.style.top = top + 'px';
+                        }
+
+                        function onPointerUp(ev) {
+                            if (ev.pointerId !== pointerId) {
+                                return;
+                            }
+                            window.removeEventListener('pointermove', onPointerMove);
+                            window.removeEventListener('pointerup', onPointerUp);
+                            window.removeEventListener('pointercancel', onPointerUp);
+                            try {
+                                handle.releasePointerCapture(pointerId);
+                            } catch (err) { }
+                            chatWindow.classList.remove('ai-chat-resizing');
+                            handle.classList.remove('is-active');
+                            document.body.classList.remove('ai-chat-resizing');
+                            document.body.style.cursor = previousBodyCursor;
+                            captureGeometry();
+                            persistWindowState();
+                        }
+
+                        window.addEventListener('pointermove', onPointerMove);
+                        window.addEventListener('pointerup', onPointerUp);
+                        window.addEventListener('pointercancel', onPointerUp);
+                    });
+                });
 
                 chatHeader.addEventListener('pointerdown', function (event) {
                     if (event.target.closest('button') || isSmallScreen()) {
