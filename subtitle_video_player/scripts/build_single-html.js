@@ -134,6 +134,8 @@ function build() {
   const inlineScripts = {
     'assets/vendor/jquery/jquery-3.6.0.min.js': readText(path.join(ROOT, 'assets/vendor/jquery/jquery-3.6.0.min.js')),
     'assets/vendor/jquery/jquery-ui-1.13.2.min.js': readText(path.join(ROOT, 'assets/vendor/jquery/jquery-ui-1.13.2.min.js')),
+    'assets/vendor/marked/marked.umd.js': readText(path.join(ROOT, 'assets/vendor/marked/marked.umd.js')),
+    'assets/vendor/dompurify/purify.min.js': readText(path.join(ROOT, 'assets/vendor/dompurify/purify.min.js')),
     'js/cache/sup_ocr_cache.js': readText(path.join(ROOT, 'js/cache/sup_ocr_cache.js')),
     'js/sup/pgs_parser.js': readText(path.join(ROOT, 'js/sup/pgs_parser.js')),
     'js/ocr/paddle_ocr.js': patchMainOcrJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr.js')))
@@ -153,6 +155,18 @@ function build() {
     '<script src="assets/vendor/jquery/jquery-ui-1.13.2.min.js"></script>',
     `<script>\n${inlineScripts['assets/vendor/jquery/jquery-ui-1.13.2.min.js']}\n</script>`,
     'Failed to inline jquery-ui'
+  );
+  html = replaceOnce(
+    html,
+    '<script src="assets/vendor/marked/marked.umd.js"></script>',
+    `<script>\n${inlineScripts['assets/vendor/marked/marked.umd.js']}\n</script>`,
+    'Failed to inline marked'
+  );
+  html = replaceOnce(
+    html,
+    '<script src="assets/vendor/dompurify/purify.min.js"></script>',
+    `<script>\n${inlineScripts['assets/vendor/dompurify/purify.min.js']}\n</script>`,
+    'Failed to inline dompurify'
   );
   html = replaceOnce(
     html,

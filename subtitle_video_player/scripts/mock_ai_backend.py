@@ -8,6 +8,7 @@
 测试指令(包含在提问中即可触发对应分支):
 - "触发错误"   -> 流中途下发 error 事件
 - "触发500"    -> 返回 HTTP 500
+- "未闭合围栏" -> 返回缺少结束标记的 markdown 代码围栏
 """
 
 import json
@@ -17,14 +18,27 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 REPLY_TEMPLATE = (
-    "这是 mock 后端的回答。收到你的问题(共 {n} 字)，"
-    "本轮请求附带的 system_message 长度为 {m} 字符。"
-    "在 [0:00:05] 这句字幕里提到了相关内容，可以点击时间点跳转试试；"
-    "更早的背景见 [0:00:01]。"
-    "下面是一段用来测试流式渲染的长文本："
-    "第一点，流式输出按小块推送，前端应有打字机效果；"
-    "第二点，生成过程中可以点击停止，残缺回答不会计入历史；"
-    "第三点，完成后回答中的时间点会变成可点击链接。"
+    "## mock 回答（markdown 测试）\n\n"
+    "收到你的问题(共 {n} 字)，system_message 长度 **{m}** 字符。\n\n"
+    "在 [0:00:05] 这句字幕里提到了相关内容，可以点击时间点跳转；更早的背景见 [0:00:01]。\n\n"
+    "### 格式覆盖\n\n"
+    "- **粗体**、*斜体*、~~删除线~~、行内代码 `preserve=true`\n"
+    "- 链接：[doubao_backend](https://github.com/leolulu/doubao_backend)\n"
+    "- 协议白名单：[HTTPS](https://example.com) [HTTP](http://example.com) "
+    "[相对路径](./local) [邮箱](mailto:test@example.com)\n"
+    "- 任务列表：\n\n"
+    "| 参数 | 说明 |\n"
+    "|---|---|\n"
+    "| id | 会话 ID |\n"
+    "| preserve | 是否保留历史 |\n\n"
+    "> 引用块：时间戳 [0:00:03] 在引用里也应可点击。\n\n"
+    "```python\n"
+    "# 代码块里的 [0:00:09] 不应变成链接\n"
+    "print('hello')\n"
+    "```\n\n"
+    "XSS 探针(应全部被消毒)：<script>alert(1)</script> "
+    "<img src=x onerror=\"alert(2)\"> [恶意链接](javascript:alert(3))\n\n"
+    "---\n\n"
     "以上内容仅用于联调，与真实模型无关。"
 )
 
@@ -80,6 +94,8 @@ class MockHandler(BaseHTTPRequestHandler):
     def _build_reply(self, payload):
         user_message = payload.get("user_message") or ""
         system_message = payload.get("system_message") or ""
+        if "未闭合围栏" in user_message:
+            return "## 未闭合围栏测试\n\n```python\nprint('streaming')\n"
         return REPLY_TEMPLATE.format(n=len(user_message), m=len(system_message))
 
     def _handle_plain(self, payload):

@@ -2,6 +2,7 @@
 <html>
 
 <head>
+    <meta charset="UTF-8">
     <title>Video Player with Subtitles</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="data:,">
@@ -953,6 +954,125 @@
             color: #94261f;
         }
 
+        .ai-chat-error-line {
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        /* ===== AI 气泡内 markdown 样式(紧凑聊天风) ===== */
+        .ai-chat-msg-ai.ai-chat-md {
+            white-space: normal;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md>*:first-child {
+            margin-top: 0;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md>*:last-child {
+            margin-bottom: 0;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md p {
+            margin: 6px 0;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md h1,
+        .ai-chat-msg-ai.ai-chat-md h2,
+        .ai-chat-msg-ai.ai-chat-md h3,
+        .ai-chat-msg-ai.ai-chat-md h4,
+        .ai-chat-msg-ai.ai-chat-md h5,
+        .ai-chat-msg-ai.ai-chat-md h6 {
+            margin: 10px 0 6px;
+            line-height: 1.35;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md h1 {
+            font-size: 1.25em;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md h2 {
+            font-size: 1.15em;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md h3 {
+            font-size: 1.08em;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md h4,
+        .ai-chat-msg-ai.ai-chat-md h5,
+        .ai-chat-msg-ai.ai-chat-md h6 {
+            font-size: 1em;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md ul,
+        .ai-chat-msg-ai.ai-chat-md ol {
+            margin: 6px 0;
+            padding-left: 22px;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md li {
+            margin: 2px 0;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md code {
+            background: #e9ebf0;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.92em;
+            font-family: Consolas, Menlo, Monaco, 'Courier New', monospace;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md pre {
+            background: #f0f1f5;
+            border: 1px solid #e2e5ec;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 8px 0;
+            overflow-x: auto;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9em;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md blockquote {
+            margin: 8px 0;
+            padding: 4px 10px;
+            border-left: 3px solid #c5cbd6;
+            color: #5a6270;
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .ai-chat-msg-ai.ai-chat-md table {
+            border-collapse: collapse;
+            margin: 8px 0;
+            display: block;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md th,
+        .ai-chat-msg-ai.ai-chat-md td {
+            border: 1px solid #d5d9e2;
+            padding: 4px 8px;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md th {
+            background: #f3f5f9;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md hr {
+            border: none;
+            border-top: 1px solid #e0e3ea;
+            margin: 10px 0;
+        }
+
+        .ai-chat-msg-ai.ai-chat-md a {
+            color: #1a63d6;
+        }
+
         .ai-chat-msg-meta {
             font-size: 12px;
             color: #9aa1ad;
@@ -1334,6 +1454,8 @@
 
     <script src="assets/vendor/jquery/jquery-3.6.0.min.js"></script>
     <script src="assets/vendor/jquery/jquery-ui-1.13.2.min.js"></script>
+    <script src="assets/vendor/marked/marked.umd.js"></script>
+    <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/cache/sup_ocr_cache.js"></script>
     <script src="js/sup/pgs_parser.js"></script>
     <script src="js/ocr/paddle_ocr.js"></script>
@@ -5324,37 +5446,122 @@
 
                 var TIME_LINK_PATTERN = /\[(\d{1,2}:[0-5]?\d(?::[0-5]?\d)?)\]/g;
 
-                function renderAiMessageContent(div, fullText) {
-                    div.textContent = '';
+                function makeTimeLink(seconds, label) {
+                    var link = document.createElement('span');
+                    link.className = 'ai-chat-time-link';
+                    link.textContent = label;
+                    link.title = '点击跳转到该时间点';
+                    link.onclick = function () {
+                        videoElement.currentTime = getShiftedSubtitleTime(seconds);
+                        if ($('#clickToPlay').prop('checked')) {
+                            videoElement.play();
+                        }
+                    };
+                    return link;
+                }
+
+                // 把一段纯文本中的 [h:mm:ss] 转成可点击跳转链接,依次追加到容器
+                function appendTextWithTimeLinks(container, text) {
                     var lastIndex = 0;
                     var match;
                     TIME_LINK_PATTERN.lastIndex = 0;
-                    while ((match = TIME_LINK_PATTERN.exec(fullText)) !== null) {
+                    while ((match = TIME_LINK_PATTERN.exec(text)) !== null) {
                         var seconds = parseClock(match[1]);
                         if (seconds === null) {
                             continue;
                         }
                         if (match.index > lastIndex) {
-                            div.appendChild(document.createTextNode(fullText.slice(lastIndex, match.index)));
+                            container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
                         }
-                        var link = document.createElement('span');
-                        link.className = 'ai-chat-time-link';
-                        link.textContent = match[0];
-                        link.title = '点击跳转到该时间点';
-                        (function (sec) {
-                            link.onclick = function () {
-                                videoElement.currentTime = getShiftedSubtitleTime(sec);
-                                if ($('#clickToPlay').prop('checked')) {
-                                    videoElement.play();
-                                }
-                            };
-                        })(seconds);
-                        div.appendChild(link);
+                        container.appendChild(makeTimeLink(seconds, match[0]));
                         lastIndex = match.index + match[0].length;
                     }
-                    if (lastIndex < fullText.length) {
-                        div.appendChild(document.createTextNode(fullText.slice(lastIndex)));
+                    if (lastIndex < text.length) {
+                        container.appendChild(document.createTextNode(text.slice(lastIndex)));
                     }
+                }
+
+                function renderPlainTextWithTimeLinks(div, fullText) {
+                    div.textContent = '';
+                    appendTextWithTimeLinks(div, fullText);
+                }
+
+                // markdown 渲染后的 DOM 后处理:文本节点中的时间戳转跳转链接(跳过代码与链接内部)
+                function linkifyTimestamps(root) {
+                    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+                    var targets = [];
+                    var node;
+                    while ((node = walker.nextNode())) {
+                        if (!node.nodeValue || node.nodeValue.indexOf(':') === -1) {
+                            continue;
+                        }
+                        TIME_LINK_PATTERN.lastIndex = 0;
+                        if (!TIME_LINK_PATTERN.test(node.nodeValue)) {
+                            continue;
+                        }
+                        var parent = node.parentElement;
+                        if (parent && parent.closest && parent.closest('pre, code, a')) {
+                            continue;
+                        }
+                        targets.push(node);
+                    }
+                    targets.forEach(function (textNode) {
+                        var fragment = document.createDocumentFragment();
+                        appendTextWithTimeLinks(fragment, textNode.nodeValue);
+                        textNode.parentNode.replaceChild(fragment, textNode);
+                    });
+                }
+
+                // 流式中途未闭合的代码围栏会把后续内容全部吞进代码块,渲染前补一个临时闭合(不改原文)
+                function repairUnclosedFences(text) {
+                    var fences = text.match(/^[ \t]{0,3}(```|~~~)/gm) || [];
+                    if (fences.length % 2 === 1) {
+                        var lastFence = fences[fences.length - 1];
+                        return text + '\n' + (lastFence.indexOf('~~~') !== -1 ? '~~~' : '```');
+                    }
+                    return text;
+                }
+
+                // AI 输出按不可信内容对待:白名单消毒,禁 img,链接仅允许绝对 http/https
+                var AI_SANITIZE_CONFIG = {
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'del', 's', 'code', 'pre',
+                        'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
+                        'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a', 'span'],
+                    ALLOWED_ATTR: ['href', 'title', 'class', 'start', 'align'],
+                    ALLOW_DATA_ATTR: false,
+                    ALLOWED_URI_REGEXP: /^https?:\/\//i
+                };
+
+                var markdownReady = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined' && DOMPurify.isSupported;
+                if (markdownReady) {
+                    marked.use({ gfm: true, breaks: true });
+                    DOMPurify.addHook('afterSanitizeAttributes', function (node) {
+                        if (node.tagName === 'A' && node.hasAttribute('href')) {
+                            node.setAttribute('target', '_blank');
+                            node.setAttribute('rel', 'noopener noreferrer');
+                        }
+                    });
+                }
+
+                function renderAiMessageContent(div, fullText, reportSanitizedRemoval) {
+                    if (!markdownReady) {
+                        renderPlainTextWithTimeLinks(div, fullText);
+                        return;
+                    }
+                    var html;
+                    try {
+                        html = marked.parse(repairUnclosedFences(fullText));
+                    } catch (err) {
+                        div.classList.remove('ai-chat-md');
+                        renderPlainTextWithTimeLinks(div, fullText);
+                        return;
+                    }
+                    div.classList.add('ai-chat-md');
+                    div.innerHTML = DOMPurify.sanitize(html, AI_SANITIZE_CONFIG);
+                    if (reportSanitizedRemoval !== false && DOMPurify.removed && DOMPurify.removed.length) {
+                        console.warn('AI 回复中有内容被消毒移除:', DOMPurify.removed);
+                    }
+                    linkifyTimestamps(div);
                 }
 
                 // ---------- SSE 流式请求 ----------
@@ -5462,20 +5669,45 @@
                     updateToggleButtonState();
                     activeAbortController = new AbortController();
                     var accumulated = '';
+                    var streamRenderTimer = null;
+                    var lastStreamRenderAt = 0;
+
+                    // 流式期间全量重渲染 markdown,节流至约 100ms 一次
+                    function renderStreamingNow() {
+                        streamRenderTimer = null;
+                        lastStreamRenderAt = Date.now();
+                        var pinned = isPinnedToBottom();
+                        renderAiMessageContent(aiDiv, accumulated, false);
+                        if (pinned) {
+                            scrollToBottom();
+                        }
+                    }
+
+                    function cancelStreamingRender() {
+                        if (streamRenderTimer) {
+                            clearTimeout(streamRenderTimer);
+                            streamRenderTimer = null;
+                        }
+                    }
+
                     streamChatRequest(options.payloadText, {
                         onDelta: function (textChunk) {
-                            var pinned = isPinnedToBottom();
                             accumulated += textChunk;
-                            aiDiv.textContent = accumulated;
-                            if (pinned) {
-                                scrollToBottom();
+                            if (!streamRenderTimer) {
+                                streamRenderTimer = setTimeout(renderStreamingNow, Math.max(0, 100 - (Date.now() - lastStreamRenderAt)));
                             }
                         }
                     }, activeAbortController.signal).then(function () {
+                        cancelStreamingRender();
                         aiDiv.classList.remove('ai-chat-streaming');
+                        var shouldKeepPinned = isPinnedToBottom();
                         renderAiMessageContent(aiDiv, accumulated);
+                        if (shouldKeepPinned) {
+                            scrollToBottom();
+                        }
                         finishGeneration(true);
                     }).catch(function (err) {
+                        cancelStreamingRender();
                         aiDiv.classList.remove('ai-chat-streaming');
                         if (err && err.name === 'AbortError') {
                             if (accumulated) {
@@ -5490,7 +5722,12 @@
                             }
                         } else {
                             aiDiv.classList.add('ai-chat-msg-error');
-                            aiDiv.textContent = (accumulated ? accumulated + '\n\n' : '') + '⚠ ' + (err && err.message ? err.message : '请求失败');
+                            var shouldKeepErrorPinned = isPinnedToBottom();
+                            renderAiMessageContent(aiDiv, accumulated);
+                            var errorLine = document.createElement('div');
+                            errorLine.className = 'ai-chat-error-line';
+                            errorLine.textContent = '⚠ ' + (err && err.message ? err.message : '请求失败');
+                            aiDiv.appendChild(errorLine);
                             var retryButton = document.createElement('button');
                             retryButton.type = 'button';
                             retryButton.className = 'ai-chat-retry-btn';
@@ -5505,6 +5742,9 @@
                                 runStreamInto(aiDiv, options);
                             };
                             aiDiv.appendChild(retryButton);
+                            if (shouldKeepErrorPinned) {
+                                scrollToBottom();
+                            }
                         }
                         finishGeneration(false);
                     });
