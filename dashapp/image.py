@@ -284,7 +284,15 @@ page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候�
 
 app.layout = html.Div(
     [
-        html.Div(style={"display": "flex", "flex-wrap": "wrap", "justify-content": "left"}, id="container"),
+        html.Div(
+            style={
+                "display": "flex",
+                "flex-wrap": "wrap",
+                "justify-content": "left",
+                "--media-max-height": f"{pic_max_height}px",
+            },
+            id="container",
+        ),
         html.Div(
             [
                 html.Div(
@@ -418,7 +426,7 @@ def popup_100_pics(n_clicks):
                 autoPlay=False if (tbnl_display_mode and file_ext != ".tbnl") else True,
                 controls=True,
                 loop=True,
-                style={"max-height": "380px", "vertical-align": "middle"},
+                style={"max-height": "var(--media-max-height)", "vertical-align": "middle"},
                 id={"type": "mp4" if (file_ext in [".mp4", ".m4v"]) else "tbnl" if file_ext == ".tbnl" else "video", "index": idx},
                 className=img_path,
             )
@@ -427,7 +435,7 @@ def popup_100_pics(n_clicks):
                 html.Img(
                     className=img_path,
                     src=img_path if is_remote(img_path) else PRELOAD_IMG_URL,
-                    style={"max-height": "380px", "vertical-align": "middle"},
+                    style={"max-height": "var(--media-max-height)", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
                     title=None if is_remote(img_path) else get_txt_title_for_image(img_path),
                 ),
@@ -451,7 +459,7 @@ def popup_100_pics(n_clicks):
                     -1,
                     html.Img(
                         src=VIDEO_WARNING_IMG_URL,
-                        style={"max-height": pic_max_height, "vertical-align": "middle"},
+                        style={"max-height": "var(--media-max-height)", "vertical-align": "middle"},
                         id={"type": "pic", "index": idx + 1},
                         className="",
                     ),
@@ -544,17 +552,15 @@ app.clientside_callback(
 
 
 @callback(
-    Output({"type": ALL, "index": ALL}, "style", allow_duplicate=True),
+    Output("container", "style"),
     Input("slider2", "value"),
-    State({"type": ALL, "index": ALL}, "children"),
-    prevent_initial_call="initial_duplicate",
 )
-def apply_height_change_to_media(s_value, children):
+def apply_height_change_to_media(s_value):
     global pic_max_height
     pic_max_height = s_value
     p = Patch()
-    p.update({"max-height": f"{pic_max_height}px", "vertical-align": "middle"})
-    return [p for _ in range(len(children))]
+    p["--media-max-height"] = f"{pic_max_height}px"
+    return p
 
 
 @callback(
@@ -589,6 +595,10 @@ def apply_options_to_media_display(
     src_paths,
     ids,
 ):
+    layout_triggered = dash.ctx.triggered and all(item["prop_id"] == "." for item in dash.ctx.triggered)
+    if not option_list_not_display_mp4 and not option_list_not_display_pic and not filter_value and layout_triggered:
+        raise dash.exceptions.PreventUpdate
+
     output_results = []
 
     if option_list_not_display_mp4 and "not_display_mp4" in option_list_not_display_mp4:
