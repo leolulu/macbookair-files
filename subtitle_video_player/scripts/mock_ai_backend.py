@@ -1,6 +1,6 @@
 """AI 对话功能的本地 mock 后端。
 
-模拟 doubao_backend 的 /stream SSE 接口与 / 非流式接口，
+模拟 doubao_backend 的 /models、/stream SSE 接口与 / 非流式接口，
 用于在没有真实 API key 的情况下联调字幕播放器的 AI 对话功能。
 
 用法: uv run python scripts/mock_ai_backend.py [端口]   (默认 11301)
@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 REPLY_TEMPLATE = (
     "## mock 回答（markdown 测试）\n\n"
     "收到你的问题(共 {n} 字)，system_message 长度 **{m}** 字符。\n\n"
+    "路由参数：provider=`{provider}`，model=`{model}`。\n\n"
     "在 [0:00:05] 这句字幕里提到了相关内容，可以点击时间点跳转；更早的背景见 [0:00:01]。\n\n"
     "### 格式覆盖\n\n"
     "- **粗体**、*斜体*、~~删除线~~、行内代码 `preserve=true`\n"
@@ -41,6 +42,13 @@ REPLY_TEMPLATE = (
     "---\n\n"
     "以上内容仅用于联调，与真实模型无关。"
 )
+
+MODELS_RESPONSE = {
+    "providers": [
+        {"id": "doubao", "models": ["ep-mock-primary", "ep-mock-backup"]},
+        {"id": "zhipu", "models": ["glm-mock", "glm-mock-flash"]},
+    ]
+}
 
 
 class MockHandler(BaseHTTPRequestHandler):
@@ -75,7 +83,12 @@ class MockHandler(BaseHTTPRequestHandler):
     def _route(self):
         path = urlparse(self.path).path
         payload = self._read_payload()
-        if path == "/stream":
+        if path == "/models":
+            if self.command != "GET":
+                self._send_text(405, "method not allowed")
+                return
+            self._send_json(200, MODELS_RESPONSE)
+        elif path == "/stream":
             self._handle_stream(payload)
         elif path == "/":
             self._handle_plain(payload)
@@ -91,12 +104,26 @@ class MockHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_json(self, status, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self._cors()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _build_reply(self, payload):
         user_message = payload.get("user_message") or ""
         system_message = payload.get("system_message") or ""
         if "未闭合围栏" in user_message:
             return "## 未闭合围栏测试\n\n```python\nprint('streaming')\n"
-        return REPLY_TEMPLATE.format(n=len(user_message), m=len(system_message))
+        return REPLY_TEMPLATE.format(
+            n=len(user_message),
+            m=len(system_message),
+            provider=payload.get("provider") or "默认",
+            model=payload.get("model") or "默认",
+        )
 
     def _handle_plain(self, payload):
         if not payload.get("user_message"):

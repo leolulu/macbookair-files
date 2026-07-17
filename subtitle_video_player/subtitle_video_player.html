@@ -1122,9 +1122,55 @@
             white-space: nowrap;
         }
 
+        .ai-chat-routing-fields {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 14px;
+            padding: 0 6px;
+        }
+
+        .ai-chat-settings .ai-chat-routing-row {
+            min-width: 0;
+        }
+
+        .ai-chat-routing-label {
+            display: inline-flex;
+            align-items: center;
+            height: 28px;
+            line-height: 1;
+        }
+
+        .ai-chat-routing-row select {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 100%;
+            height: 28px;
+            box-sizing: border-box;
+            padding: 0 8px;
+            font: inherit;
+        }
+
+        .ai-chat-settings select:disabled,
+        .ai-chat-settings input:disabled {
+            cursor: not-allowed;
+            opacity: 0.62;
+        }
+
         #aiChatBackendUrl {
             flex: 1 1 auto;
             min-width: 0;
+        }
+
+        #aiChatModelHint {
+            margin: 0 6px;
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.35;
+            white-space: normal;
+        }
+
+        #aiChatModelHint.ai-chat-model-hint-error {
+            color: #b5473c;
         }
 
         #aiChatContextInfo {
@@ -1721,16 +1767,21 @@
             <label>后端URL
                 <input type="text" id="aiChatBackendUrl" placeholder="http://127.0.0.1:11301" autocomplete="off">
             </label>
-            <label>服务商
-                <select id="aiChatProvider">
-                    <option value="">默认</option>
-                    <option value="doubao">豆包</option>
-                    <option value="zhipu">智谱</option>
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="minimax">MiniMax</option>
-                    <option value="kimi">Kimi</option>
-                </select>
-            </label>
+            <div class="ai-chat-routing-fields">
+                <label class="ai-chat-routing-row">
+                    <span class="ai-chat-routing-label">服务商</span>
+                    <select id="aiChatProvider">
+                        <option value="">默认</option>
+                    </select>
+                </label>
+                <label class="ai-chat-routing-row">
+                    <span class="ai-chat-routing-label">模型</span>
+                    <select id="aiChatModel" disabled>
+                        <option value="">默认</option>
+                    </select>
+                </label>
+            </div>
+            <span id="aiChatModelHint" aria-live="polite"></span>
             <label title="AI 仍会阅读全部字幕以理解上下文，但不会在回答中透露当前播放位置之后的剧情">
                 <input type="checkbox" id="aiChatNoSpoiler" checked> 防剧透模式
             </label>
@@ -5450,6 +5501,8 @@
                 var settingsPanel = document.getElementById('aiChatSettings');
                 var backendUrlInput = document.getElementById('aiChatBackendUrl');
                 var providerSelect = document.getElementById('aiChatProvider');
+                var modelSelect = document.getElementById('aiChatModel');
+                var modelHint = document.getElementById('aiChatModelHint');
                 var noSpoilerCheckbox = document.getElementById('aiChatNoSpoiler');
                 var attachPositionCheckbox = document.getElementById('aiChatAttachPosition');
                 var contextInfo = document.getElementById('aiChatContextInfo');
@@ -5469,9 +5522,17 @@
                 var aiSettings = {
                     backendUrl: AI_DEFAULT_BACKEND_URL,
                     provider: '',
+                    model: '',
                     noSpoiler: true,
                     attachPosition: true
                 };
+                var availableProviderModels = [];
+                var modelDiscoveryState = 'idle';
+                var modelDiscoveryUrl = '';
+                var modelDiscoveryError = '';
+                var modelDiscoveryRequestSerial = 0;
+                var modelDiscoveryAbortController = null;
+                var conversationStarted = false;
 
                 function loadAiSettings() {
                     try {
@@ -5486,6 +5547,9 @@
                             }
                             if (typeof parsed.provider === 'string') {
                                 aiSettings.provider = parsed.provider;
+                            }
+                            if (typeof parsed.model === 'string') {
+                                aiSettings.model = parsed.model;
                             }
                             if (typeof parsed.noSpoiler === 'boolean') {
                                 aiSettings.noSpoiler = parsed.noSpoiler;
@@ -5509,11 +5573,195 @@
                     return String(url || '').trim().replace(/\/+$/, '');
                 }
 
+                function replaceSelectOptions(select, entries) {
+                    select.textContent = '';
+                    entries.forEach(function (entry) {
+                        var option = document.createElement('option');
+                        option.value = entry.value;
+                        option.textContent = entry.label;
+                        select.appendChild(option);
+                    });
+                }
+
+                function findAvailableProvider(providerId) {
+                    for (var i = 0; i < availableProviderModels.length; i++) {
+                        if (availableProviderModels[i].id === providerId) {
+                            return availableProviderModels[i];
+                        }
+                    }
+                    return null;
+                }
+
+                function normalizeModelDiscoveryPayload(payload) {
+                    if (!payload || !Array.isArray(payload.providers)) {
+                        throw new Error('模型发现接口返回格式不正确');
+                    }
+                    var providers = [];
+                    var seenProviders = new Set();
+                    payload.providers.forEach(function (provider) {
+                        if (!provider || typeof provider.id !== 'string' || !Array.isArray(provider.models)) {
+                            return;
+                        }
+                        var providerId = provider.id.trim();
+                        if (!providerId || seenProviders.has(providerId)) {
+                            return;
+                        }
+                        var models = [];
+                        var seenModels = new Set();
+                        provider.models.forEach(function (model) {
+                            if (typeof model !== 'string') {
+                                return;
+                            }
+                            var modelId = model.trim();
+                            if (!modelId || seenModels.has(modelId)) {
+                                return;
+                            }
+                            seenModels.add(modelId);
+                            models.push(modelId);
+                        });
+                        if (!models.length) {
+                            return;
+                        }
+                        seenProviders.add(providerId);
+                        providers.push({ id: providerId, models: models });
+                    });
+                    return providers;
+                }
+
+                function syncRoutingControls() {
+                    var providerEntries = [{ value: '', label: '默认' }];
+                    var selectedProvider = null;
+                    var settingsChanged = false;
+
+                    if (modelDiscoveryState === 'ready') {
+                        availableProviderModels.forEach(function (provider) {
+                            providerEntries.push({ value: provider.id, label: provider.id });
+                        });
+                        selectedProvider = findAvailableProvider(aiSettings.provider);
+                        if (aiSettings.provider && !selectedProvider) {
+                            aiSettings.provider = '';
+                            aiSettings.model = '';
+                            settingsChanged = true;
+                        }
+                    }
+
+                    replaceSelectOptions(providerSelect, providerEntries);
+                    providerSelect.value = selectedProvider ? selectedProvider.id : '';
+
+                    var modelEntries = [{ value: '', label: '默认' }];
+                    if (selectedProvider) {
+                        selectedProvider.models.forEach(function (model) {
+                            modelEntries.push({ value: model, label: model });
+                        });
+                        if (aiSettings.model && selectedProvider.models.indexOf(aiSettings.model) === -1) {
+                            aiSettings.model = '';
+                            settingsChanged = true;
+                        }
+                    } else if (modelDiscoveryState === 'ready' && aiSettings.model) {
+                        aiSettings.model = '';
+                        settingsChanged = true;
+                    }
+                    replaceSelectOptions(modelSelect, modelEntries);
+                    modelSelect.value = selectedProvider ? aiSettings.model : '';
+
+                    backendUrlInput.disabled = conversationStarted;
+                    providerSelect.disabled = conversationStarted || modelDiscoveryState !== 'ready' || !availableProviderModels.length;
+                    modelSelect.disabled = conversationStarted || !selectedProvider;
+
+                    modelHint.classList.remove('ai-chat-model-hint-error');
+                    if (conversationStarted) {
+                        modelHint.textContent = '对话已开始，后端、服务商和模型已锁定；点击“新对话”后可重新选择。';
+                    } else if (modelDiscoveryState === 'loading') {
+                        modelHint.textContent = '正在从后端获取可用服务商和模型…';
+                    } else if (modelDiscoveryState === 'error') {
+                        modelHint.textContent = modelDiscoveryError || '模型列表加载失败，将使用默认回退链。';
+                        modelHint.classList.add('ai-chat-model-hint-error');
+                    } else if (modelDiscoveryState === 'ready' && !availableProviderModels.length) {
+                        modelHint.textContent = '未发现可手动选择的服务商，将使用默认回退链。';
+                    } else if (selectedProvider) {
+                        modelHint.textContent = '模型选择“默认”时，使用该服务商配置的模型回退链。';
+                    } else if (modelDiscoveryState === 'ready') {
+                        modelHint.textContent = '选择服务商后可以指定模型；当前使用后端默认回退链。';
+                    } else {
+                        modelHint.textContent = '';
+                    }
+
+                    if (settingsChanged) {
+                        saveAiSettings();
+                    }
+                }
+
+                function setConversationStarted(started) {
+                    conversationStarted = Boolean(started);
+                    syncRoutingControls();
+                }
+
+                function loadModelDiscovery(force) {
+                    var backendUrl = normalizeBackendUrl(aiSettings.backendUrl);
+                    if (!force && modelDiscoveryState === 'ready' && modelDiscoveryUrl === backendUrl) {
+                        syncRoutingControls();
+                        return Promise.resolve();
+                    }
+
+                    if (modelDiscoveryAbortController) {
+                        modelDiscoveryAbortController.abort();
+                    }
+                    var requestSerial = ++modelDiscoveryRequestSerial;
+                    var controller = new AbortController();
+                    var timedOut = false;
+                    modelDiscoveryAbortController = controller;
+                    modelDiscoveryUrl = backendUrl;
+                    modelDiscoveryState = 'loading';
+                    modelDiscoveryError = '';
+                    availableProviderModels = [];
+                    syncRoutingControls();
+
+                    var timeoutId = setTimeout(function () {
+                        timedOut = true;
+                        controller.abort();
+                    }, 6000);
+
+                    return fetch(backendUrl + '/models', {
+                        method: 'GET',
+                        signal: controller.signal
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            throw new Error('后端返回 HTTP ' + response.status);
+                        }
+                        return response.json();
+                    }).then(function (payload) {
+                        if (requestSerial !== modelDiscoveryRequestSerial) {
+                            return;
+                        }
+                        availableProviderModels = normalizeModelDiscoveryPayload(payload);
+                        modelDiscoveryState = 'ready';
+                        syncRoutingControls();
+                    }).catch(function (err) {
+                        if (requestSerial !== modelDiscoveryRequestSerial) {
+                            return;
+                        }
+                        aiSettings.provider = '';
+                        aiSettings.model = '';
+                        availableProviderModels = [];
+                        modelDiscoveryState = 'error';
+                        modelDiscoveryError = timedOut
+                            ? '模型列表加载超时，将使用默认回退链；重新打开设置可重试。'
+                            : '模型列表加载失败，将使用默认回退链；重新打开设置可重试。';
+                        saveAiSettings();
+                        syncRoutingControls();
+                    }).finally(function () {
+                        clearTimeout(timeoutId);
+                        if (requestSerial === modelDiscoveryRequestSerial) {
+                            modelDiscoveryAbortController = null;
+                        }
+                    });
+                }
+
                 function applySettingsToInputs() {
                     backendUrlInput.value = aiSettings.backendUrl;
-                    providerSelect.value = aiSettings.provider;
                     noSpoilerCheckbox.checked = aiSettings.noSpoiler;
                     attachPositionCheckbox.checked = aiSettings.attachPosition;
+                    syncRoutingControls();
                 }
 
                 // ---------- 时间格式 ----------
@@ -5697,6 +5945,7 @@
                     if (fp !== conversationFingerprint) {
                         conversationFingerprint = fp;
                         conversationId = generateConversationId();
+                        setConversationStarted(false);
                         appendMetaLine('字幕已更换，已自动开启新对话（此前内容不再作为上下文）');
                         showFloatingToast('字幕已更换，AI已开启新对话', 'info', 2400);
                     }
@@ -5878,6 +6127,9 @@
                     };
                     if (aiSettings.provider) {
                         payload.provider = aiSettings.provider;
+                        if (aiSettings.model) {
+                            payload.model = aiSettings.model;
+                        }
                     }
                     var response = await fetch(normalizeBackendUrl(aiSettings.backendUrl) + '/stream', {
                         method: 'POST',
@@ -5954,16 +6206,23 @@
                 function dispatchChat(options) {
                     if (isGenerating) {
                         showFloatingToast('AI 正在回答，请稍候或点停止', 'warning', 2000);
-                        return;
+                        return false;
+                    }
+                    if ((modelDiscoveryState === 'idle' || modelDiscoveryState === 'loading')
+                        && (aiSettings.provider || aiSettings.model)) {
+                        showFloatingToast('正在获取可用模型，请稍候', 'info', 1800);
+                        return false;
                     }
                     if (!collectTranscriptLines().length) {
                         showFloatingToast(subtitles.length ? 'SUP 字幕还没有可用文本，OCR 完成后再试' : '请先加载字幕再使用 AI 对话', 'warning', 2600);
-                        return;
+                        return false;
                     }
                     ensureConversationFreshness();
+                    setConversationStarted(true);
                     appendUserMessage(options.displayText, options.quote);
                     var aiDiv = appendAiMessage();
                     runStreamInto(aiDiv, options);
+                    return true;
                 }
 
                 function runStreamInto(aiDiv, options) {
@@ -6075,15 +6334,17 @@
                         payload += '【引用字幕 ' + quote.timeLabel + '】"' + quote.text + '"\n';
                     }
                     payload += raw;
-                    chatInput.value = '';
-                    autoGrowInput();
-                    clearQuoteChip();
-                    dispatchChat({
+                    var accepted = dispatchChat({
                         payloadText: payload,
                         displayText: raw,
                         quote: quote,
                         restoreInputOnStop: raw
                     });
+                    if (accepted) {
+                        chatInput.value = '';
+                        autoGrowInput();
+                        clearQuoteChip();
+                    }
                 }
 
                 // ---------- 输入区 ----------
@@ -6138,6 +6399,7 @@
                     }
                     conversationId = generateConversationId();
                     conversationFingerprint = subtitleFingerprint();
+                    setConversationStarted(false);
                     messagesBox.innerHTML = '';
                     clearQuoteChip();
                     showFloatingToast('已开启新对话', 'success', 1600);
@@ -6145,14 +6407,36 @@
 
                 // ---------- 设置面板 ----------
                 backendUrlInput.addEventListener('change', function () {
+                    if (conversationStarted) {
+                        applySettingsToInputs();
+                        return;
+                    }
                     var value = normalizeBackendUrl(backendUrlInput.value);
                     aiSettings.backendUrl = value || AI_DEFAULT_BACKEND_URL;
+                    aiSettings.provider = '';
+                    aiSettings.model = '';
                     backendUrlInput.value = aiSettings.backendUrl;
                     saveAiSettings();
+                    loadModelDiscovery(true);
                 });
 
                 providerSelect.addEventListener('change', function () {
+                    if (conversationStarted) {
+                        syncRoutingControls();
+                        return;
+                    }
                     aiSettings.provider = providerSelect.value;
+                    aiSettings.model = '';
+                    saveAiSettings();
+                    syncRoutingControls();
+                });
+
+                modelSelect.addEventListener('change', function () {
+                    if (conversationStarted) {
+                        syncRoutingControls();
+                        return;
+                    }
+                    aiSettings.model = modelSelect.value;
                     saveAiSettings();
                 });
 
@@ -6170,6 +6454,10 @@
                     settingsPanel.hidden = !settingsPanel.hidden;
                     if (!settingsPanel.hidden) {
                         updateContextInfo();
+                        if (modelDiscoveryState === 'error'
+                            || modelDiscoveryUrl !== normalizeBackendUrl(aiSettings.backendUrl)) {
+                            loadModelDiscovery(true);
+                        }
                     }
                 });
 
@@ -6562,6 +6850,7 @@
                 loadAiSettings();
                 applySettingsToInputs();
                 updateSendButtonState();
+                loadModelDiscovery();
                 try {
                     var savedWindowState = localStorage.getItem(AI_WINDOW_STATE_KEY);
                     if (savedWindowState) {
