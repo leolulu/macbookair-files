@@ -46,7 +46,7 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 slider_overdrive_mode = False
-native_image_loading = False
+native_image_loading = True
 
 exe_for_webp = ThreadPoolExecutor(max_workers=8)
 exe_for_zip = ThreadPoolExecutor(max_workers=1)
@@ -727,10 +727,10 @@ def update_img_path_list(data):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--instant",
+        "--progressive",
         action="store_true",
-        help="启动时直接设置所有本地图片的 src，由浏览器自行调度加载",
+        help="启用本地图片逐张受控加载",
     )
     args = parser.parse_args()
-    native_image_loading = args.instant
+    native_image_loading = not args.progressive
     app.run(debug=False, host="0.0.0.0")
