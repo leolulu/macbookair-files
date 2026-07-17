@@ -1,3 +1,4 @@
+import argparse
 import os
 import random
 import re
@@ -47,6 +48,7 @@ show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
 slider_overdrive_mode = False
+native_image_loading = False
 
 exe_for_webp = ThreadPoolExecutor(max_workers=8)
 exe_for_zip = ThreadPoolExecutor(max_workers=1)
@@ -434,10 +436,11 @@ def popup_100_pics(n_clicks):
             else html.A(
                 html.Img(
                     className=img_path,
-                    src=img_path if is_remote(img_path) else PRELOAD_IMG_URL,
+                    src=img_path if is_remote(img_path) or native_image_loading else PRELOAD_IMG_URL,
                     style={"max-height": "var(--media-max-height)", "vertical-align": "middle"},
                     id={"type": "pic", "index": idx},
                     title=None if is_remote(img_path) else get_txt_title_for_image(img_path),
+                    **({"data-native-loading": "true"} if native_image_loading and not is_remote(img_path) else {}),
                 ),
                 href=os.path.join(
                     os.path.dirname(img_path),
@@ -714,4 +717,12 @@ def update_img_path_list(data):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--instant",
+        action="store_true",
+        help="启动时直接设置所有本地图片的 src，由浏览器自行调度加载",
+    )
+    args = parser.parse_args()
+    native_image_loading = args.instant
     app.run(debug=False, host="0.0.0.0")

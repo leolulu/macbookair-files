@@ -6,6 +6,9 @@ function check_if_img_loaded(params) {
     var filteredImages = Array.prototype.filter.call(images, function (img) {
         return img.className.includes("static/img");
     });
+    if (filteredImages[0].dataset.nativeLoading === "true") {
+        return;
+    }
     if (filteredImages[0].className != filteredImages[0].name) {
         console.log("初始化...");
         console.log('classname: ', filteredImages[0].className)
