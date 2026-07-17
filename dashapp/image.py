@@ -1,6 +1,5 @@
 import argparse
 import os
-import random
 import re
 import shutil
 import subprocess
@@ -12,7 +11,6 @@ from urllib.parse import urlparse
 
 import dash
 from dash import ALL, Input, Output, Patch, State, callback, dcc, html
-from PIL import Image
 
 app = dash.Dash(__name__)
 
@@ -266,21 +264,31 @@ def get_img_path_list(img_path_list: List[str]):
 
 img_path_list = get_img_path_list(img_path_list)
 
-pic_resolutions_sum = []
-sample_num = int(len(img_path_list) / 10)
-for pic in random.sample(img_path_list, sample_num):
+
+def _calculate_page_capacity_from_resolutions(img_paths):
+    """按历史算法，根据抽样图片的平均分辨率估算每页容量。"""
+    import random
+
+    from PIL import Image
+
+    pic_resolutions_sum = []
+    sample_num = int(len(img_paths) / 10)
+    for pic in random.sample(img_paths, sample_num):
+        try:
+            pic_resolutions_sum.append(sum(Image.open(pic.replace("%23", "#")).size))
+        except:  # noqa: E722
+            pass
     try:
-        pic_resolutions_sum.append(sum(Image.open(pic.replace("%23", "#")).size))
+        if len(pic_resolutions_sum) < sample_num * 0.5:
+            raise UserWarning()
+        avg_pic_resolution_sum = sum(pic_resolutions_sum) / len(pic_resolutions_sum)
+        page_capacity = int(100_000 / avg_pic_resolution_sum)
+        print("平均分辨率和为{}，计算得出每页{}张图...".format(avg_pic_resolution_sum, page_capacity))
+        return page_capacity
     except:  # noqa: E722
-        pass
-try:
-    if len(pic_resolutions_sum) < sample_num * 0.5:
-        raise UserWarning()
-    avg_pic_resolution_sum = sum(pic_resolutions_sum) / len(pic_resolutions_sum)
-    page_capacity = int(100_000 / avg_pic_resolution_sum)
-    print("平均分辨率和为{}，计算得出每页{}张图...".format(avg_pic_resolution_sum, page_capacity))
-except:  # noqa: E722
-    page_capacity = 10
+        return 10
+
+
 # Caution:
 page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候，能取到正确数量。下面的12会除以2，再次得到这里的6
 
