@@ -23,6 +23,19 @@ JPG_FROM_WEBP_FOLDER = "jpg_from_webp"
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".avif", ".jfif"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v"}
 MEDIA_EXTS = IMG_EXTS | VIDEO_EXTS
+IGNORED_FILE_EXTS = {
+    ".htm",
+    ".html",
+    ".swf",
+    ".db",
+    ".css",
+    ".js",
+    ".bak",
+    ".wmv",
+    ".psd",
+    ".url",
+    ".mp3",
+}
 
 img_path_list = []
 browsed_img_list = []
@@ -179,27 +192,19 @@ def get_img_path_list(img_path_list: List[str]):
     browsed_img_list = [path for path in browsed_img_list if is_remote(path) or os.path.exists(path.replace("%23", "#"))]
 
     temp_img_list = []
+    trash_folder_abs = os.path.abspath(TRASH_FOLDER_PATH)
     for root, dirs_, files_ in os.walk("./static/img"):
+        root_abs = os.path.abspath(root)
+        root_basename = os.path.basename(root)
         for file_ in files_:
-            if os.path.splitext(file_)[-1].lower() in [
-                ".htm",
-                ".html",
-                ".swf",
-                ".db",
-                ".css",
-                ".js",
-                ".bak",
-                ".wmv",
-                ".psd",
-                ".url",
-                ".mp3",
-            ] or re.search(r"ds_store$", file_.lower()):
+            file_ext = os.path.splitext(file_)[-1].lower()
+            if file_ext in IGNORED_FILE_EXTS or re.search(r"ds_store$", file_.lower()):
                 continue
-            if os.path.dirname(os.path.abspath(os.path.join(root, file_))) == os.path.abspath(TRASH_FOLDER_PATH):
+            if root_abs == trash_folder_abs:
                 continue
-            if os.path.basename(root) == JPG_FROM_WEBP_FOLDER:
+            if root_basename == JPG_FROM_WEBP_FOLDER:
                 continue
-            if os.path.splitext(file_)[-1].lower() == ".txt":
+            if file_ext == ".txt":
                 txt_abs = os.path.abspath(os.path.join(root, file_))
                 if txt_abs not in parsed_txt_files:
                     parsed_txt_files.add(txt_abs)
@@ -210,7 +215,7 @@ def get_img_path_list(img_path_list: List[str]):
                     temp_img_list.extend(urls)
                 continue
             if (
-                (os.path.splitext(file_)[-1].lower() == ".webp")
+                (file_ext == ".webp")
                 and (not os.path.exists(os.path.join(root, JPG_FROM_WEBP_FOLDER, file_.replace(".webp", ".jpg"))))
                 and (file_ not in converting_webp)
             ):
@@ -236,7 +241,7 @@ def get_img_path_list(img_path_list: List[str]):
                 exe_for_webp.submit(_task_for_webp, file_, new_path, root)
                 converting_webp.append(file_)
 
-            if os.path.splitext(file_)[-1].lower() == ".zip":
+            if file_ext == ".zip":
 
                 def _task_for_zip(file_, root):
                     with zipfile.ZipFile(os.path.join(root, file_), "r") as zip_ref:
@@ -247,9 +252,12 @@ def get_img_path_list(img_path_list: List[str]):
 
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort(key=media_sort_key)
+    pending_img_set = set(img_path_list)
+    browsed_img_set = set(browsed_img_list)
     for temp_img in temp_img_list:
-        if (temp_img not in img_path_list) and (temp_img not in browsed_img_list):
+        if (temp_img not in pending_img_set) and (temp_img not in browsed_img_set):
             img_path_list.append(temp_img)
+            pending_img_set.add(temp_img)
     img_path_list.sort(key=media_sort_key)
     return img_path_list
 
