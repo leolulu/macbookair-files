@@ -297,6 +297,46 @@ app.layout = html.Div(
         ),
         html.Div(
             [
+                html.Img(id="image_viewer_image", alt="", draggable="false"),
+                html.Div(
+                    html.Button(
+                        "\u276e",
+                        id="image_viewer_previous",
+                        className="image-viewer-control image-viewer-control--previous",
+                        type="button",
+                        **{"aria-label": "上一张"},
+                    ),
+                    id="image_viewer_previous_zone",
+                    className="image-viewer-zone image-viewer-zone--previous",
+                ),
+                html.Div(
+                    [
+                        html.Button(
+                            "\u00d7",
+                            id="image_viewer_close",
+                            className="image-viewer-control image-viewer-control--close",
+                            type="button",
+                            **{"aria-label": "关闭"},
+                        ),
+                        html.Button(
+                            "\u276f",
+                            id="image_viewer_next",
+                            className="image-viewer-control image-viewer-control--next",
+                            type="button",
+                            **{"aria-label": "下一张"},
+                        ),
+                    ],
+                    id="image_viewer_next_zone",
+                    className="image-viewer-zone image-viewer-zone--next",
+                ),
+            ],
+            id="image_viewer",
+            className="image-viewer",
+            role="dialog",
+            **{"aria-hidden": "true", "aria-modal": "true"},
+        ),
+        html.Div(
+            [
                 html.Div(
                     html.Div(
                         [
@@ -450,6 +490,7 @@ def popup_100_pics(n_clicks):
                 if img_path.endswith(".webp") and not is_remote(img_path)
                 else img_path,
                 target="_blank",
+                className="image-viewer-link",
             )
         )
         browsed_img_list.append(img_path)
