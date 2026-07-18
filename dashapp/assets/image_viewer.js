@@ -391,6 +391,16 @@
         openViewer(link);
     });
 
+    document.addEventListener("contextmenu", function (event) {
+        if (!isViewerOpen() || event.button !== 2) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeViewer();
+    }, true);
+
     document.addEventListener("keydown", function (event) {
         if (!isViewerOpen()) {
             return;
