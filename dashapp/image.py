@@ -293,6 +293,26 @@ def _calculate_page_capacity_from_resolutions(img_paths):
 # Caution:
 page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候，能取到正确数量。下面的12会除以2，再次得到这里的6
 
+
+def map_capacity_slider_value(slider_value):
+    """把数量滑块的普通档位映射为实际的每页数量。"""
+    capacity = float(slider_value)
+    if slider_value <= 48:
+        capacity = slider_value / 2
+    elif 48 < slider_value <= 90:
+        capacity = (38 / 21) * slider_value - 1316 / 21
+    elif 90 < slider_value <= 100:
+        capacity = 90 * slider_value - 8000
+
+    return 2 * round(capacity / 2)
+
+
+# 客户端拖动预览直接查这张由服务端规则生成的表，避免在 JavaScript 中复制数量映射公式。
+CAPACITY_SLIDER_PREVIEW_MAP = {
+    str(slider_value): map_capacity_slider_value(slider_value) for slider_value in range(4, 101)
+}
+
+
 # 跨标签页共享设置的唯一注册表。
 #
 # 新增需要跨标签页同步的控件时：
@@ -504,6 +524,7 @@ _base_layout = html.Div(
         ),
         dcc.Store(id="data_update_img_path_list"),
         dcc.Store(id="applied_display_settings"),
+        dcc.Store(id="capacity_slider_preview_map", data=CAPACITY_SLIDER_PREVIEW_MAP),
     ]
 )
 
@@ -620,6 +641,33 @@ def popup_100_pics(n_clicks):
     return return_list, remain_count
 
 
+# 拖动时只在当前标签页预览数量；下面监听 value 的服务端回调仍是共享状态的唯一提交入口。
+app.clientside_callback(
+    """
+    function(dragValue, capacityMap, appliedSettings) {
+        if (dragValue === undefined || dragValue === null) {
+            return window.dash_clientside.no_update;
+        }
+        if (dragValue > 100) {
+            const capacity = appliedSettings && appliedSettings.page_capacity;
+            return capacity === undefined || capacity === null
+                ? window.dash_clientside.no_update
+                : `再来${capacity}张！`;
+        }
+        const capacity = capacityMap && capacityMap[String(Math.round(dragValue))];
+        return capacity === undefined
+            ? window.dash_clientside.no_update
+            : `再来${capacity}张！`;
+    }
+    """,
+    Output("button_text", "children", allow_duplicate=True),
+    Input("slider1", "drag_value"),
+    State("capacity_slider_preview_map", "data"),
+    State("applied_display_settings", "data"),
+    prevent_initial_call=True,
+)
+
+
 @app.callback(
     dash.dependencies.Output("button_text", "children"),
     dash.dependencies.Input("slider1", "value"),
@@ -639,24 +687,13 @@ def set_page_capacity(s_value, applied_settings):
             dash.set_props("capacity_popup", {"className": ""})
         return "再来{}张！".format(applied_settings.get("page_capacity", settings["page_capacity"]))
 
-    def _value_mapping(in_value):
-        out_value = float(in_value)
-        if in_value <= 48:
-            out_value = in_value / 2
-        elif 48 < in_value <= 90:
-            out_value = (38 / 21) * in_value - 1316 / 21
-        elif 90 < in_value <= 100:
-            out_value = 90 * in_value - 8000
-
-        return 2 * round(out_value / 2)
-
     if s_value > 100:
         # 超档位：滑块不再控制数量，浮层手动输入接管，数量保持不变直到输入确认
         dash.set_props("capacity_popup", {"className": "show"})
         dash.set_props("capacity_input", {"value": settings["page_capacity"]})
         return "再来{}张！".format(settings["page_capacity"])
     dash.set_props("capacity_popup", {"className": ""})
-    capacity = _value_mapping(s_value)
+    capacity = map_capacity_slider_value(s_value)
     commit_display_settings(page_capacity=capacity, capacity_slider_value=s_value)
     button_text = "再来{}张！".format(capacity)
     return button_text
@@ -692,6 +729,25 @@ app.clientside_callback(
     """,
     Output("slider1", "value"),
     Input("slider1", "value"),
+    prevent_initial_call=True,
+)
+
+
+# 高度拖动预览只更新当前标签页的 CSS 变量；松手后的 value 回调再提交共享设置。
+app.clientside_callback(
+    """
+    function(dragValue, currentStyle) {
+        if (dragValue === undefined || dragValue === null) {
+            return window.dash_clientside.no_update;
+        }
+        return Object.assign({}, currentStyle || {}, {
+            "--media-max-height": `${dragValue}px`
+        });
+    }
+    """,
+    Output("container", "style", allow_duplicate=True),
+    Input("slider2", "drag_value"),
+    State("container", "style"),
     prevent_initial_call=True,
 )
 
