@@ -300,7 +300,7 @@ app.layout = html.Div(
                 html.Img(id="image_viewer_image", alt="", draggable="false"),
                 html.Div(
                     html.Button(
-                        "\u276e",
+                        "\u2039",
                         id="image_viewer_previous",
                         className="image-viewer-control image-viewer-control--previous",
                         type="button",
@@ -319,7 +319,7 @@ app.layout = html.Div(
                             **{"aria-label": "关闭"},
                         ),
                         html.Button(
-                            "\u276f",
+                            "\u203a",
                             id="image_viewer_next",
                             className="image-viewer-control image-viewer-control--next",
                             type="button",
