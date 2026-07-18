@@ -1,4 +1,5 @@
 import argparse
+from copy import deepcopy
 import os
 import random
 import re
@@ -47,12 +48,12 @@ remote_url_order = {}
 show_folder_title = False
 show_moving_promote = False
 tbnl_display_mode = False
-slider_overdrive_mode = False
 native_image_loading = False
 
 exe_for_webp = ThreadPoolExecutor(max_workers=8)
 exe_for_zip = ThreadPoolExecutor(max_workers=1)
 lock = threading.Lock()
+settings_lock = threading.Lock()
 converting_webp = []
 
 os.makedirs("./static/img", exist_ok=True)
@@ -284,7 +285,110 @@ except:  # noqa: E722
 # Caution:
 page_capacity = 6  # 这里写原始值6，是为了在第一次取图的时候，能取到正确数量。下面的12会除以2，再次得到这里的6
 
-app.layout = html.Div(
+# 跨标签页共享设置的唯一注册表。
+#
+# 新增需要跨标签页同步的控件时：
+# 1. 在这里登记默认值、组件 id 和对应属性；
+# 2. 在控件原有的业务回调里调用 commit_display_settings，或把直接输入交给
+#    commit_triggered_control_settings。
+# 布局初始化和“再来”按钮触发的当前标签页回填都会自动读取本表，无需再分别补 set_props。
+#
+# page_capacity 是由数量滑块/手动输入推导出的业务值，没有可直接回填的组件属性，所以只登记默认值。
+# option_show_delete_button 有意不登记：删除功能具有破坏性，它的显示开关只在当前标签页生效。
+SHARED_SETTING_SPECS = {
+    "page_capacity": {"default": page_capacity},
+    "capacity_slider_value": {"default": 12, "component_id": "slider1", "component_property": "value"},
+    "pic_max_height": {"default": pic_max_height, "component_id": "slider2", "component_property": "value"},
+    "hide_control_options": {"default": [], "component_id": "option_hide_control", "component_property": "value"},
+    "hidden_mp4_options": {"default": [], "component_id": "option_not_display_mp4", "component_property": "value"},
+    "hidden_pic_options": {"default": [], "component_id": "option_not_display_pic", "component_property": "value"},
+    "path_filter": {"default": None, "component_id": "path_filter", "component_property": "value"},
+}
+_display_settings = {name: deepcopy(spec["default"]) for name, spec in SHARED_SETTING_SPECS.items()}
+_component_setting_names = {
+    (spec["component_id"], spec["component_property"]): name
+    for name, spec in SHARED_SETTING_SPECS.items()
+    if "component_id" in spec
+}
+
+def get_display_settings():
+    with settings_lock:
+        return deepcopy(_display_settings)
+
+
+def update_display_settings(**updates):
+    unknown_settings = updates.keys() - SHARED_SETTING_SPECS.keys()
+    if unknown_settings:
+        raise KeyError("未登记的跨标签页设置: {}".format(", ".join(sorted(unknown_settings))))
+    with settings_lock:
+        _display_settings.update(deepcopy(updates))
+        return deepcopy(_display_settings)
+
+
+def get_container_style(height):
+    return {
+        "display": "flex",
+        "flex-wrap": "wrap",
+        "justify-content": "left",
+        "--media-max-height": f"{height}px",
+    }
+
+
+def get_settings_component_props(settings):
+    """把共享设置转换成当前标签页需要回填的组件属性。"""
+    component_props = {}
+    for setting_name, spec in SHARED_SETTING_SPECS.items():
+        if "component_id" not in spec:
+            continue
+        component_props.setdefault(spec["component_id"], {})[spec["component_property"]] = deepcopy(settings[setting_name])
+
+    # 下列属性是共享设置的派生显示结果，不对应可独立编辑的设置项。
+    component_props.update(
+        {
+            "container": {"style": get_container_style(settings["pic_max_height"])},
+            "button_text": {"children": "再来{}张！".format(settings["page_capacity"])},
+            "capacity_input": {
+                "value": settings["page_capacity"] if settings["capacity_slider_value"] > 100 else None
+            },
+            "capacity_popup": {"className": "show" if settings["capacity_slider_value"] > 100 else ""},
+            "applied_display_settings": {"data": deepcopy(settings)},
+        }
+    )
+    return component_props
+
+
+def apply_display_settings_to_tab(settings):
+    """将服务端共享设置回填到发起当前回调的标签页。"""
+    for component_id, props in get_settings_component_props(settings).items():
+        dash.set_props(component_id, props)
+
+
+def commit_display_settings(**updates):
+    """原子更新服务端共享设置，并记录当前标签页已经应用的版本。"""
+    settings = update_display_settings(**updates)
+    dash.set_props("applied_display_settings", {"data": settings})
+    return settings
+
+
+def commit_triggered_control_settings(component_values, applied_settings):
+    """提交本次回调中由用户直接改动的、已登记的控件值。"""
+    updates = {}
+    for prop_id in dash.ctx.triggered_prop_ids:
+        if prop_id == "." or "." not in prop_id:
+            continue
+        component_id, component_property = prop_id.rsplit(".", 1)
+        setting_name = _component_setting_names.get((component_id, component_property))
+        if setting_name is None or component_id not in component_values:
+            continue
+        value = component_values[component_id]
+        if applied_settings is not None and value == applied_settings.get(setting_name):
+            continue
+        updates[setting_name] = value
+    if updates:
+        commit_display_settings(**updates)
+
+
+_base_layout = html.Div(
     [
         html.Div(
             style={
@@ -333,7 +437,7 @@ app.layout = html.Div(
                                         min=4,
                                         max=104,
                                         step=1,
-                                        value=12,  # 这里写12，是为了在按钮上能够显示正确数量
+                                        value=12,
                                         updatemode="mouseup",
                                         id="slider1",
                                         marks={
@@ -360,7 +464,7 @@ app.layout = html.Div(
                                 max=1500,
                                 step=1,
                                 value=pic_max_height,
-                                updatemode="drag",
+                                updatemode="mouseup",
                                 id="slider2",
                                 marks=None,
                                 className="slider",
@@ -391,8 +495,33 @@ app.layout = html.Div(
             id="delete_component_container",
         ),
         dcc.Store(id="data_update_img_path_list"),
+        dcc.Store(id="applied_display_settings"),
     ]
 )
+
+
+def _apply_layout_settings(component, component_props):
+    if isinstance(component, (list, tuple)):
+        for child in component:
+            _apply_layout_settings(child, component_props)
+        return
+    if not hasattr(component, "to_plotly_json"):
+        return
+
+    component_id = getattr(component, "id", None)
+    for component_property, value in component_props.get(component_id, {}).items():
+        setattr(component, component_property, deepcopy(value))
+
+    _apply_layout_settings(getattr(component, "children", None), component_props)
+
+
+def serve_layout():
+    layout = deepcopy(_base_layout)
+    _apply_layout_settings(layout, get_settings_component_props(get_display_settings()))
+    return layout
+
+
+app.layout = serve_layout
 
 
 @app.callback(
@@ -402,11 +531,12 @@ app.layout = html.Div(
 )
 def popup_100_pics(n_clicks):
     global img_path_list, tbnl_display_mode, consecutive_pic_count
+    settings = get_display_settings()
     return_list = []
     previous_img_catalog = "〄 " + "default".capitalize()
     pic_threshold = 20
 
-    for idx in range(page_capacity):
+    for idx in range(settings["page_capacity"]):
         try:
             img_path = img_path_list.pop(0)
             file_ext = url_ext(img_path)
@@ -478,19 +608,28 @@ def popup_100_pics(n_clicks):
     remain_count = "还剩{}张".format(len(img_path_list))
     if len([i for i in return_list if isinstance(i, html.H1)]) == 1 and show_moving_promote:
         return_list.insert(0, html.H1("Only one category in the page!", id="promotion"))
+    apply_display_settings_to_tab(settings)
     return return_list, remain_count
 
 
 @app.callback(
     dash.dependencies.Output("button_text", "children"),
-    dash.dependencies.Input("slider1", "drag_value"),
     dash.dependencies.Input("slider1", "value"),
+    dash.dependencies.State("applied_display_settings", "data"),
+    prevent_initial_call=True,
 )
-def set_page_capacity(drag_value, s_value):
-    # updatemode=mouseup 下两者分离：拖动中用 drag_value 实时反馈，松手/吸附落定后用 value
-    triggered = dash.callback_context.triggered
-    if triggered and triggered[0]["prop_id"].endswith(".drag_value") and drag_value is not None:
-        s_value = drag_value
+def set_page_capacity(s_value, applied_settings):
+    # slider1 uses updatemode=mouseup, so this callback only commits a settled value.
+    if s_value is None:
+        return dash.no_update
+    settings = get_display_settings()
+    if applied_settings and s_value == applied_settings.get("capacity_slider_value"):
+        if s_value > 100:
+            dash.set_props("capacity_popup", {"className": "show"})
+            dash.set_props("capacity_input", {"value": applied_settings.get("page_capacity", settings["page_capacity"])})
+        else:
+            dash.set_props("capacity_popup", {"className": ""})
+        return "再来{}张！".format(applied_settings.get("page_capacity", settings["page_capacity"]))
 
     def _value_mapping(in_value):
         out_value = float(in_value)
@@ -503,19 +642,15 @@ def set_page_capacity(drag_value, s_value):
 
         return 2 * round(out_value / 2)
 
-    global page_capacity, slider_overdrive_mode
     if s_value > 100:
         # 超档位：滑块不再控制数量，浮层手动输入接管，数量保持不变直到输入确认
-        if not slider_overdrive_mode:
-            slider_overdrive_mode = True
-            dash.set_props("capacity_popup", {"className": "show"})
-            dash.set_props("capacity_input", {"value": page_capacity})
-        return "再来{}张！".format(page_capacity)
-    if slider_overdrive_mode:
-        slider_overdrive_mode = False
-        dash.set_props("capacity_popup", {"className": ""})
-    page_capacity = _value_mapping(s_value)
-    button_text = "再来{}张！".format(page_capacity)
+        dash.set_props("capacity_popup", {"className": "show"})
+        dash.set_props("capacity_input", {"value": settings["page_capacity"]})
+        return "再来{}张！".format(settings["page_capacity"])
+    dash.set_props("capacity_popup", {"className": ""})
+    capacity = _value_mapping(s_value)
+    commit_display_settings(page_capacity=capacity, capacity_slider_value=s_value)
+    button_text = "再来{}张！".format(capacity)
     return button_text
 
 
@@ -527,14 +662,13 @@ def set_page_capacity(drag_value, s_value):
     prevent_initial_call=True,
 )
 def confirm_manual_capacity(n_clicks, n_submit, input_value):
-    global page_capacity
     try:
         capacity = max(2, 2 * round(float(input_value) / 2))
     except (TypeError, ValueError):
         return dash.no_update
-    page_capacity = capacity
+    commit_display_settings(page_capacity=capacity, capacity_slider_value=104)
     dash.set_props("capacity_input", {"value": capacity})
-    return "再来{}张！".format(page_capacity)
+    return "再来{}张！".format(capacity)
 
 
 # 超档"啪"吸附：updatemode=mouseup 下 value 仅在松手时更新，拖动全程跟手零回写——
@@ -557,12 +691,17 @@ app.clientside_callback(
 @callback(
     Output("container", "style"),
     Input("slider2", "value"),
+    State("applied_display_settings", "data"),
+    prevent_initial_call=True,
 )
-def apply_height_change_to_media(s_value):
-    global pic_max_height
-    pic_max_height = s_value
+def apply_height_change_to_media(s_value, applied_settings):
+    if s_value is None:
+        return dash.no_update
+    if applied_settings and s_value == applied_settings.get("pic_max_height"):
+        return dash.no_update
+    commit_display_settings(pic_max_height=s_value)
     p = Patch()
-    p["--media-max-height"] = f"{pic_max_height}px"
+    p["--media-max-height"] = f"{s_value}px"
     return p
 
 
@@ -570,9 +709,11 @@ def apply_height_change_to_media(s_value):
     Output({"type": "tbnl", "index": ALL}, "controls", allow_duplicate=True),
     Input("option_hide_control", "value"),
     State({"type": "tbnl", "index": ALL}, "children"),
+    State("applied_display_settings", "data"),
     prevent_initial_call="initial_duplicate",
 )
-def apply_option_to_tbnl_control(option_list_hide_control, children):
+def apply_option_to_tbnl_control(option_list_hide_control, children, applied_settings):
+    commit_triggered_control_settings({"option_hide_control": option_list_hide_control}, applied_settings)
     if option_list_hide_control and "hide_control" in option_list_hide_control:
         dash.set_props("option_hide_control", {"style": {"color": "#4CAF50"}})
         controls_value = False
@@ -589,6 +730,7 @@ def apply_option_to_tbnl_control(option_list_hide_control, children):
     Input("path_filter", "value"),
     State({"type": ALL, "index": ALL}, "className"),
     State({"type": ALL, "index": ALL}, "id"),
+    State("applied_display_settings", "data"),
     prevent_initial_call="initial_duplicate",
 )
 def apply_options_to_media_display(
@@ -597,7 +739,16 @@ def apply_options_to_media_display(
     filter_value,
     src_paths,
     ids,
+    applied_settings,
 ):
+    commit_triggered_control_settings(
+        {
+            "option_not_display_mp4": option_list_not_display_mp4,
+            "option_not_display_pic": option_list_not_display_pic,
+            "path_filter": filter_value,
+        },
+        applied_settings,
+    )
     layout_triggered = dash.ctx.triggered and all(item["prop_id"] == "." for item in dash.ctx.triggered)
     if not option_list_not_display_mp4 and not option_list_not_display_pic and not filter_value and layout_triggered:
         raise dash.exceptions.PreventUpdate
