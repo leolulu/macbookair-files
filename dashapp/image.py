@@ -741,12 +741,23 @@ def apply_options_to_media_display(
     ids,
     applied_settings,
 ):
+    component_values = {
+        "option_not_display_mp4": option_list_not_display_mp4,
+        "option_not_display_pic": option_list_not_display_pic,
+    }
+    try:
+        filter_pattern = re.compile(filter_value) if filter_value else None
+    except re.error:
+        # 非法正则只保留在当前输入框中；共享状态和媒体显示继续使用本标签页上一次应用的有效值。
+        previous_filter_value = (applied_settings or get_display_settings()).get("path_filter")
+        filter_pattern = re.compile(previous_filter_value) if previous_filter_value else None
+        dash.set_props("path_filter", {"style": {"outline": "2px solid #d93025", "outline-offset": "1px"}})
+    else:
+        component_values["path_filter"] = filter_value
+        dash.set_props("path_filter", {"style": {}})
+
     commit_triggered_control_settings(
-        {
-            "option_not_display_mp4": option_list_not_display_mp4,
-            "option_not_display_pic": option_list_not_display_pic,
-            "path_filter": filter_value,
-        },
+        component_values,
         applied_settings,
     )
     layout_triggered = dash.ctx.triggered and all(item["prop_id"] == "." for item in dash.ctx.triggered)
@@ -773,10 +784,7 @@ def apply_options_to_media_display(
         type_ = id_["type"]
         p = Patch()
 
-        if filter_value and re.search(filter_value, src_path):
-            hide_by_filter = True
-        else:
-            hide_by_filter = False
+        hide_by_filter = bool(filter_pattern and filter_pattern.search(src_path))
 
         if type_ in ["video", "tbnl"]:
             if hide_by_filter:
