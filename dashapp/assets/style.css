@@ -173,3 +173,219 @@ button:hover {
 #slider1 .rc-slider-dot:last-child {
     border-color: #FFA500;
 }
+
+body.image-viewer-open {
+    overflow: hidden;
+}
+
+#image_viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: none;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+#image_viewer.is-open {
+    display: block;
+}
+
+#image_viewer_image {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    object-fit: contain;
+    user-select: none;
+}
+
+.image-viewer-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    width: clamp(96px, 15vw, 220px);
+    align-items: center;
+}
+
+.image-viewer-zone--previous {
+    left: 0;
+    justify-content: flex-start;
+}
+
+.image-viewer-zone--next {
+    right: 0;
+    justify-content: flex-end;
+}
+
+#image_viewer .image-viewer-control {
+    all: unset;
+    box-sizing: border-box;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 0.16s ease, background-color 0.16s ease;
+}
+
+#image_viewer .image-viewer-control--previous,
+#image_viewer .image-viewer-control--next {
+    top: 50%;
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.92);
+    background: rgba(86, 86, 86, 0.58);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(4px);
+    font-size: 0;
+    line-height: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease,
+        box-shadow 0.16s ease;
+}
+
+#image_viewer .image-viewer-control--previous {
+    left: 18px;
+    padding: 0;
+}
+
+#image_viewer .image-viewer-control--next {
+    right: 18px;
+    padding: 0;
+}
+
+#image_viewer .image-viewer-control--previous::before,
+#image_viewer .image-viewer-control--next::before {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 36px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 40'%3E%3Cpath d='M9.5 5L22.5 20L9.5 35' fill='none' stroke='white' stroke-opacity='.92' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+    transition: transform 0.1s ease, filter 0.16s ease;
+}
+
+#image_viewer .image-viewer-control--previous::before {
+    transform: scaleX(-1);
+}
+
+#image_viewer .image-viewer-control--close {
+    top: 16px;
+    right: 18px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.92);
+    background: rgba(86, 86, 86, 0.58);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(4px);
+    font-size: 0;
+    line-height: 0;
+    transition: opacity 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease,
+        box-shadow 0.16s ease;
+}
+
+#image_viewer .image-viewer-control--close::before {
+    content: "";
+    display: block;
+    width: 24px;
+    height: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 7L25 25M25 7L7 25' fill='none' stroke='white' stroke-opacity='.92' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+    transition: filter 0.16s ease;
+}
+
+#image_viewer .image-viewer-zone:hover .image-viewer-control:not(.is-unavailable) {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#image_viewer .image-viewer-control:hover {
+    color: white;
+    background: rgba(0, 0, 0, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.38);
+}
+
+#image_viewer .image-viewer-control--previous:hover,
+#image_viewer .image-viewer-control--next:hover {
+    background: rgba(104, 104, 104, 0.78);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 26px rgba(255, 255, 255, 0.22),
+        0 10px 30px rgba(0, 0, 0, 0.34);
+    transform: translateY(-50%) scale(1.06);
+}
+
+#image_viewer .image-viewer-control--previous:hover::before,
+#image_viewer .image-viewer-control--next:hover::before {
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.48));
+}
+
+#image_viewer .image-viewer-control--previous:active,
+#image_viewer .image-viewer-control--next:active {
+    background: rgba(116, 116, 116, 0.84);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 14px rgba(255, 255, 255, 0.2),
+        0 4px 14px rgba(0, 0, 0, 0.28);
+    transform: translateY(-50%) scale(0.92);
+    transition-duration: 0.08s;
+}
+
+#image_viewer .image-viewer-control--previous:active::before {
+    transform: translateX(-2px) scaleX(-1);
+}
+
+#image_viewer .image-viewer-control--next:active::before {
+    transform: translateX(2px);
+}
+
+#image_viewer .image-viewer-control--close:hover {
+    background: rgba(104, 104, 104, 0.78);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 24px rgba(255, 255, 255, 0.2),
+        0 8px 26px rgba(0, 0, 0, 0.32);
+    transform: scale(1.06);
+}
+
+#image_viewer .image-viewer-control--close:hover::before {
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.46));
+}
+
+#image_viewer .image-viewer-control--close:active {
+    background: rgba(116, 116, 116, 0.84);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 12px rgba(255, 255, 255, 0.18),
+        0 3px 12px rgba(0, 0, 0, 0.26);
+    transform: scale(0.9);
+    transition-duration: 0.08s;
+}
+
+#image_viewer .image-viewer-control.is-unavailable {
+    opacity: 0;
+    pointer-events: none;
+}
