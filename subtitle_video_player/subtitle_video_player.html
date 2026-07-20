@@ -1122,15 +1122,77 @@
             white-space: nowrap;
         }
 
+        .ai-chat-routing-wrap {
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            padding: 0 6px;
+        }
+
         .ai-chat-routing-fields {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: 14px;
-            padding: 0 6px;
+            flex: 1 1 auto;
+            min-width: 0;
         }
 
         .ai-chat-settings .ai-chat-routing-row {
             min-width: 0;
+        }
+
+        #aiChatModelRefresh {
+            flex: 0 0 auto;
+            width: 28px;
+            height: 28px;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            border: 1px solid #d0d5e0;
+            border-radius: 6px;
+            background: #fff;
+            color: #4b5563;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+        }
+
+        #aiChatModelRefresh:hover:not(:disabled) {
+            background: #f3f6ff;
+            border-color: #9db7ef;
+            color: #2f5fbf;
+        }
+
+        #aiChatModelRefresh:active:not(:disabled) {
+            background: #e8efff;
+        }
+
+        #aiChatModelRefresh:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        #aiChatModelRefresh:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.28);
+        }
+
+        #aiChatModelRefresh svg {
+            width: 15px;
+            height: 15px;
+            display: block;
+        }
+
+        #aiChatModelRefresh.ai-chat-model-refresh-spinning svg {
+            animation: aiChatModelRefreshSpin 0.85s linear infinite;
+        }
+
+        @keyframes aiChatModelRefreshSpin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .ai-chat-routing-label {
@@ -1767,19 +1829,27 @@
             <label>后端URL
                 <input type="text" id="aiChatBackendUrl" placeholder="http://127.0.0.1:11301" autocomplete="off">
             </label>
-            <div class="ai-chat-routing-fields">
-                <label class="ai-chat-routing-row">
-                    <span class="ai-chat-routing-label">服务商</span>
-                    <select id="aiChatProvider">
-                        <option value="">默认</option>
-                    </select>
-                </label>
-                <label class="ai-chat-routing-row">
-                    <span class="ai-chat-routing-label">模型</span>
-                    <select id="aiChatModel" disabled>
-                        <option value="">默认</option>
-                    </select>
-                </label>
+            <div class="ai-chat-routing-wrap">
+                <div class="ai-chat-routing-fields">
+                    <label class="ai-chat-routing-row">
+                        <span class="ai-chat-routing-label">服务商</span>
+                        <select id="aiChatProvider">
+                            <option value="">默认</option>
+                        </select>
+                    </label>
+                    <label class="ai-chat-routing-row">
+                        <span class="ai-chat-routing-label">模型</span>
+                        <select id="aiChatModel" disabled>
+                            <option value="">默认</option>
+                        </select>
+                    </label>
+                </div>
+                <button id="aiChatModelRefresh" type="button" title="重新获取可用服务商和模型" aria-label="重新获取可用服务商和模型">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M21 3v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
             </div>
             <span id="aiChatModelHint" aria-live="polite"></span>
             <label title="AI 仍会阅读全部字幕以理解上下文，但不会在回答中透露当前播放位置之后的剧情">
@@ -5502,6 +5572,7 @@
                 var backendUrlInput = document.getElementById('aiChatBackendUrl');
                 var providerSelect = document.getElementById('aiChatProvider');
                 var modelSelect = document.getElementById('aiChatModel');
+                var modelRefreshButton = document.getElementById('aiChatModelRefresh');
                 var modelHint = document.getElementById('aiChatModelHint');
                 var noSpoilerCheckbox = document.getElementById('aiChatNoSpoiler');
                 var attachPositionCheckbox = document.getElementById('aiChatAttachPosition');
@@ -5671,6 +5742,15 @@
                     backendUrlInput.disabled = conversationStarted;
                     providerSelect.disabled = conversationStarted || modelDiscoveryState !== 'ready' || !availableProviderModels.length;
                     modelSelect.disabled = conversationStarted || !selectedProvider;
+                    modelRefreshButton.disabled = conversationStarted || modelDiscoveryState === 'loading';
+                    modelRefreshButton.classList.toggle('ai-chat-model-refresh-spinning', modelDiscoveryState === 'loading');
+                    if (conversationStarted) {
+                        modelRefreshButton.title = '对话已开始，点击“新对话”后可刷新模型列表';
+                    } else if (modelDiscoveryState === 'loading') {
+                        modelRefreshButton.title = '正在获取可用服务商和模型…';
+                    } else {
+                        modelRefreshButton.title = '重新获取可用服务商和模型';
+                    }
 
                     modelHint.classList.remove('ai-chat-model-hint-error');
                     if (conversationStarted) {
@@ -6453,6 +6533,13 @@
                     }
                     aiSettings.model = modelSelect.value;
                     saveAiSettings();
+                });
+
+                modelRefreshButton.addEventListener('click', function () {
+                    if (conversationStarted || modelDiscoveryState === 'loading') {
+                        return;
+                    }
+                    loadModelDiscovery(true);
                 });
 
                 noSpoilerCheckbox.addEventListener('change', function () {
