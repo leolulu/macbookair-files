@@ -1590,15 +1590,24 @@
             }
         }
 
-        #toggleAiChat.ai-chat-unread::after {
+        /* 后台回答完成：绿色圆点；出错：红色圆点（见 ai-chat-unread-error） */
+        #toggleAiChat.ai-chat-unread::after,
+        #toggleAiChat.ai-chat-unread-error::after {
             content: '';
             display: inline-block;
             width: 7px;
             height: 7px;
-            background: #e5484d;
             border-radius: 50%;
             margin-left: 5px;
             vertical-align: middle;
+        }
+
+        #toggleAiChat.ai-chat-unread::after {
+            background: #30a46c;
+        }
+
+        #toggleAiChat.ai-chat-unread-error::after {
+            background: #e5484d;
         }
 
         .ai-selection-bubble {
@@ -6017,6 +6026,7 @@
                 var isGenerating = false;
                 var activeAbortController = null;
                 var hasUnreadReply = false;
+                var hasUnreadError = false;
 
                 function generateConversationId() {
                     return 'svp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -6294,8 +6304,11 @@
 
                 function updateToggleButtonState() {
                     var windowHidden = chatWindow.hidden;
+                    var showStatus = windowHidden && !isGenerating;
                     toggleButton.classList.toggle('ai-chat-busy', isGenerating && windowHidden);
-                    toggleButton.classList.toggle('ai-chat-unread', hasUnreadReply && windowHidden && !isGenerating);
+                    // 成功完成：绿点；出错：红点
+                    toggleButton.classList.toggle('ai-chat-unread-error', showStatus && hasUnreadError);
+                    toggleButton.classList.toggle('ai-chat-unread', showStatus && hasUnreadReply);
                 }
 
                 function dispatchChat(options) {
@@ -6323,6 +6336,7 @@
                 function runStreamInto(aiDiv, options) {
                     isGenerating = true;
                     hasUnreadReply = false;
+                    hasUnreadError = false;
                     updateSendButtonState();
                     updateToggleButtonState();
                     activeAbortController = new AbortController();
@@ -6363,7 +6377,7 @@
                         if (shouldKeepPinned) {
                             scrollToBottom();
                         }
-                        finishGeneration(true);
+                        finishGeneration('success');
                     }).catch(function (err) {
                         cancelStreamingRender();
                         aiDiv.classList.remove('ai-chat-streaming');
@@ -6378,6 +6392,7 @@
                                 chatInput.value = options.restoreInputOnStop;
                                 autoGrowInput();
                             }
+                            finishGeneration();
                         } else {
                             aiDiv.classList.add('ai-chat-msg-error');
                             var shouldKeepErrorPinned = isPinnedToBottom();
@@ -6403,17 +6418,22 @@
                             if (shouldKeepErrorPinned) {
                                 scrollToBottom();
                             }
+                            finishGeneration('error');
                         }
-                        finishGeneration(false);
                     });
                 }
 
-                function finishGeneration(success) {
+                // status: 'success' | 'error'，用户停止时不传
+                function finishGeneration(status) {
                     isGenerating = false;
                     activeAbortController = null;
                     updateSendButtonState();
-                    if (success && chatWindow.hidden) {
-                        hasUnreadReply = true;
+                    if (chatWindow.hidden) {
+                        if (status === 'success') {
+                            hasUnreadReply = true;
+                        } else if (status === 'error') {
+                            hasUnreadError = true;
+                        }
                     }
                     updateToggleButtonState();
                 }
@@ -6635,6 +6655,7 @@
                 function openChatWindow(focusInput) {
                     chatWindow.hidden = false;
                     hasUnreadReply = false;
+                    hasUnreadError = false;
                     applyGeometry();
                     updateToggleButtonState();
                     persistWindowState();
