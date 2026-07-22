@@ -406,13 +406,14 @@
             return;
         }
 
-        if (event.key === "Escape") {
+        var key = event.key.toLowerCase();
+        if (event.key === "Escape" || key === "q") {
             event.preventDefault();
             closeViewer();
-        } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        } else if (event.key === "ArrowLeft" || event.key === "ArrowUp" || key === "a" || key === "w") {
             event.preventDefault();
             moveViewer(-1);
-        } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        } else if (event.key === "ArrowRight" || event.key === "ArrowDown" || key === "d" || key === "s") {
             event.preventDefault();
             moveViewer(1);
         }
