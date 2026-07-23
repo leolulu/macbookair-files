@@ -2402,7 +2402,7 @@
                     await loadSubtitles(file);
                     setCurrentSubtitleContext('local-srt', file, { keepRefreshHandle: true });
                     showFloatingToast(isFirstBind ? '已绑定并刷新当前字幕' : '已刷新当前字幕', 'success', 1800);
-                    $('#video')[0].focus();
+                    requestVideoFocusReturn();
                 } catch (error) {
                     if (error && error.name === 'AbortError') {
                         return;
@@ -4119,6 +4119,7 @@
 
             function showDufsFileListModal(baseUrl) {
                 dufsTreeActiveBaseUrl = baseUrl;
+                setFocusRegressionBlocker(FOCUS_BLOCKER_DUFS_FILE_LIST, true);
                 document.getElementById('modalOverlay').style.display = 'block';
             }
 
@@ -4126,6 +4127,7 @@
                 document.getElementById('modalOverlay').style.display = 'none';
                 dufsTreeActiveBaseUrl = '';
                 dufsTreeRefreshSeq++;
+                setFocusRegressionBlocker(FOCUS_BLOCKER_DUFS_FILE_LIST, false);
             }
 
             function cacheDufsTreeSnapshot(baseUrl, snapshot) {
@@ -5354,26 +5356,102 @@
             });
             $("#resizable-shade").draggable();
 
+            var FOCUS_VIDEO_DELAY_MS = 5000;
+            var FOCUS_BLOCKER_AI_CHAT = 'ai-chat';
+            var FOCUS_BLOCKER_DUFS_FILE_LIST = 'dufs-file-list';
+            var focusVideoElement = document.getElementById('video');
             var focusVideoTimer = null;
+            var focusReturnPending = false;
+            var focusRegressionBlockers = new Set();
+
+            function clearFocusVideoTimer() {
+                if (focusVideoTimer === null) return;
+                clearTimeout(focusVideoTimer);
+                focusVideoTimer = null;
+            }
+
+            function isFocusProtectedControl(element) {
+                if (!element) return false;
+                if (element.isContentEditable) return true;
+                if (element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') return true;
+                if (element.tagName !== 'INPUT') return false;
+
+                var inputType = (element.type || 'text').toLowerCase();
+                return ['text', 'search', 'url', 'email', 'tel', 'password', 'number'].indexOf(inputType) !== -1;
+            }
+
+            function isFocusRegressionBlocked() {
+                return focusRegressionBlockers.size > 0;
+            }
+
+            function requestVideoFocusReturn() {
+                clearFocusVideoTimer();
+                if (isFocusRegressionBlocked() || isFocusProtectedControl(document.activeElement)) {
+                    focusReturnPending = true;
+                    return false;
+                }
+
+                focusReturnPending = false;
+                focusVideoElement.focus();
+                return true;
+            }
+
+            function scheduleVideoFocusReturn() {
+                clearFocusVideoTimer();
+                focusReturnPending = true;
+
+                if (isFocusRegressionBlocked() || isFocusProtectedControl(document.activeElement)) return;
+                focusVideoTimer = setTimeout(function () {
+                    focusVideoTimer = null;
+                    requestVideoFocusReturn();
+                }, FOCUS_VIDEO_DELAY_MS);
+            }
+
+            function setFocusRegressionBlocker(blockerId, isBlocked) {
+                var wasBlocked = isFocusRegressionBlocked();
+                if (isBlocked) {
+                    focusRegressionBlockers.add(blockerId);
+                    focusReturnPending = true;
+                    clearFocusVideoTimer();
+                    return;
+                }
+
+                focusRegressionBlockers.delete(blockerId);
+                if (wasBlocked && !isFocusRegressionBlocked()) {
+                    clearFocusVideoTimer();
+                    focusReturnPending = false;
+                    focusVideoElement.focus();
+                }
+            }
+
             (function () {
-                let video = document.getElementById('video');
                 let statusIcon = document.getElementById('videoFocusStatus');
-                video.onblur = function () {
+                focusVideoElement.onblur = function () {
                     statusIcon.innerHTML = '❌<span style="color: red;">失焦</span>';
-                    if (focusVideoTimer) {
-                        clearTimeout(focusVideoTimer)
-                    }
-                    focusVideoTimer = setTimeout(function () {
-                        video.focus();
-                    }, 5000);
+                    scheduleVideoFocusReturn();
                 };
-                video.onfocus = function () {
-                    if (focusVideoTimer) {
-                        clearTimeout(focusVideoTimer)
-                    }
+                focusVideoElement.onfocus = function () {
+                    clearFocusVideoTimer();
+                    focusReturnPending = false;
                     statusIcon.innerHTML = '✔️<span style="color: #00D26A;">聚焦</span>';
                 }
             })();
+
+            document.addEventListener('focusin', function (event) {
+                if (!isFocusProtectedControl(event.target)) return;
+                focusReturnPending = true;
+                clearFocusVideoTimer();
+            });
+
+            document.addEventListener('focusout', function (event) {
+                if (!isFocusProtectedControl(event.target)) return;
+                setTimeout(function () {
+                    if (!focusReturnPending) return;
+                    if (isFocusRegressionBlocked() || isFocusProtectedControl(document.activeElement)) return;
+                    if (document.activeElement === focusVideoElement) return;
+                    scheduleVideoFocusReturn();
+                }, 0);
+            });
 
             (function () {
                 let video = document.getElementById('video');
@@ -5398,7 +5476,7 @@
 
             document.getElementById("skipBlanks").addEventListener('click', function (event) {
                 setTimeout(() => {
-                    $('#video')[0].focus();
+                    requestVideoFocusReturn();
                 }, 200);
             });
 
@@ -6653,6 +6731,7 @@
                 }
 
                 function openChatWindow(focusInput) {
+                    setFocusRegressionBlocker(FOCUS_BLOCKER_AI_CHAT, true);
                     chatWindow.hidden = false;
                     hasUnreadReply = false;
                     hasUnreadError = false;
@@ -6669,6 +6748,7 @@
                     chatWindow.hidden = true;
                     updateToggleButtonState();
                     persistWindowState();
+                    setFocusRegressionBlocker(FOCUS_BLOCKER_AI_CHAT, false);
                 }
 
                 toggleButton.addEventListener('click', function () {
