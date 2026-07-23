@@ -1122,6 +1122,61 @@
             white-space: nowrap;
         }
 
+        .ai-chat-selection-bubble-setting {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .ai-chat-selection-bubble-setting label {
+            flex: 0 0 auto;
+        }
+
+        #aiSelectionBubblePosition {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 0;
+            height: 28px;
+            box-sizing: border-box;
+            padding: 0 8px;
+            font: inherit;
+        }
+
+        .ai-chat-setting-help {
+            flex: 0 0 auto;
+            width: 17px;
+            height: 17px;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            border: 1px solid #aab3c1;
+            border-radius: 50%;
+            background: #fff;
+            color: #6b7280;
+            font: inherit;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: help;
+        }
+
+        .ai-chat-setting-help:hover {
+            border-color: #2f5fbf;
+            background: #f3f6ff;
+            color: #2f5fbf;
+        }
+
+        .ai-chat-setting-help:focus-visible {
+            outline: none;
+            border-radius: 50%;
+            box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.28);
+        }
+
         .ai-chat-routing-wrap {
             display: flex;
             align-items: flex-end;
@@ -1867,6 +1922,15 @@
             <label title="每次提问自动附带当前播放时间和当前字幕，便于 AI 理解“这句”“刚才”等指代。问全局性问题时可以关闭，避免 AI 被当前位置带偏；防剧透开启时，此项会自动启用并锁定。">
                 <input type="checkbox" id="aiChatAttachPosition" checked> 提问附带播放位置
             </label>
+            <div class="ai-chat-selection-bubble-setting">
+                <label for="aiSelectionBubblePosition">划词气泡位置</label>
+                <select id="aiSelectionBubblePosition">
+                    <option value="auto">智能定位（默认）</option>
+                    <option value="subtitle-bottom">字幕区底部</option>
+                    <option value="below">选区下方优先</option>
+                </select>
+                <button id="aiSelectionBubblePositionHelp" class="ai-chat-setting-help" type="button" title="横屏布局固定使用智能定位；切换回竖屏后恢复你选择的气泡位置。" aria-label="气泡位置设置说明">?</button>
+            </div>
             <span id="aiChatContextInfo"></span>
         </div>
         <div id="aiChatMessages" class="ai-chat-messages"></div>
@@ -5585,6 +5649,7 @@
                 var modelHint = document.getElementById('aiChatModelHint');
                 var noSpoilerCheckbox = document.getElementById('aiChatNoSpoiler');
                 var attachPositionCheckbox = document.getElementById('aiChatAttachPosition');
+                var selectionBubblePositionSelect = document.getElementById('aiSelectionBubblePosition');
                 var contextInfo = document.getElementById('aiChatContextInfo');
                 var quoteChip = document.getElementById('aiChatQuoteChip');
                 var quoteChipText = quoteChip.querySelector('.ai-chat-quote-text');
@@ -5604,7 +5669,8 @@
                     provider: '',
                     model: '',
                     noSpoiler: true,
-                    attachPosition: true
+                    attachPosition: true,
+                    selectionBubblePosition: 'auto'
                 };
                 var availableProviderModels = [];
                 var modelDiscoveryState = 'idle';
@@ -5637,6 +5703,9 @@
                             if (typeof parsed.attachPosition === 'boolean') {
                                 aiSettings.attachPosition = parsed.attachPosition;
                             }
+                            if (isValidSelectionBubblePosition(parsed.selectionBubblePosition)) {
+                                aiSettings.selectionBubblePosition = parsed.selectionBubblePosition;
+                            }
                         }
                     } catch (err) {
                         // 本地设置损坏时使用默认值
@@ -5651,6 +5720,22 @@
                     try {
                         localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
                     } catch (err) { }
+                }
+
+                function isValidSelectionBubblePosition(value) {
+                    return value === 'auto' || value === 'subtitle-bottom' || value === 'below';
+                }
+
+                function getEffectiveSelectionBubblePosition() {
+                    return isPortraitLayout() ? aiSettings.selectionBubblePosition : 'auto';
+                }
+
+                function syncSelectionBubblePositionControl() {
+                    var isPortrait = isPortraitLayout();
+                    selectionBubblePositionSelect.disabled = !isPortrait;
+                    selectionBubblePositionSelect.value = isPortrait
+                        ? aiSettings.selectionBubblePosition
+                        : 'auto';
                 }
 
                 function normalizeBackendUrl(url) {
@@ -5862,6 +5947,7 @@
                 function applySettingsToInputs() {
                     backendUrlInput.value = aiSettings.backendUrl;
                     syncContextSettingControls();
+                    syncSelectionBubblePositionControl();
                     syncRoutingControls();
                 }
 
@@ -6577,6 +6663,16 @@
                     saveAiSettings();
                 });
 
+                selectionBubblePositionSelect.addEventListener('change', function () {
+                    if (!isPortraitLayout() || !isValidSelectionBubblePosition(selectionBubblePositionSelect.value)) {
+                        syncSelectionBubblePositionControl();
+                        return;
+                    }
+                    aiSettings.selectionBubblePosition = selectionBubblePositionSelect.value;
+                    saveAiSettings();
+                    scheduleSelectionBubbleRefresh();
+                });
+
                 settingsToggleButton.addEventListener('click', function () {
                     settingsPanel.hidden = !settingsPanel.hidden;
                     if (!settingsPanel.hidden) {
@@ -6901,12 +6997,38 @@
                     currentSelectionInfo = info;
                     selectionBubble.hidden = false;
                     var bubbleRect = selectionBubble.getBoundingClientRect();
+                    var positionMode = getEffectiveSelectionBubblePosition();
                     var left = info.rect.left + info.rect.width / 2 - bubbleRect.width / 2;
-                    left = Math.min(Math.max(left, 8), window.innerWidth - bubbleRect.width - 8);
-                    var top = info.rect.top - bubbleRect.height - 8;
-                    if (top < 8) {
+                    var top;
+                    if (positionMode === 'subtitle-bottom') {
+                        var subtitlesRect = subtitlesContainer.getBoundingClientRect();
+                        var subtitleMinLeft = Math.max(8, subtitlesRect.left + 8);
+                        var subtitleMaxLeft = Math.min(
+                            window.innerWidth - bubbleRect.width - 8,
+                            subtitlesRect.right - bubbleRect.width - 8
+                        );
+                        left = subtitlesRect.left + subtitlesRect.width / 2 - bubbleRect.width / 2;
+                        if (subtitleMinLeft <= subtitleMaxLeft) {
+                            left = Math.min(Math.max(left, subtitleMinLeft), subtitleMaxLeft);
+                        }
+                        var visibleSubtitleTop = Math.max(8, subtitlesRect.top);
+                        var visibleSubtitleBottom = Math.min(window.innerHeight - 8, subtitlesRect.bottom);
+                        top = visibleSubtitleBottom - bubbleRect.height;
+                        if (top < visibleSubtitleTop) {
+                            top = visibleSubtitleTop;
+                        }
+                    } else if (positionMode === 'below') {
                         top = info.rect.bottom + 8;
+                        if (top + bubbleRect.height > window.innerHeight - 8) {
+                            top = info.rect.top - bubbleRect.height - 8;
+                        }
+                    } else {
+                        top = info.rect.top - bubbleRect.height - 8;
+                        if (top < 8) {
+                            top = info.rect.bottom + 8;
+                        }
                     }
+                    left = Math.min(Math.max(left, 8), window.innerWidth - bubbleRect.width - 8);
                     top = Math.min(Math.max(top, 8), window.innerHeight - bubbleRect.height - 8);
                     selectionBubble.style.left = left + 'px';
                     selectionBubble.style.top = top + 'px';
@@ -6918,7 +7040,7 @@
                 }
 
                 var selectionResizeFrame = null;
-                window.addEventListener('resize', function () {
+                function scheduleSelectionBubbleRefresh() {
                     if (!currentSelectionInfo || selectionBubble.hidden) {
                         return;
                     }
@@ -6931,7 +7053,22 @@
                             refreshSelectionBubble();
                         }
                     });
+                }
+
+                window.addEventListener('resize', scheduleSelectionBubbleRefresh);
+
+                document.querySelectorAll('input[name="layoutOrientation"]').forEach(function (input) {
+                    input.addEventListener('change', function () {
+                        syncSelectionBubblePositionControl();
+                        scheduleSelectionBubbleRefresh();
+                    });
                 });
+
+                document.getElementById('toggleLayout').addEventListener('change', scheduleSelectionBubbleRefresh);
+
+                if (typeof ResizeObserver === 'function') {
+                    new ResizeObserver(scheduleSelectionBubbleRefresh).observe(subtitlesContainer);
+                }
 
                 var selectionRefreshTimer = null;
                 document.addEventListener('selectionchange', function () {
