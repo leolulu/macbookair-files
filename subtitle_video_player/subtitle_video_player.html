@@ -6907,6 +6907,7 @@
                     if (top < 8) {
                         top = info.rect.bottom + 8;
                     }
+                    top = Math.min(Math.max(top, 8), window.innerHeight - bubbleRect.height - 8);
                     selectionBubble.style.left = left + 'px';
                     selectionBubble.style.top = top + 'px';
                 }
@@ -6915,6 +6916,22 @@
                     currentSelectionInfo = null;
                     selectionBubble.hidden = true;
                 }
+
+                var selectionResizeFrame = null;
+                window.addEventListener('resize', function () {
+                    if (!currentSelectionInfo || selectionBubble.hidden) {
+                        return;
+                    }
+                    if (selectionResizeFrame !== null) {
+                        cancelAnimationFrame(selectionResizeFrame);
+                    }
+                    selectionResizeFrame = requestAnimationFrame(function () {
+                        selectionResizeFrame = null;
+                        if (currentSelectionInfo && !selectionBubble.hidden) {
+                            refreshSelectionBubble();
+                        }
+                    });
+                });
 
                 var selectionRefreshTimer = null;
                 document.addEventListener('selectionchange', function () {
