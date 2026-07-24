@@ -744,9 +744,155 @@
             display: inline-block;
         }
 
-        #videoPlaybackRate {
+        .playback-rate-control {
+            position: relative;
+            display: inline-block;
+            vertical-align: baseline;
+        }
+
+        #videoPlaybackRateControl {
+            display: inline;
+            padding: 0;
+            border: 0;
+            background: transparent;
             color: #3F51B5;
+            font: inherit;
             font-weight: bold;
+            line-height: inherit;
+            vertical-align: baseline;
+            cursor: pointer;
+            transition: color 0.12s ease;
+        }
+
+        #videoPlaybackRateControl:hover,
+        #videoPlaybackRateControl[aria-expanded="true"] {
+            color: #596AC2;
+        }
+
+        #videoPlaybackRateControl:focus-visible {
+            outline: 1px dotted currentColor;
+            outline-offset: 2px;
+        }
+
+        #videoPlaybackRate {
+            color: inherit;
+            font-weight: bold;
+        }
+
+        #fastForwardLimitMarker {
+            margin-left: 1px;
+            color: #C05621;
+            font-size: 0.65em;
+            line-height: 0;
+            vertical-align: super;
+            white-space: nowrap;
+        }
+
+        #fastForwardLimitMarker[hidden] {
+            display: none;
+        }
+
+        #fastForwardLimitPopover {
+            position: absolute;
+            left: 0;
+            top: calc(100% + 4px);
+            z-index: 1200;
+            width: 138px;
+            box-sizing: border-box;
+            padding: 7px;
+            border: 1px solid #D4D7DF;
+            border-radius: 4px;
+            background: #FFFFFF;
+            box-shadow: 0 4px 12px rgba(36, 43, 68, 0.16);
+            color: #30364A;
+        }
+
+        #fastForwardLimitPopover[hidden] {
+            display: none;
+        }
+
+        .fast-forward-limit-label {
+            color: #555D73;
+            font-size: 12px;
+        }
+
+        .fast-forward-limit-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        #resetFastForwardLimit {
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #555D73;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        #resetFastForwardLimit:hover,
+        #resetFastForwardLimit.is-active {
+            color: #3F51B5;
+        }
+
+        #resetFastForwardLimit.is-active {
+            font-weight: 600;
+        }
+
+        .fast-forward-limit-stepper {
+            display: grid;
+            grid-template-columns: 25px minmax(0, 1fr) 25px;
+            height: 26px;
+            border: 1px solid #C7CBD5;
+            border-radius: 3px;
+            overflow: hidden;
+            background: #FFFFFF;
+        }
+
+        .fast-forward-limit-stepper button {
+            border: 0;
+            background: #F4F5F8;
+            color: #46506A;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .fast-forward-limit-stepper button:hover {
+            background: #E7E9EF;
+            color: #2F408C;
+        }
+
+        .fast-forward-limit-stepper button:focus-visible,
+        #fastForwardLimit:focus-visible {
+            position: relative;
+            outline: 2px solid #6C7CC1;
+            outline-offset: -2px;
+        }
+
+        #fastForwardLimit {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            border: 0;
+            border-right: 1px solid #D4D9E5;
+            border-left: 1px solid #D4D9E5;
+            border-radius: 0;
+            color: #2F408C;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 700;
+            text-align: center;
+            appearance: textfield;
+        }
+
+        #fastForwardLimit::-webkit-inner-spin-button,
+        #fastForwardLimit::-webkit-outer-spin-button {
+            margin: 0;
+            appearance: none;
         }
 
         #subtitleSyncStatus {
@@ -1728,7 +1874,22 @@
             <div class="options-container">
                 <div id="video-meta-options-slot"></div>
                 <input type="file" id="videoFile" accept=".mp4, .webm, .srt, .json, .ass, .html, .sup" multiple />
-                <span id="videoPlaybackRate" class="inline-block-element">x1.0</span>
+                <div class="playback-rate-control">
+                    <button type="button" id="videoPlaybackRateControl" aria-haspopup="dialog" aria-expanded="false" aria-controls="fastForwardLimitPopover" title="当前播放速度；点击设置快进上限">
+                        <span id="videoPlaybackRate">x1.0</span><span id="fastForwardLimitMarker" hidden></span>
+                    </button>
+                    <div id="fastForwardLimitPopover" role="dialog" aria-label="快进上限设置" hidden>
+                        <div class="fast-forward-limit-header">
+                            <label class="fast-forward-limit-label" for="fastForwardLimit">快进上限（倍）</label>
+                            <button type="button" id="resetFastForwardLimit">自动</button>
+                        </div>
+                        <div class="fast-forward-limit-stepper">
+                            <button type="button" id="decreaseFastForwardLimit" aria-label="降低快进上限">−</button>
+                            <input type="number" id="fastForwardLimit" min="1" max="16" step="1" value="16" inputmode="decimal" aria-label="快进上限倍数">
+                            <button type="button" id="increaseFastForwardLimit" aria-label="提高快进上限">+</button>
+                        </div>
+                    </div>
+                </div>
                 <span id='videoFocusStatus' class="inline-block-element">❌<span style="color: red;">失焦</span></span>
                 <span id='videoCanPlayStatus'>🔴</span>
                 <div class="inline-block-element">
@@ -3618,6 +3779,23 @@
                 skipCalibrationBySubClick: false
             };
 
+            const FAST_FORWARD_LIMIT_MIN = 1;
+            const FAST_FORWARD_LIMIT_MAX = 16;
+
+            function normalizeFastForwardLimit(value) {
+                if (value === null || String(value).trim() === '') {
+                    return FAST_FORWARD_LIMIT_MAX;
+                }
+                const parsedValue = Number(value);
+                if (!Number.isFinite(parsedValue)) {
+                    return FAST_FORWARD_LIMIT_MAX;
+                }
+                return Math.max(FAST_FORWARD_LIMIT_MIN, Math.min(FAST_FORWARD_LIMIT_MAX, Math.round(parsedValue)));
+            }
+
+            var fastForwardSpeedLimit = FAST_FORWARD_LIMIT_MAX;
+            var isFastForwardLimitManual = false;
+
             function checkIsDuringSubtitle(currentTime) {
                 currentTime = getSubtitleTimelineTime(currentTime);
                 const skipIntervalChecked = $('#enableSkipInterval').prop('checked');
@@ -3647,11 +3825,7 @@
                 if (originalSpeed > 1) {
                     fastForwardSpeed *= originalSpeed;
                 }
-                // Add a cap to prevent the browser from throwing an error
-                if (fastForwardSpeed > 16) {
-                    fastForwardSpeed = 16;
-                }
-                return fastForwardSpeed;
+                return Math.min(fastForwardSpeed, fastForwardSpeedLimit);
             }
 
             function fastForwardCheckLoop() {
@@ -5599,6 +5773,110 @@
             $('#video').on('ratechange', function () {
                 $('#videoPlaybackRate').text(`x${this.playbackRate.toFixed(1)}`);
             });
+
+            (function () {
+                const control = document.getElementById('videoPlaybackRateControl');
+                const popover = document.getElementById('fastForwardLimitPopover');
+                const input = document.getElementById('fastForwardLimit');
+                const marker = document.getElementById('fastForwardLimitMarker');
+                const resetButton = document.getElementById('resetFastForwardLimit');
+                let isLimitInputDirty = false;
+
+                function getAutomaticLimitStartingValue() {
+                    return normalizeFastForwardLimit(document.getElementById('video').playbackRate);
+                }
+
+                function setPopoverOpen(isOpen) {
+                    popover.hidden = !isOpen;
+                    control.setAttribute('aria-expanded', String(isOpen));
+                    if (isOpen) {
+                        input.value = isFastForwardLimitManual ? fastForwardSpeedLimit : getAutomaticLimitStartingValue();
+                        isLimitInputDirty = false;
+                        input.focus();
+                        input.select();
+                    }
+                }
+
+                function updateFastForwardLimitUi() {
+                    input.value = isFastForwardLimitManual ? fastForwardSpeedLimit : getAutomaticLimitStartingValue();
+                    marker.hidden = !isFastForwardLimitManual;
+                    marker.textContent = fastForwardSpeedLimit;
+                    resetButton.classList.toggle('is-active', !isFastForwardLimitManual);
+                    resetButton.setAttribute('aria-pressed', String(!isFastForwardLimitManual));
+                    control.title = isFastForwardLimitManual
+                        ? `当前播放速度；手动快进上限 x${fastForwardSpeedLimit}，点击设置`
+                        : '当前播放速度；快进上限为自动，点击设置';
+                }
+
+                function applyFastForwardLimit(value) {
+                    fastForwardSpeedLimit = normalizeFastForwardLimit(value);
+                    isFastForwardLimitManual = true;
+                    isLimitInputDirty = false;
+                    updateFastForwardLimitUi();
+
+                    const video = document.getElementById('video');
+                    if (playerState.currentState === PLAYER_STATE.FAST_FORWARDING && video.playbackRate > fastForwardSpeedLimit) {
+                        video.playbackRate = fastForwardSpeedLimit;
+                    }
+                }
+
+                function resetFastForwardLimit() {
+                    fastForwardSpeedLimit = FAST_FORWARD_LIMIT_MAX;
+                    isFastForwardLimitManual = false;
+                    isLimitInputDirty = false;
+                    updateFastForwardLimitUi();
+                }
+
+                control.addEventListener('click', function () {
+                    setPopoverOpen(popover.hidden);
+                });
+
+                document.getElementById('decreaseFastForwardLimit').addEventListener('click', function () {
+                    applyFastForwardLimit(Number(input.value) - 1);
+                });
+
+                document.getElementById('increaseFastForwardLimit').addEventListener('click', function () {
+                    applyFastForwardLimit(Number(input.value) + 1);
+                });
+
+                resetButton.addEventListener('click', resetFastForwardLimit);
+
+                input.addEventListener('input', function () {
+                    isLimitInputDirty = true;
+                });
+
+                input.addEventListener('change', function () {
+                    if (isLimitInputDirty) {
+                        applyFastForwardLimit(input.value);
+                    }
+                });
+
+                input.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter') {
+                        applyFastForwardLimit(input.value);
+                        setPopoverOpen(false);
+                        control.focus();
+                    }
+                });
+
+                document.addEventListener('pointerdown', function (event) {
+                    if (!popover.hidden && !event.target.closest('.playback-rate-control')) {
+                        if (isLimitInputDirty) {
+                            applyFastForwardLimit(input.value);
+                        }
+                        setPopoverOpen(false);
+                    }
+                });
+
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && !popover.hidden) {
+                        setPopoverOpen(false);
+                        control.focus();
+                    }
+                });
+
+                updateFastForwardLimitUi();
+            })();
 
             $('#subtitleAdvance').on('click', function () {
                 adjustSubtitleSyncOffset(-0.1);
