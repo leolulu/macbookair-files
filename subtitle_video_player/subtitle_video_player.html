@@ -1268,6 +1268,27 @@
             white-space: nowrap;
         }
 
+        /* 复选框：可点区域=框+文字，横向从左到右、自动换行 */
+        .ai-chat-settings-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 14px;
+            margin: 4px 0 2px; /* 上略隔断；下比上略收 */
+        }
+
+        .ai-chat-settings-checkboxes label {
+            display: inline-flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            width: max-content;
+            max-width: none;
+            flex: 0 0 auto;
+            flex-shrink: 0;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
         .ai-chat-selection-bubble-setting {
             display: flex;
             align-items: center;
@@ -2077,12 +2098,14 @@
                 </button>
             </div>
             <span id="aiChatModelHint" aria-live="polite"></span>
-            <label title="AI 仍会阅读全部字幕以理解上下文，但不会在回答中透露当前播放位置之后的剧情">
-                <input type="checkbox" id="aiChatNoSpoiler" checked> 防剧透模式
-            </label>
-            <label title="每次提问自动附带当前播放时间和当前字幕，便于 AI 理解“这句”“刚才”等指代。问全局性问题时可以关闭，避免 AI 被当前位置带偏；防剧透开启时，此项会自动启用并锁定。">
-                <input type="checkbox" id="aiChatAttachPosition" checked> 提问附带播放位置
-            </label>
+            <div class="ai-chat-settings-checkboxes">
+                <label title="AI 仍会阅读全部字幕以理解上下文，但不会在回答中透露当前播放位置之后的剧情">
+                    <input type="checkbox" id="aiChatNoSpoiler" checked> 防剧透模式
+                </label>
+                <label title="每次提问自动附带当前播放时间和当前字幕，便于 AI 理解“这句”“刚才”等指代。问全局性问题时可以关闭，避免 AI 被当前位置带偏；防剧透开启时，此项会自动启用并锁定。">
+                    <input type="checkbox" id="aiChatAttachPosition" checked> 提问附带播放位置
+                </label>
+            </div>
             <div class="ai-chat-selection-bubble-setting">
                 <label for="aiSelectionBubblePosition">划词气泡位置</label>
                 <select id="aiSelectionBubblePosition">
