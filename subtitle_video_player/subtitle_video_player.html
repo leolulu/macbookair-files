@@ -7127,7 +7127,8 @@
 
                 toggleButton.addEventListener('click', function () {
                     if (chatWindow.hidden) {
-                        openChatWindow(true);
+                        // 竖屏不抢输入焦点，横屏仍聚焦提问框
+                        openChatWindow(!isPortraitLayout());
                     } else {
                         closeChatWindow();
                     }
