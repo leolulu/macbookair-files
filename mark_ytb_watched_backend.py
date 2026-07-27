@@ -42,9 +42,9 @@ def download_video():
     return "Download process started", 200
 
 
-@app.route("/mark_video_watched", methods=["GET"])
-def hello():
-    return "hello"
+@app.route("/health", methods=["GET"])
+def health():
+    return "healthy"
 
 
 if __name__ == "__main__":
