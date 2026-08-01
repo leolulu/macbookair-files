@@ -44,6 +44,44 @@ test('buildNote omits a missing previous line at the beginning', () => {
     assert.equal(note, '**来源：**《Demo》\n> **Hello** world.\n> Next line.');
 });
 
+test('buildNote flattens multiline SRT cues into one quote line per cue', () => {
+    const note = eudic.buildNote({
+        videoName: 'Demo.srt',
+        lines: [
+            'Previous subtitle\r\ncontinues here.',
+            'I am here to rescue a poor Beastfolk soul\nwho has fallen victim.',
+            'Next subtitle\rcontinues too.'
+        ],
+        currentIndex: 1,
+        selectedText: 'Beastfolk',
+        selectionStart: 27
+    });
+
+    assert.equal(
+        note,
+        '**来源：**《Demo.srt》\n'
+        + '> Previous subtitle continues here.\n'
+        + '> I am here to rescue a poor **Beastfolk** soul who has fallen victim.\n'
+        + '> Next subtitle continues too.'
+    );
+});
+
+test('buildNote flattens a cleaned ASS hard break after bolding the selected word', () => {
+    const sentence = "We're going to have to find\nsome work in the next town.";
+    const note = eudic.buildNote({
+        videoName: 'Demo.ass',
+        lines: [sentence],
+        currentIndex: 0,
+        selectedText: 'work',
+        selectionStart: sentence.indexOf('work')
+    });
+
+    assert.equal(
+        note,
+        "**来源：**《Demo.ass》\n> We're going to have to find some **work** in the next town."
+    );
+});
+
 test('word validation accepts apostrophes and hyphens but rejects phrases', () => {
     assert.equal(eudic.normalizeWord('  Don’t  '), "don't");
     assert.equal(eudic.isSupportedWord("don't"), true);

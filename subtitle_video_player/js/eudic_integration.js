@@ -64,6 +64,10 @@
         return String(value || '').replace(/([\\`*_[\]])/g, '\\$1');
     }
 
+    function flattenContextLine(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim();
+    }
+
     function findSelectionStart(sentence, selectedText, approximateStart) {
         var source = String(sentence || '');
         var selected = String(selectedText || '');
@@ -133,15 +137,15 @@
 
         var context = [];
         if (currentIndex > 0 && String(lines[currentIndex - 1] || '').trim()) {
-            context.push(escapeMarkdownInline(String(lines[currentIndex - 1]).trim()));
+            context.push(escapeMarkdownInline(flattenContextLine(lines[currentIndex - 1])));
         }
-        context.push(formatCurrentLine(
+        context.push(flattenContextLine(formatCurrentLine(
             String(lines[currentIndex] || ''),
             options.selectedText,
             Number(options.selectionStart)
-        ));
+        )));
         if (currentIndex + 1 < lines.length && String(lines[currentIndex + 1] || '').trim()) {
-            context.push(escapeMarkdownInline(String(lines[currentIndex + 1]).trim()));
+            context.push(escapeMarkdownInline(flattenContextLine(lines[currentIndex + 1])));
         }
 
         return '**来源：**《' + escapeMarkdownInline(String(options.videoName || '未知').trim() || '未知') + '》\n'
