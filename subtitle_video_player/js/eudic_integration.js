@@ -28,6 +28,34 @@
         return String(value || '').trim().replace(/\u2019/g, "'").toLowerCase();
     }
 
+    function maskAuthorization(value) {
+        var authorization = String(value || '').trim();
+        if (!authorization) {
+            return '';
+        }
+        if (authorization.length <= 2) {
+            return authorization;
+        }
+        if (authorization.length <= 8) {
+            return authorization.slice(0, 1)
+                + '•'.repeat(authorization.length - 2)
+                + authorization.slice(-1);
+        }
+        if (authorization.length <= 16) {
+            return authorization.slice(0, 3)
+                + '•'.repeat(authorization.length - 6)
+                + authorization.slice(-3);
+        }
+        if (authorization.length <= 24) {
+            return authorization.slice(0, 4)
+                + '•'.repeat(authorization.length - 12)
+                + authorization.slice(-8);
+        }
+        return authorization.slice(0, 8)
+            + '•'.repeat(authorization.length - 24)
+            + authorization.slice(-16);
+    }
+
     function isSupportedWord(value) {
         return /^[a-z]+(?:'[a-z]+)*(?:-[a-z]+(?:'[a-z]+)*)*$/.test(normalizeWord(value));
     }
@@ -258,6 +286,7 @@
     return {
         API_BASE_URL: API_BASE_URL,
         EudicApiError: EudicApiError,
+        maskAuthorization: maskAuthorization,
         normalizeWord: normalizeWord,
         isSupportedWord: isSupportedWord,
         findSelectionStart: findSelectionStart,

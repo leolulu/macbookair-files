@@ -1510,6 +1510,12 @@
             box-sizing: border-box;
             padding: 0 8px;
             font: inherit;
+            font-family: Consolas, "SFMono-Regular", monospace;
+            letter-spacing: 0;
+        }
+
+        #eudicAuthorization.eudic-authorization-masked {
+            cursor: text;
         }
 
         .ai-chat-eudic-key-row button,
@@ -2216,7 +2222,7 @@
                     <span id="eudicAuthorizationStatus" class="ai-chat-eudic-status" data-state="idle" aria-live="polite">未配置</span>
                 </div>
                 <div class="ai-chat-eudic-key-row">
-                    <input type="password" id="eudicAuthorization" placeholder="Authorization，例如 NIS …" autocomplete="off" spellcheck="false" aria-label="欧路词典认证密钥">
+                    <input type="password" id="eudicAuthorization" placeholder="Authorization，例如 NIS …" autocomplete="off" spellcheck="false" aria-label="欧路词典认证密钥" title="直接粘贴可替换；点击“显示”后可编辑完整值">
                     <button id="eudicAuthorizationVisibility" type="button" aria-label="显示欧路认证密钥">显示</button>
                 </div>
                 <div class="ai-chat-eudic-actions">
@@ -6178,6 +6184,8 @@
                 var modelDiscoveryAbortController = null;
                 var conversationStarted = false;
                 var eudicAuthorization = '';
+                var eudicAuthorizationDraft = '';
+                var eudicAuthorizationRevealed = false;
                 var eudicAuthorizationVerifying = false;
 
                 function loadAiSettings() {
@@ -6227,15 +6235,37 @@
                     eudicAuthorizationStatus.setAttribute('data-state', state || 'idle');
                 }
 
+                function renderEudicAuthorizationInput() {
+                    var masked = Boolean(eudicAuthorizationDraft) && !eudicAuthorizationRevealed;
+                    eudicAuthorizationInput.type = masked || eudicAuthorizationRevealed ? 'text' : 'password';
+                    eudicAuthorizationInput.readOnly = masked;
+                    eudicAuthorizationInput.classList.toggle('eudic-authorization-masked', masked);
+                    eudicAuthorizationInput.value = masked
+                        ? window.SvpEudic.maskAuthorization(eudicAuthorizationDraft)
+                        : eudicAuthorizationDraft;
+                    eudicAuthorizationVisibilityButton.textContent = eudicAuthorizationRevealed ? '隐藏' : '显示';
+                    eudicAuthorizationVisibilityButton.setAttribute(
+                        'aria-label',
+                        eudicAuthorizationRevealed ? '隐藏欧路认证密钥' : '显示欧路认证密钥'
+                    );
+                }
+
+                function captureEudicAuthorizationDraft() {
+                    if (!eudicAuthorizationInput.readOnly) {
+                        eudicAuthorizationDraft = eudicAuthorizationInput.value.trim();
+                    }
+                }
+
                 function maskEudicAuthorization() {
-                    eudicAuthorizationInput.type = 'password';
-                    eudicAuthorizationVisibilityButton.textContent = '显示';
-                    eudicAuthorizationVisibilityButton.setAttribute('aria-label', '显示欧路认证密钥');
+                    captureEudicAuthorizationDraft();
+                    eudicAuthorizationRevealed = false;
+                    renderEudicAuthorizationInput();
                 }
 
                 function resetEudicAuthorizationInput() {
-                    eudicAuthorizationInput.value = eudicAuthorization;
-                    maskEudicAuthorization();
+                    eudicAuthorizationDraft = eudicAuthorization;
+                    eudicAuthorizationRevealed = false;
+                    renderEudicAuthorizationInput();
                     setEudicAuthorizationStatus(
                         eudicAuthorization ? '已保存' : '未配置',
                         eudicAuthorization ? 'success' : 'idle'
@@ -7219,12 +7249,38 @@
                 });
 
                 eudicAuthorizationVisibilityButton.addEventListener('click', function () {
-                    var reveal = eudicAuthorizationInput.type === 'password';
-                    eudicAuthorizationInput.type = reveal ? 'text' : 'password';
-                    eudicAuthorizationVisibilityButton.textContent = reveal ? '隐藏' : '显示';
-                    eudicAuthorizationVisibilityButton.setAttribute(
-                        'aria-label',
-                        reveal ? '隐藏欧路认证密钥' : '显示欧路认证密钥'
+                    captureEudicAuthorizationDraft();
+                    eudicAuthorizationRevealed = !eudicAuthorizationRevealed;
+                    renderEudicAuthorizationInput();
+                    eudicAuthorizationInput.focus();
+                    if (eudicAuthorizationRevealed) {
+                        eudicAuthorizationInput.setSelectionRange(
+                            eudicAuthorizationInput.value.length,
+                            eudicAuthorizationInput.value.length
+                        );
+                    }
+                });
+
+                eudicAuthorizationInput.addEventListener('input', function () {
+                    captureEudicAuthorizationDraft();
+                    setEudicAuthorizationStatus(
+                        eudicAuthorizationDraft ? '待验证' : '未配置',
+                        'idle'
+                    );
+                });
+
+                eudicAuthorizationInput.addEventListener('paste', function (event) {
+                    var clipboardData = event.clipboardData || window.clipboardData;
+                    if (!clipboardData) {
+                        return;
+                    }
+                    event.preventDefault();
+                    eudicAuthorizationDraft = String(clipboardData.getData('text') || '').trim();
+                    eudicAuthorizationRevealed = false;
+                    renderEudicAuthorizationInput();
+                    setEudicAuthorizationStatus(
+                        eudicAuthorizationDraft ? '待验证' : '未配置',
+                        'idle'
                     );
                 });
 
@@ -7232,7 +7288,8 @@
                     if (eudicAuthorizationVerifying) {
                         return;
                     }
-                    var candidate = eudicAuthorizationInput.value.trim();
+                    captureEudicAuthorizationDraft();
+                    var candidate = eudicAuthorizationDraft;
                     if (!candidate) {
                         setEudicAuthorizationStatus('请输入密钥', 'error');
                         return;
@@ -7267,7 +7324,8 @@
                     if (eudicAuthorizationVerifying) {
                         return;
                     }
-                    if (!eudicAuthorization && !eudicAuthorizationInput.value.trim()) {
+                    captureEudicAuthorizationDraft();
+                    if (!eudicAuthorization && !eudicAuthorizationDraft) {
                         resetEudicAuthorizationInput();
                         return;
                     }

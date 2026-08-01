@@ -51,6 +51,15 @@ test('word validation accepts apostrophes and hyphens but rejects phrases', () =
     assert.equal(eudic.isSupportedWord('two words'), false);
 });
 
+test('maskAuthorization preserves length and keeps a recognizable prefix and suffix', () => {
+    const authorization = 'NIS abcdefghijklmnopqrstuvwxyz0123456789';
+    const masked = eudic.maskAuthorization(authorization);
+
+    assert.equal(masked.length, authorization.length);
+    assert.equal(masked, 'NIS abcd' + '•'.repeat(16) + 'uvwxyz0123456789');
+    assert.equal(eudic.maskAuthorization('abcdefgh'), 'a' + '•'.repeat(6) + 'h');
+});
+
 test('submitWord stops immediately when the word already exists', async () => {
     const calls = [];
     const result = await eudic.submitWord({
