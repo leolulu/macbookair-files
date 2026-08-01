@@ -1462,6 +1462,96 @@
             font-size: 12px;
         }
 
+        .ai-chat-eudic-settings {
+            margin-top: 2px;
+            padding: 8px 6px 2px;
+            border-top: 1px solid #e3e6ee;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ai-chat-eudic-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .ai-chat-eudic-title {
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .ai-chat-eudic-status {
+            color: #6b7280;
+            font-size: 12px;
+        }
+
+        .ai-chat-eudic-status[data-state="success"] {
+            color: #218358;
+        }
+
+        .ai-chat-eudic-status[data-state="error"] {
+            color: #b5473c;
+        }
+
+        .ai-chat-eudic-key-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        #eudicAuthorization {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 28px;
+            box-sizing: border-box;
+            padding: 0 8px;
+            font: inherit;
+        }
+
+        .ai-chat-eudic-key-row button,
+        .ai-chat-eudic-actions button {
+            flex: 0 0 auto;
+            height: 28px;
+            box-sizing: border-box;
+            padding: 0 9px;
+            border: 1px solid #d0d5e0;
+            border-radius: 6px;
+            background: #fff;
+            color: #374151;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .ai-chat-eudic-key-row button:hover:not(:disabled),
+        .ai-chat-eudic-actions button:hover:not(:disabled) {
+            border-color: #9db7ef;
+            background: #f3f6ff;
+            color: #2f5fbf;
+        }
+
+        .ai-chat-eudic-key-row button:disabled,
+        .ai-chat-eudic-actions button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .ai-chat-eudic-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ai-chat-eudic-help {
+            color: #6b7280;
+            font-size: 11px;
+            line-height: 1.35;
+            white-space: normal;
+        }
+
         .ai-chat-messages {
             flex: 1 1 auto;
             overflow-y: auto;
@@ -1862,6 +1952,11 @@
             background: #44507a;
         }
 
+        .ai-selection-bubble button:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
+
         @media (max-width: 700px) {
             .ai-chat-window {
                 left: 2vw !important;
@@ -2115,6 +2210,21 @@
                 </select>
                 <button id="aiSelectionBubblePositionHelp" class="ai-chat-setting-help" type="button" title="横屏布局固定使用智能定位；切换回竖屏后恢复你选择的气泡位置。" aria-label="气泡位置设置说明">?</button>
             </div>
+            <div class="ai-chat-eudic-settings">
+                <div class="ai-chat-eudic-header">
+                    <span class="ai-chat-eudic-title">欧路词典</span>
+                    <span id="eudicAuthorizationStatus" class="ai-chat-eudic-status" data-state="idle" aria-live="polite">未配置</span>
+                </div>
+                <div class="ai-chat-eudic-key-row">
+                    <input type="password" id="eudicAuthorization" placeholder="Authorization，例如 NIS …" autocomplete="off" spellcheck="false" aria-label="欧路词典认证密钥">
+                    <button id="eudicAuthorizationVisibility" type="button" aria-label="显示欧路认证密钥">显示</button>
+                </div>
+                <div class="ai-chat-eudic-actions">
+                    <button id="eudicAuthorizationSave" type="button">验证并保存</button>
+                    <button id="eudicAuthorizationClear" type="button">清除</button>
+                </div>
+                <span class="ai-chat-eudic-help">密钥需对应后端读取的同一欧路账号，并单独保存在本机 localStorage。输入框仅遮挡显示，页面脚本和开发者工具仍可读取。</span>
+            </div>
             <span id="aiChatContextInfo"></span>
         </div>
         <div id="aiChatMessages" class="ai-chat-messages"></div>
@@ -2131,6 +2241,7 @@
     <div id="aiSelectionBubble" class="ai-selection-bubble" hidden>
         <button id="aiSelectionLookup" type="button" title="在整个字幕语境中讲解选中词/词组的含义与用法">查词</button>
         <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI…</button>
+        <button id="aiSelectionAddEudic" type="button" title="将选中单词和前后字幕添加到欧路词典">加生词</button>
     </div>
 
 
@@ -2138,6 +2249,7 @@
     <script src="assets/vendor/jquery/jquery-ui-1.13.2.min.js"></script>
     <script src="assets/vendor/marked/marked.umd.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
+    <script src="js/eudic_integration.js"></script>
     <script src="js/cache/sup_ocr_cache.js"></script>
     <script src="js/sup/pgs_parser.js"></script>
     <script src="js/ocr/paddle_ocr.js"></script>
@@ -6010,6 +6122,7 @@
             ; (function () {
                 var AI_SETTINGS_KEY = 'AI_CHAT_SETTINGS_V1';
                 var AI_WINDOW_STATE_KEY = 'AI_CHAT_WINDOW_STATE_V1';
+                var EUDIC_AUTHORIZATION_KEY = 'EUDIC_STUDY_AUTHORIZATION_V1';
                 var AI_DEFAULT_BACKEND_URL = 'http://127.0.0.1:11301';
                 var AI_MAX_TRANSCRIPT_CHARS = 150000;
                 var AI_SMALL_SCREEN_WIDTH = 700;
@@ -6036,9 +6149,15 @@
                 var newConversationButton = document.getElementById('aiChatNewConversation');
                 var settingsToggleButton = document.getElementById('aiChatSettingsToggle');
                 var closeButton = document.getElementById('aiChatClose');
+                var eudicAuthorizationInput = document.getElementById('eudicAuthorization');
+                var eudicAuthorizationVisibilityButton = document.getElementById('eudicAuthorizationVisibility');
+                var eudicAuthorizationSaveButton = document.getElementById('eudicAuthorizationSave');
+                var eudicAuthorizationClearButton = document.getElementById('eudicAuthorizationClear');
+                var eudicAuthorizationStatus = document.getElementById('eudicAuthorizationStatus');
                 var selectionBubble = document.getElementById('aiSelectionBubble');
                 var selectionLookupButton = document.getElementById('aiSelectionLookup');
                 var selectionAskButton = document.getElementById('aiSelectionAsk');
+                var selectionAddEudicButton = document.getElementById('aiSelectionAddEudic');
                 var subtitlesContainer = document.getElementById('subtitles');
                 var videoElement = document.getElementById('video');
 
@@ -6058,6 +6177,8 @@
                 var modelDiscoveryRequestSerial = 0;
                 var modelDiscoveryAbortController = null;
                 var conversationStarted = false;
+                var eudicAuthorization = '';
+                var eudicAuthorizationVerifying = false;
 
                 function loadAiSettings() {
                     try {
@@ -6099,6 +6220,51 @@
                     try {
                         localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings));
                     } catch (err) { }
+                }
+
+                function setEudicAuthorizationStatus(text, state) {
+                    eudicAuthorizationStatus.textContent = text;
+                    eudicAuthorizationStatus.setAttribute('data-state', state || 'idle');
+                }
+
+                function maskEudicAuthorization() {
+                    eudicAuthorizationInput.type = 'password';
+                    eudicAuthorizationVisibilityButton.textContent = '显示';
+                    eudicAuthorizationVisibilityButton.setAttribute('aria-label', '显示欧路认证密钥');
+                }
+
+                function resetEudicAuthorizationInput() {
+                    eudicAuthorizationInput.value = eudicAuthorization;
+                    maskEudicAuthorization();
+                    setEudicAuthorizationStatus(
+                        eudicAuthorization ? '已保存' : '未配置',
+                        eudicAuthorization ? 'success' : 'idle'
+                    );
+                }
+
+                function loadEudicAuthorization() {
+                    try {
+                        eudicAuthorization = String(localStorage.getItem(EUDIC_AUTHORIZATION_KEY) || '').trim();
+                    } catch (err) {
+                        eudicAuthorization = '';
+                    }
+                    resetEudicAuthorizationInput();
+                }
+
+                function setEudicAuthorizationVerifying(verifying) {
+                    eudicAuthorizationVerifying = verifying;
+                    eudicAuthorizationInput.disabled = verifying;
+                    eudicAuthorizationVisibilityButton.disabled = verifying;
+                    eudicAuthorizationSaveButton.disabled = verifying;
+                    eudicAuthorizationClearButton.disabled = verifying;
+                    eudicAuthorizationSaveButton.textContent = verifying ? '验证中…' : '验证并保存';
+                }
+
+                function openEudicSettings() {
+                    openChatWindow(false);
+                    settingsPanel.hidden = false;
+                    resetEudicAuthorizationInput();
+                    eudicAuthorizationInput.focus();
                 }
 
                 function isValidSelectionBubblePosition(value) {
@@ -7052,14 +7218,84 @@
                     scheduleSelectionBubbleRefresh();
                 });
 
+                eudicAuthorizationVisibilityButton.addEventListener('click', function () {
+                    var reveal = eudicAuthorizationInput.type === 'password';
+                    eudicAuthorizationInput.type = reveal ? 'text' : 'password';
+                    eudicAuthorizationVisibilityButton.textContent = reveal ? '隐藏' : '显示';
+                    eudicAuthorizationVisibilityButton.setAttribute(
+                        'aria-label',
+                        reveal ? '隐藏欧路认证密钥' : '显示欧路认证密钥'
+                    );
+                });
+
+                eudicAuthorizationSaveButton.addEventListener('click', async function () {
+                    if (eudicAuthorizationVerifying) {
+                        return;
+                    }
+                    var candidate = eudicAuthorizationInput.value.trim();
+                    if (!candidate) {
+                        setEudicAuthorizationStatus('请输入密钥', 'error');
+                        return;
+                    }
+                    if (!window.SvpEudic) {
+                        setEudicAuthorizationStatus('欧路功能未加载', 'error');
+                        return;
+                    }
+
+                    setEudicAuthorizationVerifying(true);
+                    setEudicAuthorizationStatus('正在验证…', 'idle');
+                    try {
+                        await window.SvpEudic.validateAuthorization(candidate);
+                        localStorage.setItem(EUDIC_AUTHORIZATION_KEY, candidate);
+                        eudicAuthorization = candidate;
+                        resetEudicAuthorizationInput();
+                        showFloatingToast('欧路认证密钥已验证并保存', 'success', 2200);
+                    } catch (error) {
+                        maskEudicAuthorization();
+                        setEudicAuthorizationStatus('验证失败，未替换原密钥', 'error');
+                        showFloatingToast(
+                            error && error.message ? error.message : '欧路认证密钥验证失败',
+                            'error',
+                            3000
+                        );
+                    } finally {
+                        setEudicAuthorizationVerifying(false);
+                    }
+                });
+
+                eudicAuthorizationClearButton.addEventListener('click', function () {
+                    if (eudicAuthorizationVerifying) {
+                        return;
+                    }
+                    if (!eudicAuthorization && !eudicAuthorizationInput.value.trim()) {
+                        resetEudicAuthorizationInput();
+                        return;
+                    }
+                    if (!window.confirm('确定清除本机保存的欧路认证密钥吗？')) {
+                        return;
+                    }
+                    try {
+                        localStorage.removeItem(EUDIC_AUTHORIZATION_KEY);
+                        eudicAuthorization = '';
+                        resetEudicAuthorizationInput();
+                        showFloatingToast('欧路认证密钥已清除', 'success', 1800);
+                    } catch (error) {
+                        setEudicAuthorizationStatus('清除失败', 'error');
+                        showFloatingToast('无法清除欧路认证密钥', 'error', 2400);
+                    }
+                });
+
                 settingsToggleButton.addEventListener('click', function () {
                     settingsPanel.hidden = !settingsPanel.hidden;
                     if (!settingsPanel.hidden) {
+                        resetEudicAuthorizationInput();
                         updateContextInfo();
                         if (modelDiscoveryState === 'error'
                             || modelDiscoveryUrl !== normalizeBackendUrl(aiSettings.backendUrl)) {
                             loadModelDiscovery(true);
                         }
+                    } else {
+                        resetEudicAuthorizationInput();
                     }
                 });
 
@@ -7142,6 +7378,7 @@
 
                 function closeChatWindow() {
                     captureGeometry();
+                    resetEudicAuthorizationInput();
                     chatWindow.hidden = true;
                     updateToggleButtonState();
                     persistWindowState();
@@ -7325,6 +7562,7 @@
 
                 // ---------- 划选字幕气泡 ----------
                 var currentSelectionInfo = null;
+                var eudicSubmissionPending = false;
 
                 function findSubtitleElement(node) {
                     var el = node && node.nodeType === 1 ? node : (node ? node.parentElement : null);
@@ -7362,10 +7600,25 @@
                     var timeLabel = startIdx === endIdx
                         ? '[' + formatClock(subtitles[startIdx].start) + ']'
                         : '[' + formatClock(subtitles[startIdx].start) + '-' + formatClock(subtitles[endIdx].end) + ']';
+                    var sentence = String(subtitles[startIdx].text || '').trim();
+                    var selectionStart = NaN;
+                    if (startIdx === endIdx) {
+                        try {
+                            var prefixRange = range.cloneRange();
+                            prefixRange.selectNodeContents(startDiv);
+                            prefixRange.setEnd(range.startContainer, range.startOffset);
+                            selectionStart = prefixRange.toString().length;
+                            var rawSentence = String(subtitles[startIdx].text || '');
+                            selectionStart = Math.max(0, selectionStart - (rawSentence.length - rawSentence.trimStart().length));
+                        } catch (err) { }
+                    }
                     return {
                         text: text,
                         timeLabel: timeLabel,
-                        sentence: String(subtitles[startIdx].text || '').trim(),
+                        sentence: sentence,
+                        startIdx: startIdx,
+                        endIdx: endIdx,
+                        selectionStart: selectionStart,
                         rect: range.getBoundingClientRect()
                     };
                 }
@@ -7520,8 +7773,95 @@
                     openChatWindow(true);
                 });
 
+                selectionAddEudicButton.addEventListener('click', async function () {
+                    if (eudicSubmissionPending) {
+                        return;
+                    }
+                    var info = currentSelectionInfo;
+                    if (!info) {
+                        return;
+                    }
+                    if (!window.SvpEudic) {
+                        showFloatingToast('欧路功能未加载', 'error', 2400);
+                        return;
+                    }
+                    if (info.startIdx !== info.endIdx) {
+                        showFloatingToast('添加生词时请选择同一条字幕中的单个英文单词', 'warning', 2800);
+                        return;
+                    }
+                    if (!window.SvpEudic.isSupportedWord(info.text)) {
+                        showFloatingToast('请选择一个完整的英文单词，暂不支持词组或跨词选择', 'warning', 2800);
+                        return;
+                    }
+                    if (!eudicAuthorization) {
+                        hideSelectionBubble();
+                        window.getSelection().removeAllRanges();
+                        openEudicSettings();
+                        setEudicAuthorizationStatus('请先验证并保存密钥', 'error');
+                        showFloatingToast('请先在设置中配置欧路认证密钥', 'warning', 2600);
+                        return;
+                    }
+
+                    var note;
+                    try {
+                        note = window.SvpEudic.buildNote({
+                            videoName: getVideoDisplayName(),
+                            lines: subtitles.map(function (subtitle) {
+                                return String(subtitle.text || '').trim();
+                            }),
+                            currentIndex: info.startIdx,
+                            selectedText: info.text,
+                            selectionStart: info.selectionStart
+                        });
+                    } catch (error) {
+                        showFloatingToast(
+                            error && error.message ? error.message : '无法生成欧路笔记',
+                            'error',
+                            2800
+                        );
+                        return;
+                    }
+
+                    eudicSubmissionPending = true;
+                    selectionAddEudicButton.disabled = true;
+                    selectionAddEudicButton.textContent = '添加中…';
+                    hideSelectionBubble();
+                    window.getSelection().removeAllRanges();
+                    try {
+                        var result = await window.SvpEudic.submitWord({
+                            authorization: eudicAuthorization,
+                            word: info.text,
+                            note: note
+                        });
+                        if (result.status === 'duplicate') {
+                            showFloatingToast('欧路中已存在「' + result.word + '」，本次未添加', 'info', 2800);
+                        } else {
+                            showFloatingToast('已将「' + result.word + '」和字幕语境添加到欧路', 'success', 2600);
+                        }
+                    } catch (error) {
+                        if (error && error.noteSaved) {
+                            showFloatingToast('笔记已保存，但生词添加失败；可重新选择该词重试', 'error', 3600);
+                        } else {
+                            showFloatingToast(
+                                error && error.message ? error.message : '添加欧路生词失败',
+                                'error',
+                                3200
+                            );
+                        }
+                        if (error && error.code === 'authorization_failed') {
+                            openEudicSettings();
+                            setEudicAuthorizationStatus('密钥无效或已失效', 'error');
+                        }
+                    } finally {
+                        eudicSubmissionPending = false;
+                        selectionAddEudicButton.disabled = false;
+                        selectionAddEudicButton.textContent = '加生词';
+                    }
+                });
+
                 // ---------- 初始化 ----------
                 loadAiSettings();
+                loadEudicAuthorization();
                 applySettingsToInputs();
                 updateSendButtonState();
                 loadModelDiscovery();

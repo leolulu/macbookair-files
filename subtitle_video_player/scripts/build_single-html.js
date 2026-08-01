@@ -136,6 +136,7 @@ function build() {
     'assets/vendor/jquery/jquery-ui-1.13.2.min.js': readText(path.join(ROOT, 'assets/vendor/jquery/jquery-ui-1.13.2.min.js')),
     'assets/vendor/marked/marked.umd.js': readText(path.join(ROOT, 'assets/vendor/marked/marked.umd.js')),
     'assets/vendor/dompurify/purify.min.js': readText(path.join(ROOT, 'assets/vendor/dompurify/purify.min.js')),
+    'js/eudic_integration.js': readText(path.join(ROOT, 'js/eudic_integration.js')),
     'js/cache/sup_ocr_cache.js': readText(path.join(ROOT, 'js/cache/sup_ocr_cache.js')),
     'js/sup/pgs_parser.js': readText(path.join(ROOT, 'js/sup/pgs_parser.js')),
     'js/ocr/paddle_ocr.js': patchMainOcrJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr.js')))
@@ -167,6 +168,12 @@ function build() {
     '<script src="assets/vendor/dompurify/purify.min.js"></script>',
     `<script>\n${inlineScripts['assets/vendor/dompurify/purify.min.js']}\n</script>`,
     'Failed to inline dompurify'
+  );
+  html = replaceOnce(
+    html,
+    '<script src="js/eudic_integration.js"></script>',
+    `<script>\n${inlineScripts['js/eudic_integration.js']}\n</script>`,
+    'Failed to inline eudic_integration.js'
   );
   html = replaceOnce(
     html,

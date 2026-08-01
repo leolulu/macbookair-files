@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build:single-html": "node ./scripts/build_single-html.js"
+    "build:single-html": "node ./scripts/build_single-html.js",
+    "test:eudic": "node --test ./test/eudic_integration.test.js"
   }
 }
