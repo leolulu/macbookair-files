@@ -135,17 +135,29 @@
             throw new Error('当前字幕索引无效');
         }
 
+        return buildNoteFromContext({
+            videoName: options.videoName,
+            previousLine: currentIndex > 0 ? lines[currentIndex - 1] : '',
+            currentLine: lines[currentIndex],
+            nextLine: currentIndex + 1 < lines.length ? lines[currentIndex + 1] : '',
+            selectedText: options.selectedText,
+            selectionStart: options.selectionStart
+        });
+    }
+
+    function buildNoteFromContext(options) {
+        options = options || {};
         var context = [];
-        if (currentIndex > 0 && String(lines[currentIndex - 1] || '').trim()) {
-            context.push(escapeMarkdownInline(flattenContextLine(lines[currentIndex - 1])));
+        if (options.includePrevious !== false && String(options.previousLine || '').trim()) {
+            context.push(escapeMarkdownInline(flattenContextLine(options.previousLine)));
         }
         context.push(flattenContextLine(formatCurrentLine(
-            String(lines[currentIndex] || ''),
+            String(options.currentLine || ''),
             options.selectedText,
             Number(options.selectionStart)
         )));
-        if (currentIndex + 1 < lines.length && String(lines[currentIndex + 1] || '').trim()) {
-            context.push(escapeMarkdownInline(flattenContextLine(lines[currentIndex + 1])));
+        if (options.includeNext !== false && String(options.nextLine || '').trim()) {
+            context.push(escapeMarkdownInline(flattenContextLine(options.nextLine)));
         }
 
         return '**来源：**《' + escapeMarkdownInline(String(options.videoName || '未知').trim() || '未知') + '》\n'
@@ -296,6 +308,8 @@
         findSelectionStart: findSelectionStart,
         formatCurrentLine: formatCurrentLine,
         buildNote: buildNote,
+        buildNoteFromContext: buildNoteFromContext,
+        normalizeContextLine: flattenContextLine,
         isWordPayloadPresent: isWordPayloadPresent,
         validateAuthorization: validateAuthorization,
         getWord: getWord,

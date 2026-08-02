@@ -82,6 +82,57 @@ test('buildNote flattens a cleaned ASS hard break after bolding the selected wor
     );
 });
 
+test('buildNoteFromContext uses edited lines and omits unchecked neighbours', () => {
+    const note = eudic.buildNoteFromContext({
+        videoName: 'Demo.ass',
+        previousLine: '427.38 -39.02 428.17 -39.08',
+        currentLine: 'It is surprisingly nice out today.',
+        nextLine: 'It really is.',
+        includePrevious: false,
+        includeNext: true,
+        selectedText: 'nice',
+        selectionStart: 21
+    });
+
+    assert.equal(
+        note,
+        '**来源：**《Demo.ass》\n'
+        + '> It is surprisingly **nice** out today.\n'
+        + '> It really is.'
+    );
+    assert.doesNotMatch(note, /427\.38/);
+});
+
+test('buildNoteFromContext normalizes whitespace in manually edited cues', () => {
+    const note = eudic.buildNoteFromContext({
+        videoName: 'Demo.srt',
+        previousLine: 'Previous\nline',
+        currentLine: 'The   selected\r\nword remains.',
+        nextLine: '',
+        selectedText: 'word',
+        selectionStart: 15
+    });
+
+    assert.equal(
+        note,
+        '**来源：**《Demo.srt》\n'
+        + '> Previous line\n'
+        + '> The selected **word** remains.'
+    );
+});
+
+test('buildNoteFromContext requires the selected word in the edited current cue', () => {
+    assert.throws(
+        () => eudic.buildNoteFromContext({
+            videoName: 'Demo',
+            currentLine: 'The word was removed.',
+            selectedText: 'missing',
+            selectionStart: 0
+        }),
+        /无法在当前字幕中定位选中的单词/
+    );
+});
+
 test('word validation accepts apostrophes and hyphens but rejects phrases', () => {
     assert.equal(eudic.normalizeWord('  Don’t  '), "don't");
     assert.equal(eudic.isSupportedWord("don't"), true);
