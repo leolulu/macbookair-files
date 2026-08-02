@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "scripts": {
     "build:single-html": "node ./scripts/build_single-html.js",
-    "test:eudic": "node --test ./test/eudic_integration.test.js"
+    "test": "node --test ./test/*.test.js",
+    "test:eudic": "node --test ./test/eudic_integration.test.js",
+    "test:markdown": "node --test ./test/ai_markdown_compat.test.js"
   }
 }

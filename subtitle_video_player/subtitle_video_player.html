@@ -2254,6 +2254,7 @@
     <script src="assets/vendor/jquery/jquery-3.6.0.min.js"></script>
     <script src="assets/vendor/jquery/jquery-ui-1.13.2.min.js"></script>
     <script src="assets/vendor/marked/marked.umd.js"></script>
+    <script src="js/ai_markdown_compat.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/eudic_integration.js"></script>
     <script src="js/cache/sup_ocr_cache.js"></script>
@@ -6871,6 +6872,16 @@
                 var markdownReady = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined' && DOMPurify.isSupported;
                 if (markdownReady) {
                     marked.use({ gfm: true, breaks: true });
+                    // CommonMark 的左右侧边界规则会让“中文**“内容”**”中的强调标记保持为原文。
+                    // 兼容扩展只接管完整、成对标点包裹的高置信度写法；未闭合、转义或有歧义时回退给 Marked。
+                    // SSE 始终重解析累计全文，扩展不修改原始响应；半个标记会在后续 chunk 或最终渲染时自然补全。
+                    if (typeof SvpAiMarkdownCompat !== 'undefined') {
+                        try {
+                            SvpAiMarkdownCompat.install(marked);
+                        } catch (err) {
+                            console.warn('AI Markdown 兼容扩展加载失败，继续使用 Marked 默认规则:', err);
+                        }
+                    }
                     DOMPurify.addHook('afterSanitizeAttributes', function (node) {
                         if (node.tagName === 'A' && node.hasAttribute('href')) {
                             node.setAttribute('target', '_blank');
