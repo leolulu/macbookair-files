@@ -2563,8 +2563,8 @@
                     </div>
                     <div class="eudic-context-row is-current">
                         <div class="eudic-context-row-header">
-                            <span class="eudic-context-current-label">当前句 · 必须包含生词</span>
-                            <span id="eudicContextWordStatus" class="eudic-context-word-status" data-state="success">生词已定位</span>
+                            <span class="eudic-context-current-label">当前句 · 必须包含所选词条</span>
+                            <span id="eudicContextWordStatus" class="eudic-context-word-status" data-state="success">词条已定位</span>
                         </div>
                         <textarea id="eudicContextCurrent" rows="2" aria-label="当前句字幕"></textarea>
                         <div class="eudic-context-preview">
@@ -2688,7 +2688,7 @@
     <div id="aiSelectionBubble" class="ai-selection-bubble" hidden>
         <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI</button>
         <button id="aiSelectionLookup" type="button" title="在整个字幕语境中讲解选中词/词组的含义与用法">查词</button>
-        <button id="aiSelectionAddEudic" type="button" title="将选中单词和前后字幕添加到欧路词典">加生词</button>
+        <button id="aiSelectionAddEudic" type="button" title="将选中单词或词组和前后字幕添加到欧路词典">加生词</button>
     </div>
 
 
@@ -8210,7 +8210,7 @@
                 function renderEudicContextPreview(match) {
                     eudicContextPreview.textContent = '';
                     if (!match) {
-                        eudicContextPreview.textContent = '当前句中未找到生词';
+                        eudicContextPreview.textContent = '当前句中未找到所选词条';
                         return;
                     }
                     var start = match.occurrence.start;
@@ -8245,13 +8245,13 @@
                     var match = getEudicEditedWordMatch();
                     renderEudicContextPreview(match);
                     if (!match) {
-                        eudicContextWordStatus.textContent = '未找到生词';
+                        eudicContextWordStatus.textContent = '未找到词条';
                         eudicContextWordStatus.setAttribute('data-state', 'error');
                     } else if (match.count > 1) {
                         eudicContextWordStatus.textContent = '已定位第 ' + (match.ordinal + 1) + ' 处';
                         eudicContextWordStatus.setAttribute('data-state', 'multiple');
                     } else {
-                        eudicContextWordStatus.textContent = '生词已定位';
+                        eudicContextWordStatus.textContent = '词条已定位';
                         eudicContextWordStatus.setAttribute('data-state', 'success');
                     }
                     eudicContextSubmitButton.disabled = eudicSubmissionPending || !match;
@@ -8343,7 +8343,7 @@
                     setEudicContextError('');
                     var match = updateEudicContextValidation();
                     if (!match) {
-                        setEudicContextError('当前句需要保留生词「' + eudicContextDraft.selectedText + '」');
+                        setEudicContextError('当前句需要保留所选词条「' + eudicContextDraft.selectedText + '」');
                         eudicContextCurrentInput.focus();
                         return;
                     }
@@ -8662,11 +8662,12 @@
                         return;
                     }
                     if (info.startIdx !== info.endIdx) {
-                        showFloatingToast('添加生词时请选择同一条字幕中的单个英文单词', 'warning', 2800);
+                        showFloatingToast('请选择同一条字幕中的英文单词或词组', 'warning', 2800);
                         return;
                     }
-                    if (!window.SvpEudic.isSupportedWord(info.text)) {
-                        showFloatingToast('请选择一个完整的英文单词，暂不支持词组或跨词选择', 'warning', 2800);
+                    var selectedTerm = window.SvpEudic.normalizeSelectedTerm(info.text);
+                    if (!window.SvpEudic.isSupportedWord(selectedTerm)) {
+                        showFloatingToast('请选择完整的英文单词或词组；支持空格、撇号和连字符', 'warning', 3200);
                         return;
                     }
                     if (!eudicAuthorization) {
@@ -8679,7 +8680,7 @@
                     }
                     hideSelectionBubble();
                     window.getSelection().removeAllRanges();
-                    openEudicContextDialog(info);
+                    openEudicContextDialog(Object.assign({}, info, { text: selectedTerm }));
                 });
 
                 // ---------- 初始化 ----------

@@ -24,8 +24,22 @@
     EudicApiError.prototype = Object.create(Error.prototype);
     EudicApiError.prototype.constructor = EudicApiError;
 
+    // 鼠标划选时容易把引号或句末标点一并选中。这里只移除词条首尾的
+    // 句子标点，并保留内部撇号、连字符和词间空格，避免把 C++、24/7
+    // 等当前不支持的形式悄悄改成另一个词条。
+    var WORD_EDGE_PUNCTUATION = /^[\s"'“”‘’.,!?;:，。！？；：…—–\-()\[\]{}<>《》〈〉「」『』【】]+|[\s"'“”‘’.,!?;:，。！？；：…—–\-()\[\]{}<>《》〈〉「」『』【】]+$/g;
+
+    function normalizeSelectedTerm(value) {
+        return String(value || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(WORD_EDGE_PUNCTUATION, '')
+            .trim()
+            .replace(/\u2019/g, "'");
+    }
+
     function normalizeWord(value) {
-        return String(value || '').trim().replace(/\u2019/g, "'").toLowerCase();
+        return normalizeSelectedTerm(value).toLowerCase();
     }
 
     function maskAuthorization(value) {
@@ -57,7 +71,7 @@
     }
 
     function isSupportedWord(value) {
-        return /^[a-z]+(?:'[a-z]+)*(?:-[a-z]+(?:'[a-z]+)*)*$/.test(normalizeWord(value));
+        return /^[a-z]+(?:['-][a-z]+)*(?: [a-z]+(?:['-][a-z]+)*)*$/.test(normalizeWord(value));
     }
 
     function escapeMarkdownInline(value) {
@@ -115,10 +129,10 @@
 
     function formatCurrentLine(sentence, selectedText, approximateStart) {
         var source = String(sentence || '').trim();
-        var selected = String(selectedText || '').trim();
+        var selected = normalizeSelectedTerm(selectedText);
         var start = findSelectionStart(source, selected, approximateStart);
         if (start < 0) {
-            throw new Error('无法在当前字幕中定位选中的单词');
+            throw new Error('无法在当前字幕中定位选中的词条');
         }
         return escapeMarkdownInline(source.slice(0, start))
             + '**'
@@ -281,7 +295,7 @@
             throw new EudicApiError('authorization_missing', '请先配置欧路认证密钥');
         }
         if (!isSupportedWord(word)) {
-            throw new EudicApiError('invalid_word', '请选择一个完整的英文单词');
+            throw new EudicApiError('invalid_word', '请选择完整的英文单词或词组');
         }
 
         var existing = await getWord(authorization, word, options.fetchImpl);
@@ -303,6 +317,7 @@
         API_BASE_URL: API_BASE_URL,
         EudicApiError: EudicApiError,
         maskAuthorization: maskAuthorization,
+        normalizeSelectedTerm: normalizeSelectedTerm,
         normalizeWord: normalizeWord,
         isSupportedWord: isSupportedWord,
         findSelectionStart: findSelectionStart,

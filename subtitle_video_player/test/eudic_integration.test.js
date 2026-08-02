@@ -121,7 +121,7 @@ test('buildNoteFromContext normalizes whitespace in manually edited cues', () =>
     );
 });
 
-test('buildNoteFromContext requires the selected word in the edited current cue', () => {
+test('buildNoteFromContext requires the selected term in the edited current cue', () => {
     assert.throws(
         () => eudic.buildNoteFromContext({
             videoName: 'Demo',
@@ -129,15 +129,40 @@ test('buildNoteFromContext requires the selected word in the edited current cue'
             selectedText: 'missing',
             selectionStart: 0
         }),
-        /无法在当前字幕中定位选中的单词/
+        /无法在当前字幕中定位选中的词条/
     );
 });
 
-test('word validation accepts apostrophes and hyphens but rejects phrases', () => {
+test('term normalization trims edge punctuation and keeps phrase characters', () => {
+    assert.equal(eudic.normalizeSelectedTerm('  “Take   care of,”  '), 'Take care of');
+    assert.equal(eudic.normalizeWord('  “Take   care of,”  '), 'take care of');
     assert.equal(eudic.normalizeWord('  Don’t  '), "don't");
+});
+
+test('term validation accepts phrases, apostrophes, and hyphens', () => {
     assert.equal(eudic.isSupportedWord("don't"), true);
     assert.equal(eudic.isSupportedWord('state-of-the-art'), true);
-    assert.equal(eudic.isSupportedWord('two words'), false);
+    assert.equal(eudic.isSupportedWord('take care of'), true);
+    assert.equal(eudic.isSupportedWord("don't give-up"), true);
+});
+
+test('term validation rejects internal punctuation, digits, and special symbols', () => {
+    assert.equal(eudic.isSupportedWord('hello, how are'), false);
+    assert.equal(eudic.isSupportedWord('COVID-19'), false);
+    assert.equal(eudic.isSupportedWord('24/7'), false);
+    assert.equal(eudic.isSupportedWord('C++'), false);
+    assert.equal(eudic.isSupportedWord('rock & roll'), false);
+});
+
+test('buildNoteFromContext bolds the complete selected phrase without edge punctuation', () => {
+    const note = eudic.buildNoteFromContext({
+        videoName: 'Demo',
+        currentLine: 'She said, “Take care of yourself.”',
+        selectedText: '“Take care of',
+        selectionStart: 11
+    });
+
+    assert.equal(note, '**来源：**《Demo》\n> She said, “**Take care of** yourself.”');
 });
 
 test('maskAuthorization preserves length and keeps a recognizable prefix and suffix', () => {
@@ -166,7 +191,7 @@ test('submitWord stops immediately when the word already exists', async () => {
     assert.match(calls[0].url, /\/word\?language=en&word=hello$/);
 });
 
-test('submitWord saves the note before adding a new word', async () => {
+test('submitWord normalizes and saves a phrase before adding it', async () => {
     const calls = [];
     const responses = [
         jsonResponse(200, { data: [] }),
@@ -175,7 +200,7 @@ test('submitWord saves the note before adding a new word', async () => {
     ];
     const result = await eudic.submitWord({
         authorization: 'NIS test',
-        word: 'Hello',
+        word: '“Take  Care Of,”',
         note: 'context',
         fetchImpl: async (url, options) => {
             calls.push({ url, options });
@@ -187,10 +212,14 @@ test('submitWord saves the note before adding a new word', async () => {
     assert.match(calls[1].url, /\/note$/);
     assert.deepEqual(JSON.parse(calls[1].options.body), {
         language: 'en',
-        word: 'hello',
+        word: 'take care of',
         note: 'context'
     });
     assert.match(calls[2].url, /\/word$/);
+    assert.deepEqual(JSON.parse(calls[2].options.body), {
+        language: 'en',
+        word: 'take care of'
+    });
 });
 
 test('submitWord reports when the note was saved but adding the word failed', async () => {
