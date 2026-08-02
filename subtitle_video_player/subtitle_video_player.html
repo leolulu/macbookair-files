@@ -6187,6 +6187,7 @@
                 var eudicAuthorizationDraft = '';
                 var eudicAuthorizationRevealed = false;
                 var eudicAuthorizationVerifying = false;
+                var eudicAuthorizationKnownInvalid = false;
 
                 function loadAiSettings() {
                     try {
@@ -6235,6 +6236,24 @@
                     eudicAuthorizationStatus.setAttribute('data-state', state || 'idle');
                 }
 
+                function setStoredEudicAuthorizationStatus() {
+                    if (!eudicAuthorization) {
+                        setEudicAuthorizationStatus('未配置', 'idle');
+                    } else if (eudicAuthorizationKnownInvalid) {
+                        setEudicAuthorizationStatus('凭据已失效', 'error');
+                    } else {
+                        setEudicAuthorizationStatus('✓ 已验证并保存', 'success');
+                    }
+                }
+
+                function updateEudicAuthorizationDraftStatus() {
+                    if (eudicAuthorizationDraft === eudicAuthorization) {
+                        setStoredEudicAuthorizationStatus();
+                    } else {
+                        setEudicAuthorizationStatus('待验证', 'idle');
+                    }
+                }
+
                 function renderEudicAuthorizationInput() {
                     var masked = Boolean(eudicAuthorizationDraft) && !eudicAuthorizationRevealed;
                     eudicAuthorizationInput.type = masked || eudicAuthorizationRevealed ? 'text' : 'password';
@@ -6266,10 +6285,7 @@
                     eudicAuthorizationDraft = eudicAuthorization;
                     eudicAuthorizationRevealed = false;
                     renderEudicAuthorizationInput();
-                    setEudicAuthorizationStatus(
-                        eudicAuthorization ? '已保存' : '未配置',
-                        eudicAuthorization ? 'success' : 'idle'
-                    );
+                    setStoredEudicAuthorizationStatus();
                 }
 
                 function loadEudicAuthorization() {
@@ -6278,6 +6294,7 @@
                     } catch (err) {
                         eudicAuthorization = '';
                     }
+                    eudicAuthorizationKnownInvalid = false;
                     resetEudicAuthorizationInput();
                 }
 
@@ -7263,10 +7280,7 @@
 
                 eudicAuthorizationInput.addEventListener('input', function () {
                     captureEudicAuthorizationDraft();
-                    setEudicAuthorizationStatus(
-                        eudicAuthorizationDraft ? '待验证' : '未配置',
-                        'idle'
-                    );
+                    updateEudicAuthorizationDraftStatus();
                 });
 
                 eudicAuthorizationInput.addEventListener('paste', function (event) {
@@ -7278,10 +7292,7 @@
                     eudicAuthorizationDraft = String(clipboardData.getData('text') || '').trim();
                     eudicAuthorizationRevealed = false;
                     renderEudicAuthorizationInput();
-                    setEudicAuthorizationStatus(
-                        eudicAuthorizationDraft ? '待验证' : '未配置',
-                        'idle'
-                    );
+                    updateEudicAuthorizationDraftStatus();
                 });
 
                 eudicAuthorizationSaveButton.addEventListener('click', async function () {
@@ -7290,12 +7301,15 @@
                     }
                     captureEudicAuthorizationDraft();
                     var candidate = eudicAuthorizationDraft;
+                    var replacingSavedAuthorization = Boolean(
+                        eudicAuthorization && candidate !== eudicAuthorization
+                    );
                     if (!candidate) {
                         setEudicAuthorizationStatus('请输入密钥', 'error');
                         return;
                     }
                     if (!window.SvpEudic) {
-                        setEudicAuthorizationStatus('欧路功能未加载', 'error');
+                        setEudicAuthorizationStatus('功能未加载', 'error');
                         return;
                     }
 
@@ -7305,13 +7319,33 @@
                         await window.SvpEudic.validateAuthorization(candidate);
                         localStorage.setItem(EUDIC_AUTHORIZATION_KEY, candidate);
                         eudicAuthorization = candidate;
+                        eudicAuthorizationKnownInvalid = false;
                         resetEudicAuthorizationInput();
                         showFloatingToast('欧路认证密钥已验证并保存', 'success', 2200);
                     } catch (error) {
                         maskEudicAuthorization();
-                        setEudicAuthorizationStatus('验证失败，未替换原密钥', 'error');
+                        if (error && error.code === 'authorization_failed') {
+                            if (replacingSavedAuthorization) {
+                                setEudicAuthorizationStatus('新凭据无效', 'error');
+                            } else if (eudicAuthorization) {
+                                eudicAuthorizationKnownInvalid = true;
+                                setEudicAuthorizationStatus('凭据已失效', 'error');
+                            } else {
+                                setEudicAuthorizationStatus('凭据无效', 'error');
+                            }
+                        } else if (error && (error.code === 'network_error' || error.code === 'fetch_unavailable')) {
+                            setEudicAuthorizationStatus('暂时无法验证', 'error');
+                        } else {
+                            setEudicAuthorizationStatus('验证失败', 'error');
+                        }
+                        var validationErrorMessage = error && error.message
+                            ? error.message
+                            : '欧路认证密钥验证失败';
+                        if (replacingSavedAuthorization) {
+                            validationErrorMessage += '；原凭据仍保留';
+                        }
                         showFloatingToast(
-                            error && error.message ? error.message : '欧路认证密钥验证失败',
+                            validationErrorMessage,
                             'error',
                             3000
                         );
@@ -7335,6 +7369,7 @@
                     try {
                         localStorage.removeItem(EUDIC_AUTHORIZATION_KEY);
                         eudicAuthorization = '';
+                        eudicAuthorizationKnownInvalid = false;
                         resetEudicAuthorizationInput();
                         showFloatingToast('欧路认证密钥已清除', 'success', 1800);
                     } catch (error) {
@@ -7855,7 +7890,7 @@
                         hideSelectionBubble();
                         window.getSelection().removeAllRanges();
                         openEudicSettings();
-                        setEudicAuthorizationStatus('请先验证并保存密钥', 'error');
+                        setEudicAuthorizationStatus('未配置', 'idle');
                         showFloatingToast('请先在设置中配置欧路认证密钥', 'warning', 2600);
                         return;
                     }
@@ -7907,8 +7942,8 @@
                             );
                         }
                         if (error && error.code === 'authorization_failed') {
+                            eudicAuthorizationKnownInvalid = true;
                             openEudicSettings();
-                            setEudicAuthorizationStatus('密钥无效或已失效', 'error');
                         }
                     } finally {
                         eudicSubmissionPending = false;
