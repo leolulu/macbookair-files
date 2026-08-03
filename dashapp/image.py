@@ -16,7 +16,7 @@ from dash import ALL, Input, Output, Patch, State, callback, dcc, html
 app = dash.Dash(__name__)
 
 pic_max_height = 475
-PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl.jpg"
+PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl-400x400-webp-q70.webp"
 VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
 TRASH_FOLDER_PATH = "./static/img/.trash"
 JPG_FROM_WEBP_FOLDER = "jpg_from_webp"

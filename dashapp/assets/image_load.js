@@ -28,7 +28,7 @@ function preload(images, index) {
             for (var i = index + 1; i < images.length; i++) {
                 console.log('reset image...' + i)
                 images[i].onload = null
-                images[i].src = 'assets/Russian-Cute-Sexy-Girl.jpg';
+                images[i].src = 'assets/Russian-Cute-Sexy-Girl-400x400-webp-q70.webp';
             }
         }
         img.onload = function () {
