@@ -930,6 +930,9 @@ def toggle_delete_button_display(value):
     Output("delete_button", "children", allow_duplicate=True),
     Input("delete_button", "n_clicks"),
     prevent_initial_call=True,
+    running=[
+        (Output("get_pics", "disabled", allow_duplicate=True), True, False),
+    ],
 )
 def delete_button_click(n_clicks):
     global browsed_img_list
