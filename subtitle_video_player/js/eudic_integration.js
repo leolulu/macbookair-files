@@ -174,6 +174,9 @@
             context.push(escapeMarkdownInline(flattenContextLine(options.nextLine)));
         }
 
+        // 跨项目约定：欧路同步后端通过稳定的“**来源：**《”前缀识别播放器已排版的 Note。
+        // 修改此前缀时，必须同步 eudic_auto_vocabulary_task_system/main.py
+        // 的播放器 Note 识别规则及两个项目 README 中的说明。
         return '**来源：**《' + escapeMarkdownInline(String(options.videoName || '未知').trim() || '未知') + '》\n'
             + context.map(function (line) {
                 return '> ' + line;
