@@ -27,6 +27,16 @@
             grid-template-rows: auto minmax(0, 1fr);
         }
 
+        #container.layout-landscape #video-player,
+        #container.layout-landscape #options-pane {
+            position: relative;
+            top: var(--video-side-offset-y, 0px);
+        }
+
+        #container.layout-landscape #options-pane {
+            height: calc(100% - var(--video-side-offset-y, 0px));
+        }
+
         #container.layout-landscape:not(.layout-reversed) {
             grid-template-columns: minmax(0, calc(100% - var(--landscape-subtitles-width) - var(--divider-width))) var(--divider-width) minmax(0, var(--landscape-subtitles-width));
             grid-template-areas:
@@ -189,6 +199,11 @@
 
         #videoFileName {
             color: #28569F;
+        }
+
+        #container.layout-landscape #videoFileName {
+            cursor: ns-resize;
+            user-select: none;
         }
 
         #videoDurationInfo {
@@ -2500,7 +2515,7 @@
             <!-- 添加一个元素用来显示视频文件名 -->
             <div id="video-meta-video-slot">
                 <div id="videoFileNameContainer">
-                    <span id="videoFileName" title="点击拖动可以调整视频垂直位置"></span>
+                    <span id="videoFileName" title="拖动可以调整视频和控制区的垂直位置"></span>
                     <span id="videoDurationInfo"></span>
                 </div>
             </div>
@@ -3053,18 +3068,48 @@
         });
 
         $(function () {
-            // 通过特定区域（视频名称）调整视频播放器的垂直位置
-            $('#videoFileName').on('mousedown', function (e) {
-                if (isPortraitLayout()) return;
-                e.preventDefault();
-                $('#video-player').draggable({ axis: 'y' });
+            // 通过视频名称同步调整视频区和控制区的垂直位置
+            var videoFileName = document.getElementById('videoFileName');
+            var layoutContainer = document.getElementById('container');
+            var isDraggingVideoSide = false;
+            var fileNameDragStartY = 0;
+            var fileNameDragStartOffset = 0;
+            var fileNameViewportMargin = 8;
+
+            function getVideoSideOffset() {
+                return parseFloat(layoutContainer.style.getPropertyValue('--video-side-offset-y')) || 0;
+            }
+
+            function getMaximumVideoSideOffset() {
+                var currentOffset = getVideoSideOffset();
+                var fileNameRect = videoFileName.getBoundingClientRect();
+                var fileNameBottomWithoutOffset = fileNameRect.bottom - currentOffset;
+                return Math.max(0, window.innerHeight - fileNameViewportMargin - fileNameBottomWithoutOffset);
+            }
+
+            function stopFileNameDrag() {
+                isDraggingVideoSide = false;
+            }
+
+            $(videoFileName).on('mousedown', function (event) {
+                if (isPortraitLayout() || event.which !== 1) return;
+                event.preventDefault();
+                isDraggingVideoSide = true;
+                fileNameDragStartY = event.clientY;
+                fileNameDragStartOffset = getVideoSideOffset();
             });
 
-            $('#videoFileName').on('mouseup', function (e) {
-                if (isPortraitLayout()) return;
-                e.preventDefault();
-                $('#video-player').draggable('destroy');
-            });
+            $(document).on('mousemove.videoFileNameDrag', function (event) {
+                if (!isDraggingVideoSide || isPortraitLayout()) return;
+                if ((event.buttons & 1) === 0) {
+                    stopFileNameDrag();
+                    return;
+                }
+                var nextOffset = fileNameDragStartOffset + event.clientY - fileNameDragStartY;
+                nextOffset = Math.max(0, Math.min(getMaximumVideoSideOffset(), nextOffset));
+                layoutContainer.style.setProperty('--video-side-offset-y', nextOffset + 'px');
+            }).on('mouseup.videoFileNameDrag', stopFileNameDrag);
+            $(window).on('blur.videoFileNameDrag', stopFileNameDrag);
 
             function extractFilename(urlString) {
                 try {
