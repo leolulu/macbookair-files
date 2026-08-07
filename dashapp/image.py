@@ -1,5 +1,4 @@
 import argparse
-from copy import deepcopy
 import os
 import re
 import shutil
@@ -7,6 +6,7 @@ import subprocess
 import threading
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from typing import List
 from urllib.parse import urlparse
 
@@ -158,6 +158,7 @@ def get_txt_title_for_image(img_path):
         print(f"读取txt文件时出错: {e}")
         return None
 
+
 def clean_empty_folders(folder_paths=None):
     """
     清理空文件夹，从最深层向上递归删除
@@ -171,11 +172,11 @@ def clean_empty_folders(folder_paths=None):
         # 跳过顶层
         if os.path.abspath(root) == static_img_root:
             continue
-            
+
         # 跳过特殊文件夹
         if os.path.basename(root) in special_folders:
             continue
-            
+
         # 尝试删除空文件夹
         try:
             if not os.listdir(root):
@@ -185,7 +186,6 @@ def clean_empty_folders(folder_paths=None):
             pass
 
     return removed_dir_count
-
 
 
 def get_img_path_list(img_path_list: List[str]):
@@ -308,9 +308,7 @@ def map_capacity_slider_value(slider_value):
 
 
 # 客户端拖动预览直接查这张由服务端规则生成的表，避免在 JavaScript 中复制数量映射公式。
-CAPACITY_SLIDER_PREVIEW_MAP = {
-    str(slider_value): map_capacity_slider_value(slider_value) for slider_value in range(4, 101)
-}
+CAPACITY_SLIDER_PREVIEW_MAP = {str(slider_value): map_capacity_slider_value(slider_value) for slider_value in range(4, 101)}
 
 
 # 跨标签页共享设置的唯一注册表。
@@ -334,10 +332,9 @@ SHARED_SETTING_SPECS = {
 }
 _display_settings = {name: deepcopy(spec["default"]) for name, spec in SHARED_SETTING_SPECS.items()}
 _component_setting_names = {
-    (spec["component_id"], spec["component_property"]): name
-    for name, spec in SHARED_SETTING_SPECS.items()
-    if "component_id" in spec
+    (spec["component_id"], spec["component_property"]): name for name, spec in SHARED_SETTING_SPECS.items() if "component_id" in spec
 }
+
 
 def get_display_settings():
     with settings_lock:
@@ -375,9 +372,7 @@ def get_settings_component_props(settings):
         {
             "container": {"style": get_container_style(settings["pic_max_height"])},
             "button_text": {"children": "再来{}张！".format(settings["page_capacity"])},
-            "capacity_input": {
-                "value": settings["page_capacity"] if settings["capacity_slider_value"] > 100 else None
-            },
+            "capacity_input": {"value": settings["page_capacity"] if settings["capacity_slider_value"] > 100 else None},
             "capacity_popup": {"className": "show" if settings["capacity_slider_value"] > 100 else ""},
             "applied_display_settings": {"data": deepcopy(settings)},
         }
@@ -957,7 +952,7 @@ def delete_button_click(n_clicks):
                     count += 1
             except Exception as e:
                 print(f"删除失败: {e}")
-    
+
     # 已看过的远程链接：从所有 txt 中整行移入回收站同名 txt，并从 browsed 中清除
     removed_link_count = trash_remote_urls([p for p in browsed_img_list if is_remote(p)])
     browsed_img_list = [p for p in browsed_img_list if not is_remote(p)]
@@ -986,6 +981,7 @@ def update_img_path_list(data):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "-p",
         "--progressive",
         action="store_true",
         help="启用本地图片逐张受控加载",
