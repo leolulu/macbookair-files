@@ -822,6 +822,11 @@
             color: #30364A;
         }
 
+        #fastForwardLimitPopover.is-aligned-end {
+            right: 0;
+            left: auto;
+        }
+
         #fastForwardLimitPopover[hidden] {
             display: none;
         }
@@ -6406,6 +6411,7 @@
             (function () {
                 const control = document.getElementById('videoPlaybackRateControl');
                 const popover = document.getElementById('fastForwardLimitPopover');
+                const optionsPane = document.getElementById('options-pane');
                 const input = document.getElementById('fastForwardLimit');
                 const marker = document.getElementById('fastForwardLimitMarker');
                 const resetButton = document.getElementById('resetFastForwardLimit');
@@ -6415,13 +6421,30 @@
                     return normalizeFastForwardLimit(document.getElementById('video').playbackRate);
                 }
 
+                function updatePopoverAlignment() {
+                    popover.classList.remove('is-aligned-end');
+
+                    const paneRect = optionsPane.getBoundingClientRect();
+                    const controlRect = control.getBoundingClientRect();
+                    const popoverWidth = popover.offsetWidth;
+                    const visibleLeft = Math.max(0, paneRect.left + optionsPane.clientLeft);
+                    const visibleRight = Math.min(window.innerWidth, visibleLeft + optionsPane.clientWidth);
+                    const fitsRight = controlRect.left + popoverWidth <= visibleRight;
+                    const fitsLeft = controlRect.right - popoverWidth >= visibleLeft;
+
+                    if (!fitsRight && fitsLeft) {
+                        popover.classList.add('is-aligned-end');
+                    }
+                }
+
                 function setPopoverOpen(isOpen) {
                     popover.hidden = !isOpen;
                     control.setAttribute('aria-expanded', String(isOpen));
                     if (isOpen) {
                         input.value = isFastForwardLimitManual ? fastForwardSpeedLimit : getAutomaticLimitStartingValue();
                         isLimitInputDirty = false;
-                        input.focus();
+                        updatePopoverAlignment();
+                        input.focus({ preventScroll: true });
                         input.select();
                     }
                 }
