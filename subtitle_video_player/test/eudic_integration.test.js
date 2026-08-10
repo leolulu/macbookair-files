@@ -32,6 +32,22 @@ test('buildNote keeps three available lines and bolds the selected occurrence', 
     assert.doesNotMatch(note, /\[\d+:\d+/);
 });
 
+test('buildNote does not double-escape an already escaped filename underscore', () => {
+    const note = eudic.buildNote({
+        videoName: 'KAMUI.Hes.Behind.You.S01E02.MSubs-ToonsHub\\_x264.mp4',
+        lines: ['Enough already about that bogus psychic.'],
+        currentIndex: 0,
+        selectedText: 'bogus',
+        selectionStart: 26
+    });
+
+    assert.equal(
+        note,
+        '**来源：**《KAMUI.Hes.Behind.You.S01E02.MSubs-ToonsHub\\_x264.mp4》\n'
+        + '> Enough already about that **bogus** psychic.'
+    );
+});
+
 test('buildNote omits a missing previous line at the beginning', () => {
     const note = eudic.buildNote({
         videoName: 'Demo',

@@ -78,6 +78,15 @@
         return String(value || '').replace(/([\\`*_[\]])/g, '\\$1');
     }
 
+    function escapeMarkdownSourceName(value) {
+        // DUFS 等上游有时会返回已经带 Markdown 反斜杠转义的文件名（例如 `\_`）。
+        // 来源名先还原本播放器支持的已有转义，再统一转义一次，避免 `\_` 被
+        // 重复编码成 `\\\_`，最终在滴答清单里留下可见反斜杠。兼容仅作用于
+        // 来源文件名，字幕正文继续保留原有的逐字符转义语义。
+        var normalized = String(value || '').replace(/\\([\\`*_[\]])/g, '$1');
+        return escapeMarkdownInline(normalized);
+    }
+
     function flattenContextLine(value) {
         return String(value || '').replace(/\s+/g, ' ').trim();
     }
@@ -177,7 +186,7 @@
         // 跨项目约定：欧路同步后端通过稳定的“**来源：**《”前缀识别播放器已排版的 Note。
         // 修改此前缀时，必须同步 eudic_auto_vocabulary_task_system/main.py
         // 的播放器 Note 识别规则及两个项目 README 中的说明。
-        return '**来源：**《' + escapeMarkdownInline(String(options.videoName || '未知').trim() || '未知') + '》\n'
+        return '**来源：**《' + escapeMarkdownSourceName(String(options.videoName || '未知').trim() || '未知') + '》\n'
             + context.map(function (line) {
                 return '> ' + line;
             }).join('\n');
