@@ -170,6 +170,33 @@ test('term validation rejects internal punctuation, digits, and special symbols'
     assert.equal(eudic.isSupportedWord('rock & roll'), false);
 });
 
+test('partial selection expands to the complete subtitle word form', () => {
+    assert.deepEqual(
+        eudic.expandSelectionToWordBoundaries('He works every day.', 3, 7),
+        { text: 'works', start: 3, end: 8 }
+    );
+    assert.deepEqual(
+        eudic.expandSelectionToWordBoundaries('She tried again.', 5, 8),
+        { text: 'tried', start: 4, end: 9 }
+    );
+});
+
+test('selection expansion trims edge punctuation and preserves phrase boundaries', () => {
+    assert.deepEqual(
+        eudic.expandSelectionToWordBoundaries('She said, “Take care of yourself.”', 10, 24),
+        { text: 'Take care of', start: 11, end: 23 }
+    );
+    assert.deepEqual(
+        eudic.expandSelectionToWordBoundaries("Please don't give-up now.", 8, 20),
+        { text: "don't give-up", start: 7, end: 20 }
+    );
+});
+
+test('selection expansion rejects ranges without an English word', () => {
+    assert.equal(eudic.expandSelectionToWordBoundaries('Wait ... now.', 5, 8), null);
+    assert.equal(eudic.expandSelectionToWordBoundaries('Hello', NaN, NaN), null);
+});
+
 test('buildNoteFromContext bolds the complete selected phrase without edge punctuation', () => {
     const note = eudic.buildNoteFromContext({
         videoName: 'Demo',
@@ -235,6 +262,43 @@ test('submitWord normalizes and saves a phrase before adding it', async () => {
     assert.deepEqual(JSON.parse(calls[2].options.body), {
         language: 'en',
         word: 'take care of'
+    });
+});
+
+test('an edited dictionary entry keeps the original subtitle form in the note', async () => {
+    const note = eudic.buildNoteFromContext({
+        videoName: 'Demo',
+        currentLine: 'She tried again.',
+        selectedText: 'tried',
+        selectionStart: 4
+    });
+    const calls = [];
+    const responses = [
+        jsonResponse(200, { data: [] }),
+        jsonResponse(201, { message: 'note saved' }),
+        jsonResponse(201, { message: 'word added' })
+    ];
+
+    const result = await eudic.submitWord({
+        authorization: 'NIS test',
+        word: 'try',
+        note,
+        fetchImpl: async (url, options) => {
+            calls.push({ url, options });
+            return responses.shift();
+        }
+    });
+
+    assert.deepEqual(result, { status: 'created', word: 'try' });
+    assert.match(note, /> She \*\*tried\*\* again\./);
+    assert.deepEqual(JSON.parse(calls[1].options.body), {
+        language: 'en',
+        word: 'try',
+        note
+    });
+    assert.deepEqual(JSON.parse(calls[2].options.body), {
+        language: 'en',
+        word: 'try'
     });
 });
 

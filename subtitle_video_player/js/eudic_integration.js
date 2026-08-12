@@ -74,6 +74,42 @@
         return /^[a-z]+(?:['-][a-z]+)*(?: [a-z]+(?:['-][a-z]+)*)*$/.test(normalizeWord(value));
     }
 
+    function isWordCharacter(character) {
+        return Boolean(character) && /[A-Za-z'\u2019-]/.test(character);
+    }
+
+    function expandSelectionToWordBoundaries(sentence, selectionStart, selectionEnd) {
+        var source = String(sentence || '');
+        var start = Number(selectionStart);
+        var end = Number(selectionEnd);
+        if (!Number.isFinite(start) || !Number.isFinite(end)) {
+            return null;
+        }
+        start = Math.max(0, Math.min(source.length, Math.floor(start)));
+        end = Math.max(start, Math.min(source.length, Math.floor(end)));
+
+        while (start < end && !isWordCharacter(source.charAt(start))) {
+            start += 1;
+        }
+        while (end > start && !isWordCharacter(source.charAt(end - 1))) {
+            end -= 1;
+        }
+        if (start >= end) {
+            return null;
+        }
+        while (start > 0 && isWordCharacter(source.charAt(start - 1))) {
+            start -= 1;
+        }
+        while (end < source.length && isWordCharacter(source.charAt(end))) {
+            end += 1;
+        }
+        return {
+            text: source.slice(start, end),
+            start: start,
+            end: end
+        };
+    }
+
     function escapeMarkdownInline(value) {
         return String(value || '').replace(/([\\`*_[\]])/g, '\\$1');
     }
@@ -332,6 +368,7 @@
         normalizeSelectedTerm: normalizeSelectedTerm,
         normalizeWord: normalizeWord,
         isSupportedWord: isSupportedWord,
+        expandSelectionToWordBoundaries: expandSelectionToWordBoundaries,
         findSelectionStart: findSelectionStart,
         formatCurrentLine: formatCurrentLine,
         buildNote: buildNote,

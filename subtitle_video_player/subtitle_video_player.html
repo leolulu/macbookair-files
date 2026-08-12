@@ -2020,15 +2020,70 @@
             padding: 16px 17px 14px;
         }
 
+        .eudic-context-entry {
+            margin-bottom: 10px;
+        }
+
+        .eudic-context-entry label {
+            display: block;
+            margin-bottom: 6px;
+            color: #343d50;
+            font-size: 13.5px;
+            font-weight: 650;
+        }
+
+        #eudicContextEntryWord {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 10px;
+            border: 1px solid #a9c5f5;
+            border-radius: 8px;
+            outline: none;
+            background: #ffffff;
+            color: #245eb8;
+            font: 650 17px/1.35 inherit;
+        }
+
+        #eudicContextEntryWord:focus {
+            border-color: #4d8dff;
+            box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.16);
+        }
+
+        #eudicContextEntryWord[aria-invalid="true"] {
+            border-color: #d66a6a;
+            box-shadow: 0 0 0 2px rgba(199, 68, 68, 0.1);
+        }
+
+        #eudicContextEntryWord:disabled {
+            background: #f0f2f5;
+            color: #7e8796;
+        }
+
+        .eudic-context-entry-help {
+            display: block;
+            min-height: 17px;
+            margin-top: 5px;
+            color: #788193;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .eudic-context-entry-help[data-state="error"] {
+            color: #c74444;
+        }
+
         .eudic-context-summary {
             display: flex;
             align-items: center;
-            gap: 9px;
+            gap: 6px;
             min-width: 0;
             margin-bottom: 7px;
+            color: #6f788a;
+            font-size: 13px;
         }
 
-        .eudic-context-word {
+        .eudic-context-surface-word {
             display: inline-flex;
             align-items: center;
             max-width: 60%;
@@ -2038,15 +2093,10 @@
             border-radius: 7px;
             background: #e8f0ff;
             color: #245eb8;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 650;
             text-overflow: ellipsis;
             white-space: nowrap;
-        }
-
-        .eudic-context-destination {
-            color: #6f788a;
-            font-size: 13px;
         }
 
         .eudic-context-source {
@@ -2559,9 +2609,14 @@
                 <button id="eudicContextClose" class="eudic-context-close" type="button" aria-label="取消添加生词" title="取消">×</button>
             </header>
             <div class="eudic-context-body">
+                <div class="eudic-context-entry">
+                    <label for="eudicContextEntryWord">要添加的词条</label>
+                    <input id="eudicContextEntryWord" type="text" autocomplete="off" spellcheck="false" aria-describedby="eudicContextEntryHelp">
+                    <span id="eudicContextEntryHelp" class="eudic-context-entry-help">可修改为原形，例如 tried → try</span>
+                </div>
                 <div class="eudic-context-summary">
-                    <span id="eudicContextWord" class="eudic-context-word"></span>
-                    <span class="eudic-context-destination">将添加到欧路词典</span>
+                    <span>字幕中出现：</span>
+                    <span id="eudicContextSurfaceWord" class="eudic-context-surface-word"></span>
                 </div>
                 <div id="eudicContextSource" class="eudic-context-source"></div>
                 <div class="eudic-context-section-header">
@@ -2583,8 +2638,8 @@
                     </div>
                     <div class="eudic-context-row is-current">
                         <div class="eudic-context-row-header">
-                            <span class="eudic-context-current-label">当前句 · 必须包含所选词条</span>
-                            <span id="eudicContextWordStatus" class="eudic-context-word-status" data-state="success">词条已定位</span>
+                            <span id="eudicContextCurrentLabel" class="eudic-context-current-label">当前句 · 需保留字幕原词</span>
+                            <span id="eudicContextWordStatus" class="eudic-context-word-status" data-state="success">原词已定位</span>
                         </div>
                         <textarea id="eudicContextCurrent" rows="2" aria-label="当前句字幕"></textarea>
                         <div class="eudic-context-preview">
@@ -6673,13 +6728,16 @@
                 var eudicAuthorizationStatus = document.getElementById('eudicAuthorizationStatus');
                 var eudicContextOverlay = document.getElementById('eudicContextOverlay');
                 var eudicContextCloseButton = document.getElementById('eudicContextClose');
-                var eudicContextWord = document.getElementById('eudicContextWord');
+                var eudicContextEntryWordInput = document.getElementById('eudicContextEntryWord');
+                var eudicContextEntryHelp = document.getElementById('eudicContextEntryHelp');
+                var eudicContextSurfaceWord = document.getElementById('eudicContextSurfaceWord');
                 var eudicContextSource = document.getElementById('eudicContextSource');
                 var eudicContextResetButton = document.getElementById('eudicContextReset');
                 var eudicContextPreviousRow = document.getElementById('eudicContextPreviousRow');
                 var eudicContextPreviousInclude = document.getElementById('eudicContextPreviousInclude');
                 var eudicContextPreviousInput = document.getElementById('eudicContextPrevious');
                 var eudicContextCurrentInput = document.getElementById('eudicContextCurrent');
+                var eudicContextCurrentLabel = document.getElementById('eudicContextCurrentLabel');
                 var eudicContextWordStatus = document.getElementById('eudicContextWordStatus');
                 var eudicContextPreview = document.getElementById('eudicContextPreview');
                 var eudicContextNextRow = document.getElementById('eudicContextNextRow');
@@ -8256,7 +8314,7 @@
                         return null;
                     }
                     var currentLine = normalizeEudicContextText(eudicContextCurrentInput.value);
-                    var occurrences = findEudicWordOccurrences(currentLine, eudicContextDraft.selectedText);
+                    var occurrences = findEudicWordOccurrences(currentLine, eudicContextDraft.surfaceText);
                     if (!occurrences.length) {
                         return null;
                     }
@@ -8269,6 +8327,25 @@
                     };
                 }
 
+                function getEudicEntryWordValidation() {
+                    var entryWord = window.SvpEudic.normalizeSelectedTerm(eudicContextEntryWordInput.value);
+                    if (!entryWord) {
+                        return { valid: false, word: '', message: '请输入要添加的英文词条' };
+                    }
+                    if (!window.SvpEudic.isSupportedWord(entryWord)) {
+                        return {
+                            valid: false,
+                            word: entryWord,
+                            message: '请输入完整的英文单词或词组；支持空格、撇号和连字符'
+                        };
+                    }
+                    return {
+                        valid: true,
+                        word: entryWord,
+                        message: '可修改为原形，例如 ' + eudicContextDraft.surfaceText + ' → ' + entryWord
+                    };
+                }
+
                 function setEudicContextError(message) {
                     var text = String(message || '').trim();
                     eudicContextError.textContent = text;
@@ -8278,7 +8355,7 @@
                 function renderEudicContextPreview(match) {
                     eudicContextPreview.textContent = '';
                     if (!match) {
-                        eudicContextPreview.textContent = '当前句中未找到所选词条';
+                        eudicContextPreview.textContent = '当前句中未找到字幕原词';
                         return;
                     }
                     var start = match.occurrence.start;
@@ -8311,19 +8388,28 @@
                         eudicContextNextInput
                     );
                     var match = getEudicEditedWordMatch();
+                    var entryValidation = getEudicEntryWordValidation();
                     renderEudicContextPreview(match);
+                    eudicContextEntryHelp.textContent = entryValidation.valid
+                        ? '可修改为原形，例如 tried → try'
+                        : entryValidation.message;
+                    eudicContextEntryHelp.setAttribute('data-state', entryValidation.valid ? 'valid' : 'error');
+                    eudicContextEntryWordInput.setAttribute('aria-invalid', entryValidation.valid ? 'false' : 'true');
                     if (!match) {
-                        eudicContextWordStatus.textContent = '未找到词条';
+                        eudicContextWordStatus.textContent = '未找到字幕原词';
                         eudicContextWordStatus.setAttribute('data-state', 'error');
                     } else if (match.count > 1) {
                         eudicContextWordStatus.textContent = '已定位第 ' + (match.ordinal + 1) + ' 处';
                         eudicContextWordStatus.setAttribute('data-state', 'multiple');
                     } else {
-                        eudicContextWordStatus.textContent = '词条已定位';
+                        eudicContextWordStatus.textContent = '原词已定位';
                         eudicContextWordStatus.setAttribute('data-state', 'success');
                     }
-                    eudicContextSubmitButton.disabled = eudicSubmissionPending || !match;
-                    return match;
+                    eudicContextSubmitButton.disabled = eudicSubmissionPending || !match || !entryValidation.valid;
+                    return {
+                        match: match,
+                        entryValidation: entryValidation
+                    };
                 }
 
                 function renderEudicContextDraft() {
@@ -8331,7 +8417,9 @@
                         return;
                     }
                     var defaults = eudicContextDraft.defaults;
-                    eudicContextWord.textContent = eudicContextDraft.selectedText;
+                    eudicContextEntryWordInput.value = defaults.entryWord;
+                    eudicContextSurfaceWord.textContent = eudicContextDraft.surfaceText;
+                    eudicContextCurrentLabel.textContent = '当前句 · 需保留字幕原词「' + eudicContextDraft.surfaceText + '」';
                     eudicContextSource.textContent = '来源：《' + eudicContextDraft.videoName + '》';
                     eudicContextSource.title = eudicContextSource.textContent;
                     eudicContextPreviousRow.hidden = !defaults.previousLine;
@@ -8349,6 +8437,7 @@
                     eudicSubmissionPending = submitting;
                     eudicContextCloseButton.disabled = submitting;
                     eudicContextResetButton.disabled = submitting;
+                    eudicContextEntryWordInput.disabled = submitting;
                     eudicContextPreviousInclude.disabled = submitting;
                     eudicContextCurrentInput.disabled = submitting;
                     eudicContextNextInclude.disabled = submitting;
@@ -8368,10 +8457,11 @@
                         ? normalizeEudicContextText(subtitles[info.startIdx + 1].text)
                         : '';
                     eudicContextDraft = {
-                        selectedText: info.text,
+                        surfaceText: info.surfaceText,
                         videoName: getVideoDisplayName(),
-                        targetOrdinal: findEudicTargetOrdinal(currentLine, info.text, info.selectionStart),
+                        targetOrdinal: findEudicTargetOrdinal(currentLine, info.surfaceText, info.surfaceStart),
                         defaults: {
+                            entryWord: info.text,
                             previousLine: previousLine,
                             currentLine: currentLine,
                             nextLine: nextLine
@@ -8382,11 +8472,8 @@
                     eudicContextOverlay.hidden = false;
                     setFocusRegressionBlocker(FOCUS_BLOCKER_EUDIC_CONTEXT, true);
                     setTimeout(function () {
-                        eudicContextCurrentInput.focus({ preventScroll: true });
-                        eudicContextCurrentInput.setSelectionRange(
-                            eudicContextCurrentInput.value.length,
-                            eudicContextCurrentInput.value.length
-                        );
+                        eudicContextEntryWordInput.focus({ preventScroll: true });
+                        eudicContextEntryWordInput.select();
                         var dialogBody = eudicContextOverlay.querySelector('.eudic-context-body');
                         if (dialogBody) {
                             dialogBody.scrollTop = 0;
@@ -8409,9 +8496,15 @@
                         return;
                     }
                     setEudicContextError('');
-                    var match = updateEudicContextValidation();
+                    var validation = updateEudicContextValidation();
+                    if (!validation.entryValidation.valid) {
+                        setEudicContextError(validation.entryValidation.message);
+                        eudicContextEntryWordInput.focus();
+                        return;
+                    }
+                    var match = validation.match;
                     if (!match) {
-                        setEudicContextError('当前句需要保留所选词条「' + eudicContextDraft.selectedText + '」');
+                        setEudicContextError('当前句需要保留字幕原词「' + eudicContextDraft.surfaceText + '」');
                         eudicContextCurrentInput.focus();
                         return;
                     }
@@ -8425,7 +8518,7 @@
                             nextLine: eudicContextNextInput.value,
                             includePrevious: !eudicContextPreviousRow.hidden && eudicContextPreviousInclude.checked,
                             includeNext: !eudicContextNextRow.hidden && eudicContextNextInclude.checked,
-                            selectedText: eudicContextDraft.selectedText,
+                            selectedText: eudicContextDraft.surfaceText,
                             selectionStart: match.occurrence.start
                         });
                     } catch (error) {
@@ -8433,13 +8526,14 @@
                         return;
                     }
 
-                    var selectedText = eudicContextDraft.selectedText;
+                    var entryWord = validation.entryValidation.word;
+                    eudicContextEntryWordInput.value = entryWord;
                     var shouldClose = false;
                     setEudicContextSubmitting(true);
                     try {
                         var result = await window.SvpEudic.submitWord({
                             authorization: eudicAuthorization,
-                            word: selectedText,
+                            word: entryWord,
                             note: note
                         });
                         shouldClose = true;
@@ -8477,7 +8571,8 @@
                     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
                         return null;
                     }
-                    var text = sel.toString().replace(/\s+/g, ' ').trim();
+                    var rawSelectionText = sel.toString();
+                    var text = rawSelectionText.replace(/\s+/g, ' ').trim();
                     if (!text) {
                         return null;
                     }
@@ -8505,14 +8600,21 @@
                         : '[' + formatClock(subtitles[startIdx].start) + '-' + formatClock(subtitles[endIdx].end) + ']';
                     var sentence = String(subtitles[startIdx].text || '').trim();
                     var selectionStart = NaN;
+                    var selectionEnd = NaN;
                     if (startIdx === endIdx) {
                         try {
                             var prefixRange = range.cloneRange();
                             prefixRange.selectNodeContents(startDiv);
                             prefixRange.setEnd(range.startContainer, range.startOffset);
                             selectionStart = prefixRange.toString().length;
+                            var endPrefixRange = range.cloneRange();
+                            endPrefixRange.selectNodeContents(startDiv);
+                            endPrefixRange.setEnd(range.endContainer, range.endOffset);
+                            selectionEnd = endPrefixRange.toString().length;
                             var rawSentence = String(subtitles[startIdx].text || '');
-                            selectionStart = Math.max(0, selectionStart - (rawSentence.length - rawSentence.trimStart().length));
+                            var leadingWhitespaceLength = rawSentence.length - rawSentence.trimStart().length;
+                            selectionStart = Math.max(0, selectionStart - leadingWhitespaceLength);
+                            selectionEnd = Math.max(selectionStart, selectionEnd - leadingWhitespaceLength);
                         } catch (err) { }
                     }
                     return {
@@ -8522,6 +8624,7 @@
                         startIdx: startIdx,
                         endIdx: endIdx,
                         selectionStart: selectionStart,
+                        selectionEnd: selectionEnd,
                         rect: range.getBoundingClientRect()
                     };
                 }
@@ -8635,6 +8738,18 @@
                     setEudicContextError('');
                 });
 
+                eudicContextEntryWordInput.addEventListener('input', function () {
+                    setEudicContextError('');
+                    updateEudicContextValidation();
+                });
+
+                eudicContextEntryWordInput.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter' && !event.isComposing && !eudicContextSubmitButton.disabled) {
+                        event.preventDefault();
+                        submitEudicContextDraft();
+                    }
+                });
+
                 eudicContextCurrentInput.addEventListener('input', function () {
                     setEudicContextError('');
                     updateEudicContextValidation();
@@ -8647,7 +8762,8 @@
                 eudicContextResetButton.addEventListener('click', function () {
                     if (!eudicSubmissionPending) {
                         renderEudicContextDraft();
-                        eudicContextCurrentInput.focus();
+                        eudicContextEntryWordInput.focus();
+                        eudicContextEntryWordInput.select();
                     }
                 });
 
@@ -8732,7 +8848,16 @@
                     }
                     var selectedTerm = window.SvpEudic.normalizeSelectedTerm(info.text);
                     if (!window.SvpEudic.isSupportedWord(selectedTerm)) {
-                        showFloatingToast('请选择完整的英文单词或词组；支持空格、撇号和连字符', 'warning', 3200);
+                        showFloatingToast('请选择英文单词或词组；支持空格、撇号和连字符', 'warning', 3200);
+                        return;
+                    }
+                    var surfaceSelection = window.SvpEudic.expandSelectionToWordBoundaries(
+                        info.sentence,
+                        info.selectionStart,
+                        info.selectionEnd
+                    );
+                    if (!surfaceSelection) {
+                        showFloatingToast('无法在当前字幕中定位所选英文词形', 'warning', 2800);
                         return;
                     }
                     if (!eudicAuthorization) {
@@ -8745,7 +8870,11 @@
                     }
                     hideSelectionBubble();
                     window.getSelection().removeAllRanges();
-                    openEudicContextDialog(Object.assign({}, info, { text: selectedTerm }));
+                    openEudicContextDialog(Object.assign({}, info, {
+                        text: selectedTerm,
+                        surfaceText: surfaceSelection.text,
+                        surfaceStart: surfaceSelection.start
+                    }));
                 });
 
                 // ---------- 初始化 ----------
