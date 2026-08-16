@@ -1175,14 +1175,18 @@
         .ai-chat-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 8px;
             padding: 6px 10px;
             background: #f3f5f9;
             border-bottom: 1px solid #e3e6ee;
             cursor: move;
             user-select: none;
             touch-action: none;
+            flex: 0 0 auto;
+        }
+
+        .ai-chat-header-left {
+            display: flex;
+            align-items: center;
             flex: 0 0 auto;
         }
 
@@ -1193,13 +1197,41 @@
             white-space: nowrap;
         }
 
+        .ai-chat-header-divider {
+            position: relative;
+            width: 21px;
+            height: 29px;
+            flex: 0 0 auto;
+            cursor: default;
+        }
+
+        .ai-chat-header-divider::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1px;
+            height: 18px;
+            border-radius: 999px;
+            background: #cbd3df;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+
         .ai-chat-header-actions {
             display: flex;
             align-items: center;
             gap: 4px;
+            cursor: default;
         }
 
-        .ai-chat-header-actions button {
+        .ai-chat-header-drag-space {
+            align-self: stretch;
+            min-width: 8px;
+            flex: 1 1 auto;
+        }
+
+        .ai-chat-header button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1239,6 +1271,8 @@
 
         #aiChatClose {
             font-size: 0;
+            position: relative;
+            flex: 0 0 auto;
         }
 
         #aiChatClose::before {
@@ -1249,18 +1283,24 @@
             background: currentColor;
         }
 
-        .ai-chat-header-actions button:hover {
+        #aiChatClose::after {
+            content: "";
+            position: absolute;
+            inset: 0 0 -6px -6px;
+        }
+
+        .ai-chat-header button:hover {
             border-color: #d3dae6;
             background: #e8edf5;
             color: #273247;
         }
 
-        .ai-chat-header-actions button:active {
+        .ai-chat-header button:active {
             background: #dfe5ef;
             transform: translateY(1px);
         }
 
-        .ai-chat-header-actions button:focus-visible {
+        .ai-chat-header button:focus-visible {
             outline: none;
             border-color: #8eb2f5;
             box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.2);
@@ -2419,6 +2459,10 @@
                 resize: none;
             }
 
+            .ai-chat-header {
+                cursor: default;
+            }
+
             .ai-chat-resize-handle {
                 display: none;
             }
@@ -2681,12 +2725,16 @@
         <span class="ai-chat-resize-handle ai-chat-resize-sw" data-resize-direction="sw" aria-hidden="true"></span>
         <span class="ai-chat-resize-handle ai-chat-resize-nw" data-resize-direction="nw" aria-hidden="true"></span>
         <div id="aiChatHeader" class="ai-chat-header">
-            <span class="ai-chat-title">AI对话</span>
-            <span class="ai-chat-header-actions">
-                <button id="aiChatNewConversation" type="button" title="丢弃当前上下文，开启新对话">新对话</button>
-                <button id="aiChatSettingsToggle" type="button" title="设置">⚙</button>
-                <button id="aiChatClose" type="button" title="收起（后台生成不受影响）">─</button>
+            <span class="ai-chat-header-left">
+                <span class="ai-chat-title">AI对话</span>
+                <span class="ai-chat-header-divider" aria-hidden="true"></span>
+                <span class="ai-chat-header-actions">
+                    <button id="aiChatNewConversation" type="button" title="丢弃当前上下文，开启新对话">新对话</button>
+                    <button id="aiChatSettingsToggle" type="button" title="设置">⚙</button>
+                </span>
             </span>
+            <span class="ai-chat-header-drag-space" aria-hidden="true"></span>
+            <button id="aiChatClose" type="button" title="收起（后台生成不受影响）">─</button>
         </div>
         <div id="aiChatSettings" class="ai-chat-settings" hidden>
             <label>后端URL
@@ -8194,7 +8242,7 @@
                 });
 
                 chatHeader.addEventListener('pointerdown', function (event) {
-                    if (event.target.closest('button') || isSmallScreen()) {
+                    if (event.target.closest('.ai-chat-header-actions, .ai-chat-header-divider, button') || isSmallScreen()) {
                         return;
                     }
                     event.preventDefault();
