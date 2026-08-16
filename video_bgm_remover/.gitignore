@@ -1,0 +1,6 @@
+.venv/
+.uv-cache/
+.runtime/
+__pycache__/
+models/*
+!models/.gitkeep
