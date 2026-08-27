@@ -1,0 +1,8 @@
+[project]
+name = "encrypto-batch-decrypt"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "psutil>=7.2,<8",
+    "pywinauto>=0.6.9,<0.7",
+]
