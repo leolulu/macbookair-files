@@ -14,7 +14,8 @@
 - 默认跳过已有输出，避免覆盖。
 - 使用 `--overwrite` 时自动确认覆盖。
 - 单个文件失败后记录日志并继续处理后续文件。
-- 批量处理中自动使用 `Start Over` 切换到下一文件。
+- 每个文件使用独立的 Encrypto 进程，避免前一个文件的界面状态影响后续文件。
+- 只有 Encrypto 显示 `File Decrypted and Saved!` 完成界面且输出文件存在时，才记录为成功。
 - 全部处理结束后自动关闭 Encrypto。
 
 ## 环境要求
@@ -30,6 +31,19 @@
 - 能够访问 `https://ygocdb.com/api/v0/`
 
 ## 使用方法
+
+### 无后缀文件先改名
+
+Encrypto 依靠 `.crypto` 后缀识别解密模式。待解密文件没有后缀时，必须先给文件名添加 `.crypto`，再交给脚本处理；不要把无后缀文件直接作为输入。
+
+例如：
+
+```powershell
+Rename-Item -LiteralPath "C:\待解密\example" -NewName "example.crypto"
+uv run .\encrypto_batch_decrypt.py "C:\待解密\example.crypto"
+```
+
+批量改名之前应先确认目录中不存在同名 `.crypto` 文件，避免名称冲突。
 
 ### 批量处理目录
 
@@ -73,6 +87,18 @@ uv run .\encrypto_batch_decrypt.py "C:\待解密" --overwrite
 uv run .\encrypto_batch_decrypt.py "C:\待解密" --keep-open
 ```
 
+### 调整超时
+
+解密及保存完成的单步超时默认是 1800 秒（30 分钟）。它只是最长等待上限；界面状态一旦变化，脚本会立即继续，不会固定等待 30 分钟。
+
+如果需要处理更大的文件或较慢的磁盘，可以进一步提高：
+
+```powershell
+uv run .\encrypto_batch_decrypt.py "C:\待解密" --timeout 3600
+```
+
+点击 `Save As...` 后等待 Windows 保存对话框出现的上限是 60 秒。这个阶段实测通常只需数秒，并以 0.05 秒间隔检测。
+
 ### 检查 UI Automation 控件
 
 排查不同 Encrypto 界面版本时使用：
@@ -83,19 +109,26 @@ uv run .\encrypto_batch_decrypt.py "C:\待解密\example.crypto" --inspect
 
 ## 已有文件处理规则
 
-例如：
+最终文件名以 Encrypto“另存为”对话框中自动给出的默认文件名为准。脚本会原样保留这个文件名，只修改保存目录，不会根据外层 `.crypto` 文件名自行拼接或猜测输出名称。
+
+例如，输入文件可能叫：
 
 ```text
-example.crypto
-example.7z
+124638B.crypto
 ```
 
-当 `example.7z` 已存在时：
+而 Encrypto 给出的默认文件名可能是：
+
+```text
+124638.7z.002
+```
+
+脚本最终保存的就是 `124638.7z.002`。如果无法读取保存框中的默认文件名，本次处理会直接报错，避免生成错误名称。
+
+已有文件检查会在读取默认文件名之后进行。当该默认名称对应的输出已经存在时：
 
 - 默认取消保存并记录 `SKIP`。
 - 指定 `--overwrite` 后自动点击覆盖确认中的“是”。
-
-Encrypto 可能根据加密前的文件格式自动补充扩展名，因此脚本会识别 `example`、`example.7z` 等实际输出名称。
 
 ## 密码来源
 
@@ -141,6 +174,7 @@ Closed Encrypto  Encrypto 已在批次结束后关闭
 ## 注意事项
 
 - 运行期间不要手动操作 Encrypto 的密码框、按钮或保存窗口。
+- 目录扫描只处理 `.crypto` 文件，其他扩展名会被忽略。
 - 脚本依赖 Encrypto 1.0.1 当前暴露的 UI Automation 控件 ID。
 - `--overwrite` 会替换已有的解密输出；`.crypto` 源文件始终保留。
 - 如果 Encrypto 安装在其他位置，使用 `--encrypto` 指定：

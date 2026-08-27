@@ -125,6 +125,32 @@ def wait_automation_id(window, automation_id: str, timeout: float, *, enabled: b
     return None
 
 
+def wait_for_decrypt_screen(window, encrypted: Path, timeout: float = 30.0) -> None:
+    expected_name = encrypted.name[: -len(".crypto")]
+    deadline = time.monotonic() + timeout
+    observed_name = ""
+    while time.monotonic() < deadline:
+        name_control = by_automation_id(window, "FilesAndFoldersTextBlock")
+        hint = by_automation_id(window, "HintTextBlockDecypt")
+        password = by_automation_id(window, "PassTextBoxDecrypt")
+        decrypt = by_automation_id(window, "CryptButton")
+        if name_control is not None:
+            observed_name = name_control.window_text().strip()
+        if (
+            observed_name == expected_name
+            and hint is not None
+            and hint.window_text().strip()
+            and password is not None
+            and decrypt is not None
+        ):
+            return
+        time.sleep(0.25)
+    raise TimeoutError(
+        f"Encrypto did not finish loading decrypt screen for {encrypted.name!r}; "
+        f"last visible file was {observed_name!r}"
+    )
+
+
 def first_matching(window, *, control_type: str | None = None, title_re: str | None = None):
     pattern = re.compile(title_re, re.IGNORECASE) if title_re else None
     for control in descendants(window, control_type):
@@ -151,27 +177,23 @@ def click(control) -> None:
         control.click_input()
 
 
+def click_nonblocking(control) -> None:
+    try:
+        control.set_focus()
+        send_keys("{ENTER}")
+    except Exception:
+        control.click_input()
+
+
 def wait_save_dialog(window, timeout: float):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for control in window.descendants(control_type="Window"):
             info = control.element_info
             if control.is_visible() and info.class_name == "#32770":
-                return control
-        time.sleep(0.25)
+                return Desktop(backend="uia").window(handle=control.handle).wrapper_object()
+        time.sleep(0.05)
     return None
-
-
-def reset_for_next_file(window) -> None:
-    start_over = wait_automation_id(window, "StartOverButton", 3)
-    if start_over is not None:
-        click(start_over)
-        time.sleep(0.75)
-        return
-    cancel = wait_automation_id(window, "CancelButton", 1)
-    if cancel is not None:
-        click(cancel)
-        time.sleep(0.75)
 
 
 def close_encrypto(window, timeout: float = 10.0) -> None:
@@ -199,10 +221,27 @@ def close_encrypto(window, timeout: float = 10.0) -> None:
         logging.info("Closed Encrypto")
 
 
-def output_candidates(destination: Path) -> list[Path]:
+def close_running_encrypto_windows() -> None:
+    windows_by_pid = {}
+    for candidate in Desktop(backend="uia").windows(visible_only=True, enabled_only=False):
+        try:
+            pid = candidate.element_info.process_id
+            if Path(_process_path(pid)).name.lower() == "encrypto.exe":
+                windows_by_pid.setdefault(pid, candidate)
+        except Exception:
+            continue
+    for candidate in windows_by_pid.values():
+        logging.info("Closing a pre-existing Encrypto window before opening the next file")
+        close_encrypto(candidate)
+
+
+def output_candidates(destination: Path, encrypted: Path | None = None) -> list[Path]:
     candidates = []
+    encrypted_resolved = encrypted.resolve() if encrypted is not None else None
     for path in destination.parent.glob(f"{destination.name}*"):
         if path.name != destination.name and not path.name.startswith(f"{destination.name}."):
+            continue
+        if encrypted_resolved is not None and path.resolve() == encrypted_resolved:
             continue
         if path.suffix.lower() == ".crypto":
             continue
@@ -210,22 +249,13 @@ def output_candidates(destination: Path) -> list[Path]:
     return sorted(candidates)
 
 
-def confirm_overwrite_if_present(window, timeout: float = 10.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        for dialog in window.descendants(control_type="Window"):
-            if not dialog.is_visible() or dialog.element_info.class_name != "#32770":
-                continue
-            title = dialog.window_text().strip()
-            if not re.search(r"(?i)(confirm save as|确认另存为)", title):
-                continue
-            yes = first_matching(dialog, control_type="Button", title_re=r"^(yes|是)")
-            if yes is None:
-                raise RuntimeError(f"Overwrite confirmation appeared but the Yes button was not found: {title!r}")
-            click(yes)
-            return True
-        time.sleep(0.25)
-    return False
+def overwrite_confirmation(window):
+    for dialog in window.descendants(control_type="Window"):
+        if not dialog.is_visible() or dialog.element_info.class_name != "#32770":
+            continue
+        if re.search(r"(?i)(confirm save as|确认另存为)", dialog.window_text().strip()):
+            return dialog
+    return None
 
 
 def enter_password(window, password: str) -> None:
@@ -255,17 +285,18 @@ def ygocdb_password(card_name: str, timeout: float = 20.0) -> str:
     url = YGOCDB_SEARCH_URL.format(urllib.parse.quote(card_name))
     request = urllib.request.Request(url, headers={"User-Agent": "encrypto-batch-decrypt/1.0"})
     last_error = None
-    for attempt in range(1, 4):
+    max_attempts = 6
+    for attempt in range(1, max_attempts + 1):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 payload = json.load(response)
             break
         except Exception as error:
             last_error = error
-            if attempt == 3:
+            if attempt == max_attempts:
                 raise RuntimeError(f"ygocdb request failed after {attempt} attempts: {error}") from error
             logging.warning("ygocdb request attempt %d failed; retrying: %s", attempt, error)
-            time.sleep(attempt)
+            time.sleep(min(attempt, 5))
     else:
         raise RuntimeError(f"ygocdb request failed: {last_error}")
     results = payload.get("result") or []
@@ -283,7 +314,14 @@ def ygocdb_password(card_name: str, timeout: float = 20.0) -> str:
     return card_id
 
 
-def decrypt_one(window, password: str, destination: Path, timeout: float, overwrite: bool) -> Path:
+def decrypt_one(
+    window,
+    password: str,
+    encrypted: Path,
+    destination: Path,
+    timeout: float,
+    overwrite: bool,
+) -> Path:
     enter_password(window, password)
     decrypt = wait_automation_id(window, "CryptButton", 5)
     if decrypt is None:
@@ -293,11 +331,27 @@ def decrypt_one(window, password: str, destination: Path, timeout: float, overwr
     save_as = wait_automation_id(window, "SaveButton", timeout)
     if save_as is None:
         raise RuntimeError("Save As button did not appear (wrong password or decryption failed)")
-    click(save_as)
-
-    dialog = wait_save_dialog(window, 15)
+    save_as_clicked_at = time.monotonic()
+    save_dialog_deadline = time.monotonic() + min(timeout, 60.0)
+    dialog = None
+    trigger_attempt = 0
+    while dialog is None and time.monotonic() < save_dialog_deadline:
+        trigger_attempt += 1
+        current_save_as = wait_automation_id(window, "SaveButton", 2)
+        if current_save_as is None:
+            break
+        click_nonblocking(current_save_as)
+        remaining = save_dialog_deadline - time.monotonic()
+        dialog = wait_save_dialog(window, min(10.0, max(remaining, 0.0)))
+        if dialog is None and time.monotonic() < save_dialog_deadline:
+            logging.warning("Save As dialog did not open; retrying trigger (attempt %d)", trigger_attempt)
     if dialog is None:
         raise RuntimeError("Windows Save As dialog did not appear")
+    logging.info(
+        "Save As dialog became ready in %.2f seconds after %d trigger attempt(s)",
+        time.monotonic() - save_as_clicked_at,
+        trigger_attempt,
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     edits = [
         c
@@ -314,11 +368,14 @@ def decrypt_one(window, password: str, destination: Path, timeout: float, overwr
         default_name = str(filename.get_value()).strip()
     except Exception:
         default_name = ""
-    if default_name:
-        default_name = Path(default_name).name
-        if default_name.casefold().startswith(destination.name.casefold()):
-            destination = destination.parent / default_name
-    existing_outputs = output_candidates(destination)
+    default_name = Path(default_name).name
+    if not default_name or default_name in {".", ".."}:
+        raise RuntimeError(
+            "Save As dialog did not expose a default filename; refusing to guess the output name"
+        )
+    destination = destination.parent / default_name
+    logging.info("Preserving Encrypto default output filename: %s", default_name)
+    existing_outputs = output_candidates(destination, encrypted)
     if existing_outputs and not overwrite:
         cancel = next(
             (
@@ -331,12 +388,75 @@ def decrypt_one(window, password: str, destination: Path, timeout: float, overwr
         if cancel is not None:
             click(cancel)
         raise FileExistsError(17, "Output exists", str(existing_outputs[0]))
-    filename.set_focus()
-    try:
-        filename.set_edit_text(str(destination))
-    except Exception:
-        send_keys("^a{BACKSPACE}")
-        send_keys(str(destination), with_spaces=True)
+
+    def active_address_field():
+        addresses = [
+            control
+            for control in dialog.descendants(control_type="Edit")
+            if control.is_visible()
+            and control.is_enabled()
+            and control.element_info.class_name == "Edit"
+            and control.element_info.automation_id == "41477"
+        ]
+        return addresses[-1] if addresses else None
+
+    filename.type_keys("%d", set_foreground=True)
+    address_deadline = time.monotonic() + 5.0
+    address = None
+    while address is None and time.monotonic() < address_deadline:
+        address = active_address_field()
+        if address is None:
+            time.sleep(0.05)
+    if address is None:
+        raise RuntimeError("Save dialog address field did not activate")
+
+    address.set_edit_text(str(destination.parent))
+    address.type_keys("{ENTER}", set_foreground=True)
+    time.sleep(0.25)
+
+    current_edits = [
+        control
+        for control in dialog.descendants(control_type="Edit")
+        if control.is_visible()
+        and control.is_enabled()
+        and control.element_info.class_name == "Edit"
+        and control.element_info.automation_id == "1001"
+    ]
+    if not current_edits:
+        raise RuntimeError("Filename field did not return after changing the output directory")
+    filename = current_edits[-1]
+    filename.type_keys("%d", set_foreground=True)
+    verify_deadline = time.monotonic() + 5.0
+    address = None
+    while address is None and time.monotonic() < verify_deadline:
+        address = active_address_field()
+        if address is None:
+            time.sleep(0.05)
+    if address is None:
+        raise RuntimeError("Save dialog address field did not reactivate for verification")
+    current_directory = str(address.get_value()).strip()
+    expected = os.path.normcase(os.path.normpath(str(destination.parent)))
+    actual = os.path.normcase(os.path.normpath(current_directory))
+    if actual != expected:
+        raise RuntimeError(
+            f"Save dialog directory verification failed: expected {destination.parent}, got {current_directory}"
+        )
+    logging.info("Save dialog output directory: %s", destination.parent)
+
+    address.type_keys("{ESC}", set_foreground=True)
+    current_edits = [
+        control
+        for control in dialog.descendants(control_type="Edit")
+        if control.is_visible()
+        and control.is_enabled()
+        and control.element_info.class_name == "Edit"
+        and control.element_info.automation_id == "1001"
+    ]
+    if not current_edits:
+        raise RuntimeError("Filename field disappeared after changing the output directory")
+    filename = current_edits[-1]
+    filename.set_edit_text(default_name)
+
     save = next(
         (
             c
@@ -347,20 +467,65 @@ def decrypt_one(window, password: str, destination: Path, timeout: float, overwr
     )
     if save is None:
         raise RuntimeError("Save/OK button not found in Save dialog")
-    click(save)
+    save_submitted_at = time.monotonic()
+    filename.type_keys("{ENTER}", set_foreground=True)
 
-    if overwrite:
-        confirm_overwrite_if_present(window)
+    submission_deadline = time.monotonic() + 5.0
+    while time.monotonic() < submission_deadline:
+        save_dialog_visible = any(
+            control.is_visible() and control.element_info.class_name == "#32770"
+            for control in window.descendants(control_type="Window")
+            if not re.search(r"(?i)(confirm save as|确认另存为)", control.window_text().strip())
+        )
+        if not save_dialog_visible or overwrite_confirmation(window) is not None:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("Save dialog did not accept the Save command")
+    logging.info("Save dialog accepted the Save command")
 
+    overwrite_decided = not (overwrite and existing_outputs)
+    process_id = window.element_info.process_id
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        candidates = output_candidates(destination)
+        confirmation = overwrite_confirmation(window)
+        if confirmation is not None:
+            button_pattern = r"^(yes|是)" if overwrite else r"^(no|否)"
+            decision = first_matching(confirmation, control_type="Button", title_re=button_pattern)
+            if decision is None:
+                raise RuntimeError("Overwrite confirmation appeared but its decision button was not found")
+            click_nonblocking(decision)
+            if not overwrite:
+                time.sleep(0.5)
+                cancel = next(
+                    (
+                        c
+                        for c in dialog.descendants(control_type="Button")
+                        if c.is_visible() and c.is_enabled() and c.element_info.automation_id == "2"
+                    ),
+                    None,
+                )
+                if cancel is not None:
+                    click(cancel)
+                raise RuntimeError(f"Refusing to overwrite encrypted source or existing output: {encrypted}")
+            overwrite_decided = True
+            time.sleep(0.5)
+            continue
+
+        candidates = output_candidates(destination, encrypted)
+        valid_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.exists() and (candidate.is_dir() or candidate.stat().st_size > 0)
+        ]
+        if not psutil.pid_exists(process_id):
+            raise RuntimeError("Encrypto exited before showing the saved-completion screen")
+
         completed = by_automation_id(window, "OpenFolderButton")
-        if completed is not None:
-            for candidate in candidates:
-                if candidate.exists() and (candidate.is_dir() or candidate.stat().st_size > 0):
-                    return candidate
-        time.sleep(0.5)
+        if overwrite_decided and completed is not None and valid_candidates:
+            logging.info("Encrypto reported save completion in %.2f seconds", time.monotonic() - save_submitted_at)
+            return valid_candidates[0]
+        time.sleep(0.1)
     raise TimeoutError(f"Output was not created within {timeout}s: {destination}")
 
 
@@ -383,7 +548,12 @@ def parse_args() -> argparse.Namespace:
         help="Resolve each file's hint card name through ygocdb (default), or read one password from the terminal",
     )
     parser.add_argument("--encrypto", type=Path, default=ENCRYPTO_EXE, help="Path to Encrypto.exe")
-    parser.add_argument("--timeout", type=float, default=300.0, help="Per-step timeout in seconds")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=1800.0,
+        help="Decrypt/save timeout per step in seconds (default: 1800)",
+    )
     return parser.parse_args()
 
 
@@ -404,10 +574,12 @@ def main() -> int:
 
     window = None
     try:
-        launch_file(args.encrypto, files[0])
-        window = find_encrypto_window()
-        window.set_focus()
         if args.inspect:
+            close_running_encrypto_windows()
+            launch_file(args.encrypto, files[0])
+            window = find_encrypto_window()
+            wait_for_decrypt_screen(window, files[0])
+            window.set_focus()
             print_inspection(window)
             return 0
 
@@ -422,27 +594,42 @@ def main() -> int:
 
         failures = 0
         for index, encrypted in enumerate(files, 1):
-            if index > 1:
-                reset_for_next_file(window)
+            destination = output_path(source, encrypted, output_root)
+            logging.info(
+                "[%d/%d] Decrypting %s -> directory %s",
+                index,
+                len(files),
+                encrypted,
+                destination.parent,
+            )
+            try:
+                close_running_encrypto_windows()
                 launch_file(args.encrypto, encrypted)
                 window = find_encrypto_window()
-            destination = output_path(source, encrypted, output_root)
-            if destination.exists() and not args.overwrite:
-                logging.info("[%d/%d] SKIP exists: %s", index, len(files), destination)
-                continue
-            logging.info("[%d/%d] Decrypting %s -> %s", index, len(files), encrypted, destination)
-            try:
+                wait_for_decrypt_screen(window, encrypted)
+                window.set_focus()
                 password = shared_password
                 if args.password_source == "ygocdb":
                     password = ygocdb_password(hint_card_name(window))
                 assert password is not None
-                actual_destination = decrypt_one(window, password, destination, args.timeout, args.overwrite)
+                actual_destination = decrypt_one(
+                    window,
+                    password,
+                    encrypted,
+                    destination,
+                    args.timeout,
+                    args.overwrite,
+                )
                 logging.info("[%d/%d] OK %s", index, len(files), actual_destination)
             except FileExistsError as error:
                 logging.info("[%d/%d] SKIP exists: %s", index, len(files), error.filename or error)
             except Exception:
                 failures += 1
                 logging.exception("[%d/%d] FAILED %s", index, len(files), encrypted)
+            finally:
+                if window is not None and (not args.keep_open or index < len(files)):
+                    close_encrypto(window)
+                    window = None
         return 1 if failures else 0
     finally:
         if window is not None and not args.keep_open:
