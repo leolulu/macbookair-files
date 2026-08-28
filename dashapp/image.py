@@ -23,6 +23,7 @@ JPG_FROM_WEBP_FOLDER = "jpg_from_webp"
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".avif", ".jfif"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v"}
 MEDIA_EXTS = IMG_EXTS | VIDEO_EXTS
+LOCAL_MEDIA_EXTS = MEDIA_EXTS | {".tbnl"}
 IGNORED_FILE_EXTS = {
     ".htm",
     ".html",
@@ -96,25 +97,79 @@ def extract_media_urls(txt_path):
     return extract_media_urls_from_text(content)
 
 
+def get_trash_path(source_path, avoid_overwrite=False):
+    """按 static/img 下的相对路径生成回收位置；需要时为同一路径的重复回收添加序号。"""
+    static_img_root = os.path.abspath("./static/img")
+    source_abs = os.path.abspath(source_path)
+    try:
+        if os.path.commonpath([static_img_root, source_abs]) != static_img_root:
+            raise ValueError(f"回收路径不在 static/img 下: {source_path}")
+    except ValueError:
+        raise ValueError(f"回收路径不在 static/img 下: {source_path}")
+
+    relative_path = os.path.relpath(source_abs, static_img_root)
+    trash_path = os.path.join(TRASH_FOLDER_PATH, relative_path)
+    os.makedirs(os.path.dirname(trash_path), exist_ok=True)
+    if not avoid_overwrite or not os.path.exists(trash_path):
+        return trash_path
+
+    stem, suffix = os.path.splitext(trash_path)
+    copy_index = 1
+    while os.path.exists(f"{stem}_{copy_index}{suffix}"):
+        copy_index += 1
+    return f"{stem}_{copy_index}{suffix}"
+
+
+def move_to_trash(source_path):
+    """移动文件到镜像回收位置，若同一原路径已回收过则保留为带序号的副本。"""
+    trash_path = get_trash_path(source_path, avoid_overwrite=True)
+    shutil.move(source_path, trash_path)
+    return trash_path
+
+
+def append_lines_to_trash(source_path, lines):
+    """将部分回收的 TXT 行追加到镜像位置，并保证与既有内容之间有换行分隔。"""
+    trash_path = get_trash_path(source_path)
+    needs_separator = False
+    if os.path.exists(trash_path) and os.path.getsize(trash_path) > 0:
+        with open(trash_path, "rb") as f:
+            f.seek(-1, os.SEEK_END)
+            needs_separator = f.read(1) not in {b"\n", b"\r"}
+    with open(trash_path, "a", encoding="utf-8", errors="surrogateescape", newline="") as f:
+        if needs_separator:
+            f.write("\n")
+        for line in lines:
+            f.write(line if line.endswith("\n") else line + "\n")
+    return trash_path
+
+
 def trash_remote_urls(urls_to_delete):
     """
-    从 ./static/img 树下现存的所有 txt 中，把包含已看 URL 的整行移入回收站同名 txt（平铺，append 合并）
-    若某 txt 删除后不再含任何媒体链接，则删除该 txt 文件
+    从 ./static/img 树下现存的所有 txt 中回收包含已看 URL 的整行。
+    仍有媒体链接时将命中行追加到镜像回收 TXT；已无媒体链接时整体回收原 TXT。
     """
     url_set = set(urls_to_delete)
     removed_line_count = 0
+    affected_folders = set()
     if not url_set:
-        return removed_line_count
+        return removed_line_count, affected_folders
     os.makedirs(TRASH_FOLDER_PATH, exist_ok=True)
     for root, dirs_, files_ in os.walk("./static/img"):
-        if os.path.abspath(root) == os.path.abspath(TRASH_FOLDER_PATH):
-            continue
+        dirs_[:] = [
+            folder for folder in dirs_ if folder not in {".trash", JPG_FROM_WEBP_FOLDER}
+        ]
         for file_ in files_:
             if os.path.splitext(file_)[-1].lower() != ".txt":
                 continue
             txt_path = os.path.join(root, file_)
             try:
-                with open(txt_path, "r", encoding="utf-8", errors="surrogateescape", newline="") as f:
+                with open(
+                    txt_path,
+                    "r",
+                    encoding="utf-8",
+                    errors="surrogateescape",
+                    newline="",
+                ) as f:
                     lines = f.readlines()
             except Exception as e:
                 print(f"回收txt链接失败(读取): {txt_path}, {e}")
@@ -129,18 +184,23 @@ def trash_remote_urls(urls_to_delete):
             if not trashed_lines:
                 continue
             try:
-                with open(os.path.join(TRASH_FOLDER_PATH, file_), "a", encoding="utf-8", errors="surrogateescape", newline="") as f:
-                    for line in trashed_lines:
-                        f.write(line if line.endswith("\n") else line + "\n")
                 if extract_media_urls_from_text("".join(kept_lines)):
-                    with open(txt_path, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
+                    append_lines_to_trash(txt_path, trashed_lines)
+                    with open(
+                        txt_path,
+                        "w",
+                        encoding="utf-8",
+                        errors="surrogateescape",
+                        newline="",
+                    ) as f:
                         f.writelines(kept_lines)
                 else:
-                    os.remove(txt_path)
+                    move_to_trash(txt_path)
                 removed_line_count += len(trashed_lines)
+                affected_folders.add(os.path.dirname(txt_path))
             except Exception as e:
                 print(f"回收txt链接失败(写入): {txt_path}, {e}")
-    return removed_line_count
+    return removed_line_count, affected_folders
 
 
 def get_txt_title_for_image(img_path):
@@ -159,33 +219,103 @@ def get_txt_title_for_image(img_path):
         return None
 
 
+def has_local_media_with_stem(folder_path, stem):
+    """判断同目录下是否还存在使用同一个标题 TXT 的本地媒体。"""
+    try:
+        return any(
+            os.path.splitext(file_)[0].casefold() == stem.casefold()
+            and os.path.splitext(file_)[-1].lower() in LOCAL_MEDIA_EXTS
+            for file_ in os.listdir(folder_path)
+        )
+    except OSError:
+        return False
+
+
+def trash_title_txt_for_media(media_path):
+    """最后一个同主名本地媒体回收后，一并回收不承担远程链接职责的标题 TXT。"""
+    title_txt_path = os.path.splitext(media_path)[0] + ".txt"
+    if not os.path.isfile(title_txt_path):
+        return 0
+    if extract_media_urls(title_txt_path):
+        return 0
+    folder_path = os.path.dirname(media_path)
+    media_stem = os.path.splitext(os.path.basename(media_path))[0]
+    if has_local_media_with_stem(folder_path, media_stem):
+        return 0
+    move_to_trash(title_txt_path)
+    return 1
+
+
+def folder_tree_has_media(folder_path):
+    """判断目录树中是否还有本地媒体或 TXT 远程媒体来源。"""
+    for root, dirs_, files_ in os.walk(folder_path):
+        dirs_[:] = [
+            folder for folder in dirs_ if folder not in {".trash", JPG_FROM_WEBP_FOLDER}
+        ]
+        for file_ in files_:
+            file_path = os.path.join(root, file_)
+            file_ext = os.path.splitext(file_)[-1].lower()
+            if file_ext in LOCAL_MEDIA_EXTS:
+                return True
+            if file_ext == ".txt" and extract_media_urls(file_path):
+                return True
+    return False
+
+
+def get_affected_folders(folder_paths):
+    """取得本次受影响目录及其祖先目录，范围不超过 static/img。"""
+    static_img_root = os.path.abspath("./static/img")
+    affected_folders = set()
+    for folder_path in folder_paths:
+        current = os.path.abspath(folder_path)
+        try:
+            if os.path.commonpath([static_img_root, current]) != static_img_root:
+                continue
+        except ValueError:
+            continue
+        while current != static_img_root:
+            if os.path.basename(current) not in {".trash", JPG_FROM_WEBP_FOLDER}:
+                affected_folders.add(current)
+            current = os.path.dirname(current)
+    return sorted(
+        affected_folders,
+        key=lambda path: path.count(os.sep),
+        reverse=True,
+    )
+
+
 def clean_empty_folders(folder_paths=None):
     """
-    清理空文件夹，从最深层向上递归删除
-    跳过特殊文件夹和顶层 static/img/
+    仅在本次受影响目录及其祖先中，从最深层向上回收媒体耗尽后残留的普通 TXT，
+    随后删除真正为空的目录。
     """
-    static_img_root = os.path.abspath("./static/img")
-    special_folders = {"jpg_from_webp", ".trash"}
+    trashed_txt_count = 0
     removed_dir_count = 0
-
-    for root, dirs, files in os.walk(static_img_root, topdown=False):
-        # 跳过顶层
-        if os.path.abspath(root) == static_img_root:
+    for root in get_affected_folders(folder_paths or []):
+        if not os.path.isdir(root):
             continue
-
-        # 跳过特殊文件夹
-        if os.path.basename(root) in special_folders:
+        if folder_tree_has_media(root):
             continue
-
-        # 尝试删除空文件夹
+        for file_ in os.listdir(root):
+            file_path = os.path.join(root, file_)
+            is_plain_txt = (
+                os.path.isfile(file_path)
+                and os.path.splitext(file_)[-1].lower() == ".txt"
+                and not extract_media_urls(file_path)
+            )
+            if is_plain_txt:
+                try:
+                    move_to_trash(file_path)
+                    trashed_txt_count += 1
+                except Exception as e:
+                    print(f"回收孤立txt失败: {file_path}, {e}")
         try:
             if not os.listdir(root):
                 os.rmdir(root)
                 removed_dir_count += 1
         except OSError:
             pass
-
-    return removed_dir_count
+    return trashed_txt_count, removed_dir_count
 
 
 def get_img_path_list(img_path_list: List[str]):
@@ -934,33 +1064,46 @@ def delete_button_click(n_clicks):
     if not os.path.exists(TRASH_FOLDER_PATH):
         os.makedirs(TRASH_FOLDER_PATH)
     count = 0
-    parent_folders = []  # 收集被删文件的父文件夹路径
+    title_txt_count = 0
+    parent_folders = set()  # 收集被删文件的父文件夹路径
     for file_ in browsed_img_list:
         if is_remote(file_):
             continue
         try:
             file_path = file_.replace("%23", "#")
-            shutil.move(file_path, TRASH_FOLDER_PATH)
-            parent_folders.append(os.path.dirname(file_path))
+            parent_folder = os.path.dirname(file_path)
+            move_to_trash(file_path)
+            parent_folders.add(parent_folder)
             count += 1
         except Exception as e:
-            try:
-                if "already exists" in str(e):
-                    file_path = file_.replace("%23", "#")
-                    os.remove(file_path)
-                    parent_folders.append(os.path.dirname(file_path))
-                    count += 1
-            except Exception as e:
-                print(f"删除失败: {e}")
+            print(f"删除失败: {e}")
+            continue
+        try:
+            title_txt_count += trash_title_txt_for_media(file_path)
+        except Exception as e:
+            print(f"回收标题txt失败: {os.path.splitext(file_path)[0] + '.txt'}, {e}")
 
-    # 已看过的远程链接：从所有 txt 中整行移入回收站同名 txt，并从 browsed 中清除
-    removed_link_count = trash_remote_urls([p for p in browsed_img_list if is_remote(p)])
+    # 已看过的远程链接：从所有 txt 中回收命中行或整个来源 TXT，并从 browsed 中清除
+    removed_link_count, remote_txt_folders = trash_remote_urls(
+        [p for p in browsed_img_list if is_remote(p)]
+    )
+    parent_folders.update(remote_txt_folders)
     browsed_img_list = [p for p in browsed_img_list if not is_remote(p)]
 
-    # 清理空文件夹
-    removed_dir_count = clean_empty_folders(parent_folders)
+    # 媒体耗尽后回收受影响目录内的孤立 TXT，再清理空文件夹
+    orphan_txt_count, removed_dir_count = clean_empty_folders(parent_folders)
 
-    return "删除成功{}张，移除链接{}条，清理空目录{}个".format(count, removed_link_count, removed_dir_count)
+    message_template = (
+        "删除成功{}张，回收标题TXT{}个，回收孤立TXT{}个，"
+        "移除链接{}条，清理空目录{}个"
+    )
+    return message_template.format(
+        count,
+        title_txt_count,
+        orphan_txt_count,
+        removed_link_count,
+        removed_dir_count,
+    )
 
 
 @callback(
