@@ -36,6 +36,14 @@ IGNORED_FILE_EXTS = {
     ".psd",
     ".url",
     ".mp3",
+    ".ass",
+    ".ssa",
+    ".srt",
+    ".vtt",
+    ".sub",
+    ".idx",
+    ".sup",
+    ".lrc",
 }
 
 img_path_list = []
@@ -67,6 +75,12 @@ def url_ext(path):
     if is_remote(path):
         path = urlparse(path).path
     return os.path.splitext(path)[-1].lower()
+
+
+def is_ignored_file(file_name):
+    """判断文件是否属于不展示、仅在相关图包媒体耗尽后回收的类型。"""
+    file_ext = os.path.splitext(file_name)[-1].lower()
+    return file_ext in IGNORED_FILE_EXTS or bool(re.search(r"ds_store$", file_name.lower()))
 
 
 def media_sort_key(path):
@@ -286,10 +300,11 @@ def get_affected_folders(folder_paths):
 
 def clean_empty_folders(folder_paths=None):
     """
-    仅在本次受影响目录及其祖先中，从最深层向上回收媒体耗尽后残留的普通 TXT，
-    随后删除真正为空的目录。
+    仅在本次受影响目录及其祖先中，从最深层向上回收媒体耗尽后残留的
+    普通 TXT 和忽略类型附属文件，随后删除真正为空的目录。
     """
     trashed_txt_count = 0
+    trashed_ignored_file_count = 0
     removed_dir_count = 0
     for root in get_affected_folders(folder_paths or []):
         if not os.path.isdir(root):
@@ -303,19 +318,23 @@ def clean_empty_folders(folder_paths=None):
                 and os.path.splitext(file_)[-1].lower() == ".txt"
                 and not extract_media_urls(file_path)
             )
-            if is_plain_txt:
+            is_ignored = os.path.isfile(file_path) and is_ignored_file(file_)
+            if is_plain_txt or is_ignored:
                 try:
                     move_to_trash(file_path)
-                    trashed_txt_count += 1
+                    if is_plain_txt:
+                        trashed_txt_count += 1
+                    else:
+                        trashed_ignored_file_count += 1
                 except Exception as e:
-                    print(f"回收孤立txt失败: {file_path}, {e}")
+                    print(f"回收孤立附属文件失败: {file_path}, {e}")
         try:
             if not os.listdir(root):
                 os.rmdir(root)
                 removed_dir_count += 1
         except OSError:
             pass
-    return trashed_txt_count, removed_dir_count
+    return trashed_txt_count, trashed_ignored_file_count, removed_dir_count
 
 
 def get_img_path_list(img_path_list: List[str]):
@@ -329,7 +348,7 @@ def get_img_path_list(img_path_list: List[str]):
         root_basename = os.path.basename(root)
         for file_ in files_:
             file_ext = os.path.splitext(file_)[-1].lower()
-            if file_ext in IGNORED_FILE_EXTS or re.search(r"ds_store$", file_.lower()):
+            if is_ignored_file(file_):
                 continue
             if root_abs == trash_folder_abs:
                 continue
@@ -1090,17 +1109,18 @@ def delete_button_click(n_clicks):
     parent_folders.update(remote_txt_folders)
     browsed_img_list = [p for p in browsed_img_list if not is_remote(p)]
 
-    # 媒体耗尽后回收受影响目录内的孤立 TXT，再清理空文件夹
-    orphan_txt_count, removed_dir_count = clean_empty_folders(parent_folders)
+    # 媒体耗尽后回收受影响目录内的孤立 TXT 和忽略类型附属文件，再清理空文件夹
+    orphan_txt_count, ignored_file_count, removed_dir_count = clean_empty_folders(parent_folders)
 
     message_template = (
         "删除成功{}张，回收标题TXT{}个，回收孤立TXT{}个，"
-        "移除链接{}条，清理空目录{}个"
+        "回收附属文件{}个，移除链接{}条，清理空目录{}个"
     )
     return message_template.format(
         count,
         title_txt_count,
         orphan_txt_count,
+        ignored_file_count,
         removed_link_count,
         removed_dir_count,
     )
