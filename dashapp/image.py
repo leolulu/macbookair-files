@@ -1070,6 +1070,27 @@ def toggle_delete_button_display(value):
         return {"display": "none"}, "删除已经浏览过的媒体文件"
 
 
+def format_delete_result(
+    media_count,
+    title_txt_count,
+    orphan_txt_count,
+    ignored_file_count,
+    removed_link_count,
+    removed_dir_count,
+):
+    """仅列出本次实际发生的删除和回收项目。"""
+    result_items = [
+        f"删除成功{media_count}张" if media_count else None,
+        f"回收标题TXT{title_txt_count}个" if title_txt_count else None,
+        f"回收孤立TXT{orphan_txt_count}个" if orphan_txt_count else None,
+        f"回收附属文件{ignored_file_count}个" if ignored_file_count else None,
+        f"移除链接{removed_link_count}条" if removed_link_count else None,
+        f"清理空目录{removed_dir_count}个" if removed_dir_count else None,
+    ]
+    result_items = [item for item in result_items if item]
+    return "，".join(result_items) if result_items else "本次没有删除任何项目"
+
+
 @callback(
     Output("delete_button", "children", allow_duplicate=True),
     Input("delete_button", "n_clicks"),
@@ -1112,11 +1133,7 @@ def delete_button_click(n_clicks):
     # 媒体耗尽后回收受影响目录内的孤立 TXT 和忽略类型附属文件，再清理空文件夹
     orphan_txt_count, ignored_file_count, removed_dir_count = clean_empty_folders(parent_folders)
 
-    message_template = (
-        "删除成功{}张，回收标题TXT{}个，回收孤立TXT{}个，"
-        "回收附属文件{}个，移除链接{}条，清理空目录{}个"
-    )
-    return message_template.format(
+    return format_delete_result(
         count,
         title_txt_count,
         orphan_txt_count,
