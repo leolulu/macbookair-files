@@ -4629,6 +4629,21 @@
                 element.style.color = color;
             }
 
+            function resetFastForwardState() {
+                const video = document.getElementById('video');
+                if (playerState.currentState !== PLAYER_STATE.NORMAL && Number.isFinite(playerState.originalSpeed)) {
+                    video.playbackRate = playerState.originalSpeed;
+                }
+
+                playerState.currentState = PLAYER_STATE.NORMAL;
+                playerState.targetTime = 0;
+                playerState.needCalibration = false;
+                playerState.skipCalibrationBySubClick = false;
+
+                $('#ff-sign').addClass('hide-element');
+                updateVideoPlaybackRateColor('#3F51B5');
+            }
+
             function updatePlayerState() {
                 const video = $('#video')[0];
                 const currentTime = accTime(video.currentTime);
@@ -4682,6 +4697,7 @@
                                     const duration = video.duration - currentTime;
                                     if (duration > 1) {
                                         playerState.targetTime = video.duration;
+                                        playerState.needCalibration = false;
                                         playerState.currentState = PLAYER_STATE.FAST_FORWARDING;
                                         video.playbackRate = calculateFastForwardSpeed(duration, playerState.originalSpeed);
                                         $('#ff-sign').removeClass('hide-element');
@@ -6512,8 +6528,11 @@
             });
 
             document.getElementById('video').addEventListener('loadstart', function () {
+                resetFastForwardState();
                 document.getElementById('videoDurationInfo').innerHTML = "⏱️";
             });
+
+            document.getElementById('video').addEventListener('ended', resetFastForwardState);
 
             $('#blurAllSub').change(function () {
                 if ($(this).is(':checked')) {
