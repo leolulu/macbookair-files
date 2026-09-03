@@ -344,6 +344,7 @@ def get_img_path_list(img_path_list: List[str]):
     temp_img_list = []
     trash_folder_abs = os.path.abspath(TRASH_FOLDER_PATH)
     for root, dirs_, files_ in os.walk("./static/img"):
+        dirs_[:] = [folder for folder in dirs_ if folder != ".trash"]
         root_abs = os.path.abspath(root)
         root_basename = os.path.basename(root)
         for file_ in files_:
