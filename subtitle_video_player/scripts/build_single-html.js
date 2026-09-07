@@ -12,7 +12,7 @@ const OUTPUT_HTML = path.join(ROOT, 'subtitle_video_player.single.html');
 // assets send no access-control-allow-origin header, so a worker fetch() of them
 // is blocked by the browser — that's why we use jsDelivr, not the Release.)
 // OCR only runs for image-based SUP/PGS subtitles, never for SRT/JSON/ASS, so the
-// base file stays well under 1MB and the ~37MB of OCR assets download once (then
+// base file includes offline COCA ranks; the ~37MB of OCR assets download once (then
 // get browser-cached) the first time OCR is actually used.
 //
 // The base URL is pinned to the exact commit this build came from, auto-resolved
@@ -138,12 +138,17 @@ function build() {
     'js/ai_markdown_compat.js': readText(path.join(ROOT, 'js/ai_markdown_compat.js')),
     'assets/vendor/dompurify/purify.min.js': readText(path.join(ROOT, 'assets/vendor/dompurify/purify.min.js')),
     'js/eudic_integration.js': readText(path.join(ROOT, 'js/eudic_integration.js')),
+    'js/coca_data.js': readText(path.join(ROOT, 'js/coca_data.js')),
+    'js/coca_rank.js': readText(path.join(ROOT, 'js/coca_rank.js')),
     'js/cache/sup_ocr_cache.js': readText(path.join(ROOT, 'js/cache/sup_ocr_cache.js')),
     'js/sup/pgs_parser.js': readText(path.join(ROOT, 'js/sup/pgs_parser.js')),
     'js/ocr/paddle_ocr.js': patchMainOcrJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr.js')))
   };
 
   const workerSource = patchWorkerJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr_worker.js')));
+  ['js/coca_data.js', 'js/coca_rank.js'].forEach((script) => {
+    html = replaceOnce(html, `<script src="${script}"></script>`, `<script>\n${inlineScripts[script]}\n</script>`, `Failed to inline ${script}`);
+  });
   const bootstrap = `<script>\nwindow.__SVP_SINGLE_FILE_BUNDLE__ = ${JSON.stringify({ workerSource })};\n</script>`;
 
   html = replaceOnce(

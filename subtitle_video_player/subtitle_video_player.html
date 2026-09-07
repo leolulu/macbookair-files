@@ -2862,6 +2862,8 @@
     <script src="js/ai_markdown_compat.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/eudic_integration.js"></script>
+    <script src="js/coca_data.js"></script>
+    <script src="js/coca_rank.js"></script>
     <script src="js/cache/sup_ocr_cache.js"></script>
     <script src="js/sup/pgs_parser.js"></script>
     <script src="js/ocr/paddle_ocr.js"></script>
@@ -7585,6 +7587,9 @@
                 }
 
                 function renderAiMessageContent(div, fullText, reportSanitizedRemoval) {
+                    if (window.SvpCocaRank) {
+                        fullText = window.SvpCocaRank.render(fullText, div.cocaContext);
+                    }
                     if (!markdownReady) {
                         renderPlainTextWithTimeLinks(div, fullText);
                         return;
@@ -7723,6 +7728,9 @@
                     updateSendButtonState();
                     updateToggleButtonState();
                     activeAbortController = new AbortController();
+                    var requestController = activeAbortController;
+                    var requestConversationId = conversationId;
+                    aiDiv.cocaContext = options.lookupText ? (options.cocaContext || { candidates: [] }) : null;
                     var accumulated = '';
                     var streamRenderTimer = null;
                     var lastStreamRenderAt = 0;
@@ -7745,15 +7753,39 @@
                         }
                     }
 
-                    streamChatRequest(options.payloadText, {
-                        onDelta: function (textChunk) {
-                            accumulated += textChunk;
-                            if (!streamRenderTimer) {
-                                streamRenderTimer = setTimeout(renderStreamingNow, Math.max(0, 100 - (Date.now() - lastStreamRenderAt)));
+                    // Keep lazy data preparation inside the busy/abort lifecycle, including retries.
+                    Promise.resolve().then(async function () {
+                        var payloadText = options.payloadText;
+                        if (options.lookupText && window.SvpCocaRank) {
+                            try {
+                                if (!options.cocaContext) {
+                                    var cocaData = await window.SvpCocaRank.load();
+                                    options.cocaContext = window.SvpCocaRank.createContext(options.lookupText, cocaData);
+                                }
+                                aiDiv.cocaContext = options.cocaContext;
+                                payloadText += window.SvpCocaRank.prompt(options.cocaContext);
+                            } catch (err) {
+                                console.warn('COCA 本地数据加载失败，继续查词:', err);
                             }
                         }
-                    }, activeAbortController.signal).then(function () {
+                        if (requestController.signal.aborted || requestConversationId !== conversationId) {
+                            throw new DOMException('Request cancelled', 'AbortError');
+                        }
+                        return streamChatRequest(payloadText, {
+                            onDelta: function (textChunk) {
+                                if (requestController.signal.aborted || requestConversationId !== conversationId) return;
+                                accumulated += textChunk;
+                                if (!streamRenderTimer) {
+                                    streamRenderTimer = setTimeout(renderStreamingNow, Math.max(0, 100 - (Date.now() - lastStreamRenderAt)));
+                                }
+                            }
+                        }, requestController.signal);
+                    }).then(function () {
                         cancelStreamingRender();
+                        if (requestConversationId !== conversationId) {
+                            finishGeneration();
+                            return;
+                        }
                         aiDiv.classList.remove('ai-chat-streaming');
                         var shouldKeepPinned = isPinnedToBottom();
                         renderAiMessageContent(aiDiv, accumulated);
@@ -7763,6 +7795,10 @@
                         finishGeneration('success');
                     }).catch(function (err) {
                         cancelStreamingRender();
+                        if (requestConversationId !== conversationId) {
+                            finishGeneration();
+                            return;
+                        }
                         aiDiv.classList.remove('ai-chat-streaming');
                         if (err && err.name === 'AbortError') {
                             if (accumulated) {
@@ -7782,7 +7818,8 @@
                             renderAiMessageContent(aiDiv, accumulated);
                             var errorLine = document.createElement('div');
                             errorLine.className = 'ai-chat-error-line';
-                            errorLine.textContent = '⚠ ' + (err && err.message ? err.message : '请求失败');
+                            var errorText = err && err.message ? err.message : '请求失败';
+                            errorLine.textContent = '⚠ ' + (window.SvpCocaRank ? window.SvpCocaRank.render(errorText, options.lookupText ? { candidates: [] } : null) : errorText);
                             aiDiv.appendChild(errorLine);
                             var retryButton = document.createElement('button');
                             retryButton.type = 'button';
@@ -8923,6 +8960,7 @@
                     openChatWindow(false);
                     dispatchChat({
                         payloadText: payload,
+                        lookupText: info.text,
                         displayText: '【查词】「' + info.text + '」',
                         quote: null,
                         restoreInputOnStop: ''
