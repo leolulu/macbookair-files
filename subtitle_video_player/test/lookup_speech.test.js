@@ -1,6 +1,64 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const speech = require('../js/lookup_speech');
+const { Marked } = require('../assets/vendor/marked/marked.umd');
+const compat = require('../js/ai_markdown_compat');
+
+test('speech extraction preserves Markdown exactly, including mistakenly nested markers', () => {
+    const parser = new Marked({ gfm: true, breaks: true });
+    compat.install(parser);
+    for (const [source, clean] of [
+        ['这里的 **running**[[SPEAK:running]] 是形容词。', '这里的 **running** 是形容词。'],
+        ['这里的 **running[[SPEAK:running]]** 是形容词。', '这里的 **running** 是形容词。'],
+        ['***running[[SPEAK:running]]***', '***running***'],
+        ['__running[[SPEAK:running]]__', '__running__'],
+        ['这里的**“running[[SPEAK:running]]”**。', '这里的**“running”**。'],
+        ['**running costs**[[SPEAK:running costs]] 与 **operating costs**。', '**running costs** 与 **operating costs**。'],
+        ['went[[SPEAK:went]]', 'went'],
+        ['**running**[[SPEAK:running]][[COCA:abc:c1]]', '**running**[[COCA:abc:c1]]']
+    ]) {
+        const result = speech.extract(source);
+        assert.equal(result.text, clean);
+        assert.equal(parser.parse(result.text), parser.parse(clean));
+        assert.equal(result.references.length, 1);
+    }
+    assert.deepEqual(speech.extract('**operating costs**').references, []);
+});
+
+test('every streamed marker prefix is hidden without swallowing the original word', () => {
+    const marker = '[[SPEAK:running]]';
+    for (let end = 0; end < marker.length; end++) {
+        const result = speech.extract('**running**' + marker.slice(0, end));
+        assert.equal(result.text, '**running**', marker.slice(0, end));
+        assert.deepEqual(result.references, []);
+    }
+    assert.equal(speech.extract('**running**' + marker).references.length, 1);
+    for (const source of ['**running[[SPEAK:running**', '**running[[SPEAK:running**\n下一段', '**running[[SPEAK:running**。']) {
+        assert.doesNotMatch(speech.extract(source).text, /SPEAK|\[\[/);
+        assert.match(speech.extract(source).text, /\*\*running\*\*/);
+    }
+});
+
+test('invalid references and ordinary Markdown brackets do not authorize speech', () => {
+    for (const marker of ['[[SPEAK:3273]]', '[[SPEAK:中文]]', '[[SPEAK:run/v]]', '[SPEAK:running]', '[[SPEAK:running]', '[[SPEAK running]]']) {
+        const result = speech.extract('running' + marker);
+        assert.equal(result.text, 'running');
+        assert.deepEqual(result.references, []);
+    }
+    for (const text of ['[说明](https://example.com)', '[1]', '普通[[备注]]', '**中文**']) assert.equal(speech.extract(text).text, text);
+    assert.equal(speech.extract('running[[SPEAK:running\nbad]] 后文').text, 'running 后文');
+    assert.equal(speech.extract('running[[SPEAK:running[[COCA:ns:c1]] 后文').text, 'running[[COCA:ns:c1]] 后文');
+});
+
+test('references locate their own occurrence instead of an earlier mention or similar spelling', () => {
+    const plain = 'running 是目标。这里的 running 是形容词。';
+    assert.deepEqual(speech.locateReference(plain, 'running 是目标。这里的 **running', 'running'), { start: 16, end: 23 });
+    assert.equal(speech.locateReference('running costs', 'running costs', 'run'), null);
+    assert.equal(speech.locateReference('running 是词', 'running 是词', 'running'), null);
+    assert.deepEqual(speech.locateReference('running costs 表示费用', '**running costs', 'running costs'), { start: 0, end: 13 });
+    assert.deepEqual(speech.locateReference('‘running’ 表示跑', '‘running’', 'running'), { start: 1, end: 8 });
+    assert.equal(speech.locateReference("runner's", "runner's", 'runner'), null);
+});
 
 test('pronounces English words and short phrases independently of rank or morphology', () => {
     for (const word of ['running', 'ran', 'went', 'algebraically', 'Quidditch', "don't", 'mother-in-law', 'running costs']) {

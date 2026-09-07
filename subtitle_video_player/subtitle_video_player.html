@@ -1732,7 +1732,7 @@
             border: 0;
             border-radius: 2px;
             background: transparent;
-            color: #737b88;
+            color: #7d8cf0;
             font: inherit;
             line-height: 1;
             vertical-align: -0.12em;
@@ -1755,18 +1755,18 @@
             height: 100%;
             fill: none;
             stroke: currentColor;
-            stroke-width: 1.6;
+            stroke-width: 1.8;
             stroke-linecap: round;
             stroke-linejoin: round;
         }
 
         .ai-chat-msg .lookup-speech-button:hover,
         .ai-chat-msg .lookup-speech-button[aria-pressed="true"] {
-            color: #356fcc;
+            color: #5e72df;
         }
 
         .lookup-speech-button:focus-visible {
-            outline: 1px solid #4D8DFF;
+            outline: 1px solid #7d8cf0;
             outline-offset: 2px;
         }
 
@@ -7648,6 +7648,8 @@
                     if (window.SvpCocaRank) {
                         fullText = window.SvpCocaRank.render(fullText, div.cocaContext);
                     }
+                    var speechContent = window.SvpLookupSpeech ? window.SvpLookupSpeech.extract(fullText) : { text: fullText, references: [] };
+                    fullText = speechContent.text;
                     if (!markdownReady) {
                         renderPlainTextWithTimeLinks(div, fullText);
                         return;
@@ -7667,7 +7669,9 @@
                     }
                     linkifyTimestamps(div);
                     if (div.isVocabularyLookup && lookupSpeech) {
-                        lookupSpeech.decorate(div);
+                        lookupSpeech.decorate(div, speechContent.references, function (prefix) {
+                            return DOMPurify.sanitize(marked.parse(repairUnclosedFences(prefix)), AI_SANITIZE_CONFIG);
+                        });
                         if (focusedSpeech) {
                             Array.from(div.querySelectorAll('.lookup-speech-button')).some(function (button) {
                                 if (button.getAttribute('aria-label') !== focusedSpeech) return false;
@@ -7888,6 +7892,7 @@
                             var errorLine = document.createElement('div');
                             errorLine.className = 'ai-chat-error-line';
                             var errorText = err && err.message ? err.message : '请求失败';
+                            if (window.SvpLookupSpeech) errorText = window.SvpLookupSpeech.extract(errorText).text;
                             errorLine.textContent = '⚠ ' + (window.SvpCocaRank ? window.SvpCocaRank.render(errorText, options.lookupText ? { candidates: [] } : null) : errorText);
                             aiDiv.appendChild(errorLine);
                             var retryButton = document.createElement('button');
@@ -9024,7 +9029,7 @@
                         '   - 属于本义项的常见搭配或固定词组\n' +
                         '3. 作品语境：结合当前字幕、本句场景简要说明这个词在这句里的使用效果，篇幅由你自行把握；作品本身上下文即是最好的用例，无需另造例句\n\n' +
                         '回答要求：\n' +
-                        '- 在词汇详解中首次介绍要学习的英语单词或短语时，使用 **英文词形** 加粗（短语整体加粗）；播放器会为其添加发音按钮。其他位置无需重复加粗该词，不要将整句英文、词性或中文说明放进同一组加粗标记。\n' +
+                        '- 发音标记：只在第2部分首次详细介绍本次学习的目标词或核心短语时，紧接词语附加 [[SPEAK:英文词形]]，英文词形须与紧邻的原文一致。例如 **running**[[SPEAK:running]]；标记放在加粗等格式的闭合符号之后。同一词只标一次，不标仅用于对比、词源或搭配举例的其他词。普通加粗自由使用，不代表发音；不要解释标记。\n' +
                         '- 把主要篇幅放在第2部分的词汇详解；若选中内容是词组，先点出关键实义词再讲它\n' +
                         '- 只聚焦当前上下文使用的这一个义项；不要罗列其他词典义项，也不要提供属于其他义项的搭配\n' +
                         '- 不要对原句做整句中文翻译，这不利于培养外语思维方式\n' +

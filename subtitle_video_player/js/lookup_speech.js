@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
     'use strict';
 
-    // Use ordinary Markdown emphasis, so copied text and conversation history need no markers.
+    // Only explicit speech references authorize buttons; emphasis remains purely visual.
     function spokenText(value) {
         var text = String(value || '').trim().replace(/\s+/g, ' ');
         if (text.length > 80 || !/^[a-z]+(?:['’\-][a-z]+)*(?: [a-z]+(?:['’\-][a-z]+)*){0,5}$/i.test(text)) return '';
@@ -17,6 +17,56 @@
         var american = english.filter(function (voice) { return /^en[-_]US$/i.test(voice.lang); });
         var choices = american.length ? american : english;
         return choices.find(function (voice) { return voice.default; }) || choices[0] || null;
+    }
+
+    function extract(value) {
+        var source = String(value || '');
+        var references = [];
+        var text = '';
+        var cursor = 0;
+        // Also remove malformed, single-bracket and unfinished references, but never execute them.
+        var pattern = /\[{1,2}SPEAK(?=[:\s\]]|$)(?:[^\[\]]*\]{1,2}|[a-z0-9: '’\-\t]*)/gi;
+        var match;
+        while ((match = pattern.exec(source))) {
+            text += source.slice(cursor, match.index);
+            var valid = /^\[\[SPEAK:([^\]\r\n]+)\]\]$/i.exec(match[0]);
+            var word = valid && spokenText(valid[1]);
+            if (word && references.length < 12) references.push({ text: word, before: text });
+            cursor = pattern.lastIndex;
+        }
+        text += source.slice(cursor);
+        ['[[SPEAK:', '[SPEAK:'].forEach(function (prefix) {
+            for (var length = prefix.length; length > 0; length--) {
+                if (text.toUpperCase().endsWith(prefix.slice(0, length))) {
+                    text = text.slice(0, -length);
+                    break;
+                }
+            }
+        });
+        return { text: text, references: references };
+    }
+
+    function wordMatches(text, word) {
+        var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+');
+        var pattern = new RegExp(escaped, 'gi');
+        var matches = [];
+        var match;
+        while ((match = pattern.exec(text))) {
+            var left = text.slice(0, match.index);
+            var right = text.slice(pattern.lastIndex);
+            if (/[a-z](?:['’\-])?$/i.test(left) || /^(?:['’\-])?[a-z]/i.test(right)) continue;
+            matches.push({ start: match.index, end: pattern.lastIndex });
+        }
+        return matches;
+    }
+
+    // Match the occurrence immediately preceding the marker, even when earlier mentions exist.
+    // Parsing only marker prefixes counts rendered words rather than Markdown URLs/attributes.
+    function locateReference(plainText, prefix, word) {
+        if (!spokenText(word)) return null;
+        var before = wordMatches(prefix, word);
+        if (!before.length || !/^[\s*_`“”‘’"「」『』]*$/.test(prefix.slice(before[before.length - 1].end))) return null;
+        return wordMatches(plainText, word)[before.length - 1] || null;
     }
 
     function createController(host, container, options) {
@@ -92,16 +142,34 @@
             }
         }
 
-        function decorate(message) {
+        function decorate(message, references, renderPrefix) {
             if (!supported) return;
             var seen = new Set();
-            message.querySelectorAll('strong, b').forEach(function (node) {
-                if (node.closest('a, pre, code, h1, h2, h3, h4, h5, h6') || node.querySelector('strong, b, code, a')) return;
-                var text = spokenText(node.textContent);
+            var walker = message.ownerDocument.createTreeWalker(message, 4);
+            var nodes = [];
+            var plainText = '';
+            var current;
+            while ((current = walker.nextNode())) {
+                nodes.push({ node: current, start: plainText.length, end: plainText.length + current.textContent.length });
+                plainText += current.textContent;
+            }
+            var insertions = [];
+            (references || []).forEach(function (reference) {
+                var text = reference.text;
                 var key = text.toLowerCase();
-                if (!text || seen.has(key)) return;
+                if (seen.has(key) || !renderPrefix) return;
+                var template = message.ownerDocument.createElement('template');
+                template.innerHTML = renderPrefix(reference.before);
+                var position = locateReference(plainText, template.content.textContent, text);
+                if (!position) return;
+                var target = nodes.find(function (entry) { return entry.start < position.end && entry.end >= position.end; });
+                if (!target || target.node.parentElement.closest('a, pre, code, h1, h2, h3, h4, h5, h6')) return;
                 seen.add(key);
-                if (node.nextElementSibling && buttonWords.has(node.nextElementSibling)) return;
+                insertions.push({ target: target, offset: position.end - target.start, text: text });
+            });
+            // Insert from the end so splitting one text node does not invalidate earlier offsets.
+            insertions.reverse().forEach(function (entry) {
+                var text = entry.text;
                 var button = message.ownerDocument.createElement('button');
                 button.type = 'button';
                 button.className = 'lookup-speech-button';
@@ -110,7 +178,14 @@
                 // Static, text-free artwork: selection/copy contains only the original answer.
                 button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg>';
                 buttonWords.set(button, { text: text, message: message });
-                node.after(button);
+                var node = entry.target.node;
+                if (entry.offset === node.textContent.length) {
+                    // Place the control outside inline emphasis when it ends with the target word.
+                    while (node.parentElement !== message && /^(STRONG|B|EM|I|SPAN|DEL|S)$/.test(node.parentElement.tagName) && !node.nextSibling) node = node.parentElement;
+                    node.after(button);
+                } else {
+                    node.splitText(entry.offset).before(button);
+                }
             });
             updateButtons();
         }
@@ -135,5 +210,5 @@
         return { decorate: decorate, speak: speak, stop: stop, supported: supported };
     }
 
-    return { spokenText: spokenText, chooseVoice: chooseVoice, createController: createController };
+    return { spokenText: spokenText, chooseVoice: chooseVoice, extract: extract, locateReference: locateReference, createController: createController };
 });

@@ -173,6 +173,17 @@ test('final ee, doubled z plurals and inserted k forms keep their regular lemmas
     }
 });
 
+test('malformed rank references preserve following prose and independent speech markers', async () => {
+    const context = rank.createContext('running', await decoded);
+    for (const end of [']', '']) {
+        const source = `**running**[[COCA:${context.namespace}:c1${end} 是形容词。\n\n**词源**：来自 run。`;
+        assert.equal(rank.render(source, context), '**running** 是形容词。\n\n**词源**：来自 run。');
+        assert.equal(rank.render(source, null), '**running** 是形容词。\n\n**词源**：来自 run。');
+    }
+    assert.equal(rank.render(`**running**[[COCA:${context.namespace}:c1][[SPEAK:running]] 表示持续。`, context), '**running**[[SPEAK:running]] 表示持续。');
+    assert.equal(rank.render(`**running**[[COCA:${context.namespace}:c1[[SPEAK:running]] 表示持续。`, context), '**running**[[SPEAK:running]] 表示持续。');
+});
+
 test('lookup strips model-written rank claims at every stream boundary, keeping only local ID labels', async () => {
     const context = rank.createContext('running', await decoded);
     const marker = `[[COCA:${context.namespace}:c1]]`;

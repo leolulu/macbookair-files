@@ -188,7 +188,7 @@
         // Keep ID markers intact. Remove model-written COCA clauses (including partial
         // streamed numbers) before inserting trusted local labels. Ordinary AI replies
         // do not use this filter. Commas/decimal points within numbers are not boundaries.
-        var cleaned = text.split(/(\[\[COCA:[\s\S]*?(?:\]\]|$))/gi).map(function (part) {
+        var cleaned = text.split(/(\[\[COCA:(?:[^\[\]]*\]{1,2}|[a-z0-9:]*))/gi).map(function (part) {
             if (/^\[\[COCA:/i.test(part)) return part;
             return part.replace(/[*_`]*(?:\bCOCA\b|(?:词频)?排名(?=\s*(?:第|为|是|[:：]|[0-9０-９一二三四五六七八九十百千万])))(?:[,，.](?=[0-9０-９])|[^\n，,。.;；!?！？()（）\[\]])*/gi, '');
         }).join('');
@@ -202,7 +202,8 @@
         var prefix = '[[COCA:';
         var list = context ? context.candidates : [];
         var byId = new Map(list.map(function (c) { return [c.candidate_id, c]; }));
-        var pattern = /\[\[COCA:[\s\S]*?(?:\]\]|$)/gi;
+        // A malformed rank reference must not swallow later prose or another marker.
+        var pattern = /\[\[COCA:(?:[^\[\]]*\]{1,2}|[a-z0-9:]*)/gi;
         var valid = [];
         text.replace(pattern, function (mark) {
             var match = /^\[\[COCA:([a-z0-9]+):(c\d+)\]\]$/.exec(mark);
