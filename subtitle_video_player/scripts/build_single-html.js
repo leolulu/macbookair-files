@@ -136,6 +136,7 @@ function build() {
     'assets/vendor/jquery/jquery-ui-1.13.2.min.js': readText(path.join(ROOT, 'assets/vendor/jquery/jquery-ui-1.13.2.min.js')),
     'assets/vendor/marked/marked.umd.js': readText(path.join(ROOT, 'assets/vendor/marked/marked.umd.js')),
     'js/ai_markdown_compat.js': readText(path.join(ROOT, 'js/ai_markdown_compat.js')),
+    'js/lookup_speech.js': readText(path.join(ROOT, 'js/lookup_speech.js')),
     'assets/vendor/dompurify/purify.min.js': readText(path.join(ROOT, 'assets/vendor/dompurify/purify.min.js')),
     'js/eudic_integration.js': readText(path.join(ROOT, 'js/eudic_integration.js')),
     'js/coca_data.js': readText(path.join(ROOT, 'js/coca_data.js')),
@@ -146,7 +147,7 @@ function build() {
   };
 
   const workerSource = patchWorkerJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr_worker.js')));
-  ['js/coca_data.js', 'js/coca_rank.js'].forEach((script) => {
+  ['js/coca_data.js', 'js/coca_rank.js', 'js/lookup_speech.js'].forEach((script) => {
     html = replaceOnce(html, `<script src="${script}"></script>`, `<script>\n${inlineScripts[script]}\n</script>`, `Failed to inline ${script}`);
   });
   const bootstrap = `<script>\nwindow.__SVP_SINGLE_FILE_BUNDLE__ = ${JSON.stringify({ workerSource })};\n</script>`;

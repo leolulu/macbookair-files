@@ -1721,6 +1721,55 @@
             font-weight: 600;
         }
 
+        /* Inline pronunciation controls stay within the existing text line box. */
+        .ai-chat-msg .lookup-speech-button {
+            position: relative;
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            padding: 0;
+            margin: 0 0.12em 0 0.18em;
+            border: 0;
+            border-radius: 2px;
+            background: transparent;
+            color: #737b88;
+            font: inherit;
+            line-height: 1;
+            vertical-align: -0.12em;
+            cursor: pointer;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .lookup-speech-button::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+        }
+
+        .lookup-speech-button svg {
+            display: inline;
+            vertical-align: top;
+            width: 100%;
+            height: 100%;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .ai-chat-msg .lookup-speech-button:hover,
+        .ai-chat-msg .lookup-speech-button[aria-pressed="true"] {
+            color: #356fcc;
+        }
+
+        .lookup-speech-button:focus-visible {
+            outline: 1px solid #4D8DFF;
+            outline-offset: 2px;
+        }
+
         /* ===== AI 气泡内 markdown 样式(紧凑聊天风) ===== */
         .ai-chat-msg-ai.ai-chat-md {
             white-space: normal;
@@ -2860,6 +2909,7 @@
     <script src="assets/vendor/jquery/jquery-ui-1.13.2.min.js"></script>
     <script src="assets/vendor/marked/marked.umd.js"></script>
     <script src="js/ai_markdown_compat.js"></script>
+    <script src="js/lookup_speech.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/eudic_integration.js"></script>
     <script src="js/coca_data.js"></script>
@@ -6812,6 +6862,12 @@
                 var chatWindow = document.getElementById('aiChatWindow');
                 var chatHeader = document.getElementById('aiChatHeader');
                 var messagesBox = document.getElementById('aiChatMessages');
+                var lookupSpeech = window.SvpLookupSpeech ? window.SvpLookupSpeech.createController(window, messagesBox, {
+                    beforeSpeak: function () {
+                        if (!videoElement.paused) videoElement.pause();
+                    },
+                    onError: function (message) { showFloatingToast(message, 'info', 3000); }
+                }) : null;
                 var chatInput = document.getElementById('aiChatInput');
                 var sendButton = document.getElementById('aiChatSend');
                 var toggleButton = document.getElementById('toggleAiChat');
@@ -7587,6 +7643,8 @@
                 }
 
                 function renderAiMessageContent(div, fullText, reportSanitizedRemoval) {
+                    var focusedSpeech = div.contains(document.activeElement) && document.activeElement.classList.contains('lookup-speech-button')
+                        ? document.activeElement.getAttribute('aria-label') : null;
                     if (window.SvpCocaRank) {
                         fullText = window.SvpCocaRank.render(fullText, div.cocaContext);
                     }
@@ -7608,6 +7666,16 @@
                         console.warn('AI 回复中有内容被消毒移除:', DOMPurify.removed);
                     }
                     linkifyTimestamps(div);
+                    if (div.isVocabularyLookup && lookupSpeech) {
+                        lookupSpeech.decorate(div);
+                        if (focusedSpeech) {
+                            Array.from(div.querySelectorAll('.lookup-speech-button')).some(function (button) {
+                                if (button.getAttribute('aria-label') !== focusedSpeech) return false;
+                                button.focus({ preventScroll: true });
+                                return true;
+                            });
+                        }
+                    }
                 }
 
                 // ---------- SSE 流式请求 ----------
@@ -7730,6 +7798,7 @@
                     activeAbortController = new AbortController();
                     var requestController = activeAbortController;
                     var requestConversationId = conversationId;
+                    aiDiv.isVocabularyLookup = !!options.lookupText;
                     aiDiv.cocaContext = options.lookupText ? (options.cocaContext || { candidates: [] }) : null;
                     var accumulated = '';
                     var streamRenderTimer = null;
@@ -7929,6 +7998,7 @@
 
                 // ---------- 会话操作 ----------
                 newConversationButton.addEventListener('click', function () {
+                    if (lookupSpeech) lookupSpeech.stop();
                     if (isGenerating && activeAbortController) {
                         activeAbortController.abort();
                     }
@@ -8213,6 +8283,7 @@
                 }
 
                 function closeChatWindow() {
+                    if (lookupSpeech) lookupSpeech.stop();
                     captureGeometry();
                     resetEudicAuthorizationInput();
                     chatWindow.hidden = true;
@@ -8953,6 +9024,7 @@
                         '   - 属于本义项的常见搭配或固定词组\n' +
                         '3. 作品语境：结合当前字幕、本句场景简要说明这个词在这句里的使用效果，篇幅由你自行把握；作品本身上下文即是最好的用例，无需另造例句\n\n' +
                         '回答要求：\n' +
+                        '- 在词汇详解中首次介绍要学习的英语单词或短语时，使用 **英文词形** 加粗（短语整体加粗）；播放器会为其添加发音按钮。其他位置无需重复加粗该词，不要将整句英文、词性或中文说明放进同一组加粗标记。\n' +
                         '- 把主要篇幅放在第2部分的词汇详解；若选中内容是词组，先点出关键实义词再讲它\n' +
                         '- 只聚焦当前上下文使用的这一个义项；不要罗列其他词典义项，也不要提供属于其他义项的搭配\n' +
                         '- 不要对原句做整句中文翻译，这不利于培养外语思维方式\n' +
