@@ -2,7 +2,6 @@ import argparse
 import os
 import re
 import shutil
-import subprocess
 import threading
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -19,7 +18,6 @@ pic_max_height = 475
 PRELOAD_IMG_URL = "assets/Russian-Cute-Sexy-Girl-400x400-webp-q70.webp"
 VIDEO_WARNING_IMG_URL = "assets/video_warning.png"
 TRASH_FOLDER_PATH = "./static/img/.trash"
-JPG_FROM_WEBP_FOLDER = "jpg_from_webp"
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".avif", ".jfif"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v"}
 MEDIA_EXTS = IMG_EXTS | VIDEO_EXTS
@@ -57,11 +55,8 @@ show_moving_promote = False
 tbnl_display_mode = False
 native_image_loading = True
 
-exe_for_webp = ThreadPoolExecutor(max_workers=8)
 exe_for_zip = ThreadPoolExecutor(max_workers=1)
-lock = threading.Lock()
 settings_lock = threading.Lock()
-converting_webp = []
 
 os.makedirs("./static/img", exist_ok=True)
 
@@ -169,9 +164,7 @@ def trash_remote_urls(urls_to_delete):
         return removed_line_count, affected_folders
     os.makedirs(TRASH_FOLDER_PATH, exist_ok=True)
     for root, dirs_, files_ in os.walk("./static/img"):
-        dirs_[:] = [
-            folder for folder in dirs_ if folder not in {".trash", JPG_FROM_WEBP_FOLDER}
-        ]
+        dirs_[:] = [folder for folder in dirs_ if folder != ".trash"]
         for file_ in files_:
             if os.path.splitext(file_)[-1].lower() != ".txt":
                 continue
@@ -263,9 +256,7 @@ def trash_title_txt_for_media(media_path):
 def folder_tree_has_media(folder_path):
     """判断目录树中是否还有本地媒体或 TXT 远程媒体来源。"""
     for root, dirs_, files_ in os.walk(folder_path):
-        dirs_[:] = [
-            folder for folder in dirs_ if folder not in {".trash", JPG_FROM_WEBP_FOLDER}
-        ]
+        dirs_[:] = [folder for folder in dirs_ if folder != ".trash"]
         for file_ in files_:
             file_path = os.path.join(root, file_)
             file_ext = os.path.splitext(file_)[-1].lower()
@@ -288,7 +279,7 @@ def get_affected_folders(folder_paths):
         except ValueError:
             continue
         while current != static_img_root:
-            if os.path.basename(current) not in {".trash", JPG_FROM_WEBP_FOLDER}:
+            if os.path.basename(current) != ".trash":
                 affected_folders.add(current)
             current = os.path.dirname(current)
     return sorted(
@@ -346,14 +337,11 @@ def get_img_path_list(img_path_list: List[str]):
     for root, dirs_, files_ in os.walk("./static/img"):
         dirs_[:] = [folder for folder in dirs_ if folder != ".trash"]
         root_abs = os.path.abspath(root)
-        root_basename = os.path.basename(root)
         for file_ in files_:
             file_ext = os.path.splitext(file_)[-1].lower()
             if is_ignored_file(file_):
                 continue
             if root_abs == trash_folder_abs:
-                continue
-            if root_basename == JPG_FROM_WEBP_FOLDER:
                 continue
             if file_ext == ".txt":
                 txt_abs = os.path.abspath(os.path.join(root, file_))
@@ -365,33 +353,6 @@ def get_img_path_list(img_path_list: List[str]):
                         remote_url_order.setdefault(url_, (txt_key, url_idx))
                     temp_img_list.extend(urls)
                 continue
-            if (
-                (file_ext == ".webp")
-                and (not os.path.exists(os.path.join(root, JPG_FROM_WEBP_FOLDER, file_.replace(".webp", ".jpg"))))
-                and (file_ not in converting_webp)
-            ):
-                new_folder = os.path.join(root, JPG_FROM_WEBP_FOLDER)
-                with lock:
-                    if not os.path.exists(new_folder):
-                        os.makedirs(new_folder)
-                new_path = os.path.join(new_folder, os.path.splitext(file_)[0] + ".jpg")
-
-                def _task_for_webp(file_, new_path, root):
-                    command = f'ffmpeg -hide_banner -i "{os.path.join(root, file_)}" -q:v 1 -y "{new_path}"'
-                    # print(f"检测到webp，将转换成jpg，指令为: {command}")
-                    try:
-                        subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    except Exception as e:
-                        print(f"webp->jpg转换失败: {e}\n转换命令: {command}")
-                        if isinstance(e, subprocess.CalledProcessError):
-                            print(f"详细错误信息(stdout): {e.stdout.decode()}")
-                            print(f"详细错误信息(stderr): {e.stderr.decode()}")
-                    finally:
-                        converting_webp.remove(file_)
-
-                exe_for_webp.submit(_task_for_webp, file_, new_path, root)
-                converting_webp.append(file_)
-
             if file_ext == ".zip":
 
                 def _task_for_zip(file_, root):
@@ -786,13 +747,7 @@ def popup_100_pics(n_clicks):
                     title=None if is_remote(img_path) else get_txt_title_for_image(img_path),
                     **({"data-native-loading": "true"} if native_image_loading and not is_remote(img_path) else {}),
                 ),
-                href=os.path.join(
-                    os.path.dirname(img_path),
-                    JPG_FROM_WEBP_FOLDER,
-                    os.path.basename(img_path).replace(".webp", ".jpg"),
-                )
-                if img_path.endswith(".webp") and not is_remote(img_path)
-                else img_path,
+                href=img_path,
                 target="_blank",
                 className="image-viewer-link",
             )
