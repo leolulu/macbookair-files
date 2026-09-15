@@ -278,6 +278,9 @@ def get_affected_folders(folder_paths):
                 continue
         except ValueError:
             continue
+        relative_parts = os.path.relpath(current, static_img_root).split(os.sep)
+        if ".trash" in relative_parts:
+            continue
         while current != static_img_root:
             if os.path.basename(current) != ".trash":
                 affected_folders.add(current)
@@ -291,8 +294,8 @@ def get_affected_folders(folder_paths):
 
 def clean_empty_folders(folder_paths=None):
     """
-    仅在本次受影响目录及其祖先中，从最深层向上回收媒体耗尽后残留的
-    普通 TXT 和忽略类型附属文件，随后删除真正为空的目录。
+    仅在本次受影响目录及其祖先中，递归回收媒体耗尽子树里残留的
+    普通 TXT 和忽略类型附属文件，随后从最深层向上删除真正为空的目录。
     """
     trashed_txt_count = 0
     trashed_ignored_file_count = 0
@@ -302,29 +305,38 @@ def clean_empty_folders(folder_paths=None):
             continue
         if folder_tree_has_media(root):
             continue
-        for file_ in os.listdir(root):
-            file_path = os.path.join(root, file_)
-            is_plain_txt = (
-                os.path.isfile(file_path)
-                and os.path.splitext(file_)[-1].lower() == ".txt"
-                and not extract_media_urls(file_path)
-            )
-            is_ignored = os.path.isfile(file_path) and is_ignored_file(file_)
-            if is_plain_txt or is_ignored:
-                try:
-                    move_to_trash(file_path)
-                    if is_plain_txt:
-                        trashed_txt_count += 1
-                    else:
-                        trashed_ignored_file_count += 1
-                except Exception as e:
-                    print(f"回收孤立附属文件失败: {file_path}, {e}")
-        try:
-            if not os.listdir(root):
-                os.rmdir(root)
-                removed_dir_count += 1
-        except OSError:
-            pass
+
+        folders_to_clean = []
+        for current_root, dirs_, _ in os.walk(root):
+            dirs_[:] = [folder for folder in dirs_ if folder != ".trash"]
+            folders_to_clean.append(current_root)
+
+        for current_root in reversed(folders_to_clean):
+            if not os.path.isdir(current_root):
+                continue
+            for file_ in os.listdir(current_root):
+                file_path = os.path.join(current_root, file_)
+                is_plain_txt = (
+                    os.path.isfile(file_path)
+                    and os.path.splitext(file_)[-1].lower() == ".txt"
+                    and not extract_media_urls(file_path)
+                )
+                is_ignored = os.path.isfile(file_path) and is_ignored_file(file_)
+                if is_plain_txt or is_ignored:
+                    try:
+                        move_to_trash(file_path)
+                        if is_plain_txt:
+                            trashed_txt_count += 1
+                        else:
+                            trashed_ignored_file_count += 1
+                    except Exception as e:
+                        print(f"回收孤立附属文件失败: {file_path}, {e}")
+            try:
+                if not os.listdir(current_root):
+                    os.rmdir(current_root)
+                    removed_dir_count += 1
+            except OSError:
+                pass
     return trashed_txt_count, trashed_ignored_file_count, removed_dir_count
 
 
