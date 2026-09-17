@@ -22,6 +22,12 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", "
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".flv", ".mkv", ".ts", ".webm", ".m4v"}
 MEDIA_EXTS = IMG_EXTS | VIDEO_EXTS
 LOCAL_MEDIA_EXTS = MEDIA_EXTS | {".tbnl"}
+OTHER_ARCHIVE_EXTS = {
+    ".rar", ".7z", ".tar", ".gz", ".gzip", ".tgz", ".bz2", ".bzip2", ".tbz", ".tbz2",
+    ".xz", ".txz", ".lz", ".lzma", ".lzip", ".lzo", ".lz4", ".tlz", ".z", ".zst", ".zstd",
+    ".tzst", ".br", ".zipx", ".cab", ".arj", ".ace", ".cpio", ".lha", ".lzh", ".sit", ".sitx",
+    ".xar", ".wim",
+}
 IGNORED_FILE_EXTS = {
     ".htm",
     ".html",
@@ -254,13 +260,13 @@ def trash_title_txt_for_media(media_path):
 
 
 def folder_tree_has_media(folder_path):
-    """判断目录树中是否还有本地媒体或 TXT 远程媒体来源。"""
+    """判断目录树中是否还有本地媒体、压缩包或 TXT 远程媒体来源。"""
     for root, dirs_, files_ in os.walk(folder_path):
         dirs_[:] = [folder for folder in dirs_ if folder != ".trash"]
         for file_ in files_:
             file_path = os.path.join(root, file_)
             file_ext = os.path.splitext(file_)[-1].lower()
-            if file_ext in LOCAL_MEDIA_EXTS:
+            if file_ext in LOCAL_MEDIA_EXTS or file_ext in OTHER_ARCHIVE_EXTS:
                 return True
             if file_ext == ".txt" and extract_media_urls(file_path):
                 return True
@@ -373,6 +379,9 @@ def get_img_path_list(img_path_list: List[str]):
                     os.remove(os.path.join(root, file_))
 
                 exe_for_zip.submit(_task_for_zip, file_, root)
+
+            elif file_ext in OTHER_ARCHIVE_EXTS:
+                continue
 
             temp_img_list.append(os.path.join(root, file_).replace("\\", "/").replace("#", "%23"))
     temp_img_list.sort(key=media_sort_key)
