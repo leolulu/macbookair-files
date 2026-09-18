@@ -2865,6 +2865,7 @@
                 <label for="aiSelectionBubblePosition">划词气泡位置</label>
                 <select id="aiSelectionBubblePosition">
                     <option value="auto">智能定位（默认）</option>
+                    <option value="subtitle-top">字幕区顶部</option>
                     <option value="subtitle-bottom">字幕区底部</option>
                     <option value="below">选区下方优先</option>
                 </select>
@@ -7067,7 +7068,7 @@
                 }
 
                 function isValidSelectionBubblePosition(value) {
-                    return value === 'auto' || value === 'subtitle-bottom' || value === 'below';
+                    return value === 'auto' || value === 'subtitle-top' || value === 'subtitle-bottom' || value === 'below';
                 }
 
                 function getEffectiveSelectionBubblePosition() {
@@ -8864,7 +8865,7 @@
                     var positionMode = getEffectiveSelectionBubblePosition();
                     var left = info.rect.left + info.rect.width / 2 - bubbleRect.width / 2;
                     var top;
-                    if (positionMode === 'subtitle-bottom') {
+                    if (positionMode === 'subtitle-top' || positionMode === 'subtitle-bottom') {
                         var subtitlesRect = subtitlesContainer.getBoundingClientRect();
                         var subtitleMinLeft = Math.max(8, subtitlesRect.left + 8);
                         var subtitleMaxLeft = Math.min(
@@ -8877,9 +8878,13 @@
                         }
                         var visibleSubtitleTop = Math.max(8, subtitlesRect.top);
                         var visibleSubtitleBottom = Math.min(window.innerHeight - 8, subtitlesRect.bottom);
-                        top = visibleSubtitleBottom - bubbleRect.height;
-                        if (top < visibleSubtitleTop) {
+                        if (positionMode === 'subtitle-top') {
                             top = visibleSubtitleTop;
+                        } else {
+                            top = visibleSubtitleBottom - bubbleRect.height;
+                            if (top < visibleSubtitleTop) {
+                                top = visibleSubtitleTop;
+                            }
                         }
                     } else if (positionMode === 'below') {
                         top = info.rect.bottom + 8;
