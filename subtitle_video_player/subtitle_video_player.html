@@ -3042,6 +3042,126 @@
             return [h, m, s + ',' + ms].join(':');
         }
         
+        // 辅助函数：合并重复和渐进式字幕
+        function mergeAssSubtitles(srts, options) {
+            options = options || {};
+            var timeGapThreshold = options.timeGapThreshold || 0.1;
+            var lengthRatioThreshold = options.lengthRatioThreshold || 2.0;
+            
+            if (srts.length === 0) return [];
+            
+            // 步骤 1: 按文本分组
+            var textGroups = new Map();
+            for (var i = 0; i < srts.length; i++) {
+                var key = srts[i].text.trim();
+                if (!textGroups.has(key)) {
+                    textGroups.set(key, []);
+                }
+                textGroups.get(key).push(srts[i]);
+            }
+            
+            // 步骤 2: 对每组内的相同文本，合并时间段
+            var mergedByText = [];
+            textGroups.forEach(function(group, text) {
+                if (group.length === 1) {
+                    mergedByText.push(group[0]);
+                } else {
+                    // 按时间排序
+                    group.sort(function(a, b) {
+                        var aStart = parseAssTime(a.start);
+                        var bStart = parseAssTime(b.start);
+                        return aStart - bStart;
+                    });
+                    
+                    // 合并连续的时间段
+                    var merged = [];
+                    var current = {
+                        start: group[0].start,
+                        end: group[0].end,
+                        text: group[0].text
+                    };
+                    
+                    for (var i = 1; i < group.length; i++) {
+                        var currentEnd = parseAssTime(current.end);
+                        var nextStart = parseAssTime(group[i].start);
+                        var nextEnd = parseAssTime(group[i].end);
+                        var timeGap = nextStart - currentEnd;
+                        
+                        if (timeGap <= timeGapThreshold) {
+                            // 扩展时间范围
+                            if (nextEnd > currentEnd) {
+                                current.end = group[i].end;
+                            }
+                        } else {
+                            // 时间不连续，保存当前并开始新的
+                            merged.push(current);
+                            current = {
+                                start: group[i].start,
+                                end: group[i].end,
+                                text: group[i].text
+                            };
+                        }
+                    }
+                    merged.push(current);
+                    
+                    for (var i = 0; i < merged.length; i++) {
+                        mergedByText.push(merged[i]);
+                    }
+                }
+            });
+            
+            // 步骤 3: 重新排序
+            mergedByText.sort(function(a, b) {
+                var aStart = parseAssTime(a.start);
+                var bStart = parseAssTime(b.start);
+                if (aStart !== bStart) return aStart - bStart;
+                var aEnd = parseAssTime(a.end);
+                var bEnd = parseAssTime(b.end);
+                return aEnd - bEnd;
+            });
+            
+            // 步骤 4: 处理渐进式（按排序后的顺序线性扫描）
+            var final = [];
+            var current = {
+                start: mergedByText[0].start,
+                end: mergedByText[0].end,
+                text: mergedByText[0].text
+            };
+            
+            for (var i = 1; i < mergedByText.length; i++) {
+                var prevText = current.text.trim();
+                var nextText = mergedByText[i].text.trim();
+                var currentEnd = parseAssTime(current.end);
+                var nextStart = parseAssTime(mergedByText[i].start);
+                var timeGap = nextStart - currentEnd;
+                
+                // 检查渐进式包含
+                if (timeGap <= timeGapThreshold && 
+                    nextText.indexOf(prevText) === 0 && 
+                    prevText.length > 0) {
+                    
+                    var lengthRatio = nextText.length / prevText.length;
+                    if (lengthRatio <= lengthRatioThreshold) {
+                        // 渐进式合并
+                        current.text = mergedByText[i].text;
+                        current.end = mergedByText[i].end;
+                        continue;
+                    }
+                }
+                
+                // 不能合并
+                final.push(current);
+                current = {
+                    start: mergedByText[i].start,
+                    end: mergedByText[i].end,
+                    text: mergedByText[i].text
+                };
+            }
+            final.push(current);
+            
+            return final;
+        }
+        
         // 主函数：ASS 转 SRT
         function ass2srt(assText) {
             var lines = String(assText).split(/\r*\n/);
@@ -3082,16 +3202,22 @@
                 }
             }
             
-            // 步骤 3: 排序并转换为 SRT 格式
-            var i = 1;
-            var output = srts.sort(function(d1, d2) {
+            // 步骤 3: 排序
+            srts.sort(function(d1, d2) {
                 var s1 = parseAssTime(d1.start);
                 var s2 = parseAssTime(d2.start);
                 var e1 = parseAssTime(d1.end);
                 var e2 = parseAssTime(d2.end);
                 
                 return s1 != s2 ? s1 - s2 : e1 - e2;
-            }).map(function(srt) {
+            });
+            
+            // 步骤 4: 合并重复和渐进式字幕
+            srts = mergeAssSubtitles(srts);
+            
+            // 步骤 5: 转换为 SRT 格式
+            var i = 1;
+            var output = srts.map(function(srt) {
                 var start = assTimeToSrtTime(srt.start);
                 var end = assTimeToSrtTime(srt.end);
                 return (i++) + '\n'
