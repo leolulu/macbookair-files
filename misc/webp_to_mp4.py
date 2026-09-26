@@ -98,9 +98,9 @@ def convert(source, destination):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path, help="Folder containing animated WebP files")
-    parser.add_argument("--recursive", action="store_true", help="Include subfolders")
-    parser.add_argument("--overwrite", action="store_true", help="Replace existing MP4 files")
-    parser.add_argument("--delete-source", action="store_true",
+    parser.add_argument("-r", "--recursive", action="store_true", help="Include subfolders")
+    parser.add_argument("-o", "--overwrite", action="store_true", help="Replace existing MP4 files")
+    parser.add_argument("-d", "--delete-source", action="store_true",
                         help="Delete each WebP only after its new MP4 passes verification")
     args = parser.parse_args()
 
