@@ -11,7 +11,9 @@ import shutil
 import subprocess
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from itertools import repeat
 from pathlib import Path
 
 
@@ -23,13 +25,19 @@ def run(command):
 
 
 def is_animated(path):
+    with path.open("rb") as source:
+        header = source.read(12)
+    if len(header) != 12 or header[:4] != b"RIFF" or header[8:] != b"WEBP":
+        raise RuntimeError("file does not have a WebP header")
     data = json.loads(run([
         "ffprobe", "-v", "error", "-count_packets", "-select_streams", "v:0",
         "-show_entries", "stream=codec_name,nb_read_packets", "-of", "json", str(path),
     ]))
     streams = data.get("streams", [])
-    return bool(streams and streams[0].get("codec_name") == "webp_anim"
-                and int(streams[0].get("nb_read_packets", 0)) > 1)
+    if not streams:
+        raise RuntimeError("WebP probe found no video stream")
+    return (streams[0].get("codec_name") == "webp_anim"
+            and int(streams[0].get("nb_read_packets", 0)) > 1)
 
 
 def video_info(path, webp=False):
@@ -95,6 +103,37 @@ def convert(source, destination):
         temporary.unlink(missing_ok=True)
 
 
+def process_file(source, overwrite, delete_source):
+    destination = source.with_suffix(".mp4")
+    converted = deleted = skipped = failed = 0
+    messages = []
+    try:
+        if destination.exists() and not overwrite:
+            messages.append((False, f"Skip (MP4 exists): {source}"))
+            skipped = 1
+        elif not is_animated(source):
+            messages.append((False, f"Skip (static WebP): {source}"))
+            skipped = 1
+        else:
+            source_stat = source.stat()
+            convert(source, destination)
+            messages.append((False, f"Converted: {source} -> {destination}"))
+            converted = 1
+            if delete_source:
+                current_stat = source.stat()
+                if (current_stat.st_size != source_stat.st_size
+                        or current_stat.st_mtime_ns != source_stat.st_mtime_ns
+                        or current_stat.st_ino != source_stat.st_ino):
+                    raise RuntimeError("source changed during conversion; WebP was kept")
+                source.unlink()
+                messages.append((False, f"Deleted source: {source}"))
+                deleted = 1
+    except (OSError, ValueError, RuntimeError) as error:
+        messages.append((True, f"Failed: {source}: {error}"))
+        failed = 1
+    return converted, deleted, skipped, failed, messages
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path, help="Folder containing animated WebP files")
@@ -102,10 +141,14 @@ def main():
     parser.add_argument("-o", "--overwrite", action="store_true", help="Replace existing MP4 files")
     parser.add_argument("-d", "--delete-source", action="store_true",
                         help="Delete each WebP only after its new MP4 passes verification")
+    parser.add_argument("-j", "--jobs", type=int, default=1,
+                        help="Number of files to process concurrently (default: 1)")
     args = parser.parse_args()
 
     if not args.folder.is_dir():
         parser.error(f"Folder does not exist: {args.folder}")
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
     for executable in ("ffmpeg", "ffprobe"):
         if shutil.which(executable) is None:
             parser.error(f"{executable} was not found on PATH")
@@ -114,32 +157,16 @@ def main():
     sources = sorted((p for p in files if p.is_file() and p.suffix.lower() == ".webp"),
                      key=lambda p: str(p).lower())
     converted = deleted = skipped = failed = 0
-    for source in sources:
-        destination = source.with_suffix(".mp4")
-        try:
-            if destination.exists() and not args.overwrite:
-                print(f"Skip (MP4 exists): {source}")
-                skipped += 1
-            elif not is_animated(source):
-                print(f"Skip (static WebP): {source}")
-                skipped += 1
-            else:
-                source_stat = source.stat()
-                convert(source, destination)
-                print(f"Converted: {source} -> {destination}")
-                converted += 1
-                if args.delete_source:
-                    current_stat = source.stat()
-                    if (current_stat.st_size != source_stat.st_size
-                            or current_stat.st_mtime_ns != source_stat.st_mtime_ns
-                            or current_stat.st_ino != source_stat.st_ino):
-                        raise RuntimeError("source changed during conversion; WebP was kept")
-                    source.unlink()
-                    print(f"Deleted source: {source}")
-                    deleted += 1
-        except (OSError, ValueError, RuntimeError) as error:
-            print(f"Failed: {source}: {error}", file=sys.stderr)
-            failed += 1
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        results = pool.map(process_file, sources, repeat(args.overwrite),
+                           repeat(args.delete_source))
+        for result in results:
+            converted += result[0]
+            deleted += result[1]
+            skipped += result[2]
+            failed += result[3]
+            for is_error, message in result[4]:
+                print(message, file=sys.stderr if is_error else sys.stdout)
 
     print(f"Done: {converted} converted, {deleted} sources deleted, "
           f"{skipped} skipped, {failed} failed")
