@@ -935,6 +935,7 @@ def _convert_svg_to_mp4(svg_file_path: str):
 def process_video(args, **kwargs):
     video_file_extensions = [
         ".mp4",
+        ".m4v",
         ".flv",
         ".avi",
         ".mpg",
