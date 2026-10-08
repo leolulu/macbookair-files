@@ -1452,6 +1452,22 @@
     </div>
 
     <script>
+        // 只调整文件列表内部的滚动位置，不依赖视频或分页状态
+        function ensureFileItemVisible(fileList, fileItem) {
+            if (!fileList || !fileItem || fileList.clientHeight === 0) return;
+
+            const listRect = fileList.getBoundingClientRect();
+            const itemRect = fileItem.getBoundingClientRect();
+            const visibleTop = listRect.top + fileList.clientTop;
+            const visibleBottom = visibleTop + fileList.clientHeight;
+
+            if (itemRect.height > fileList.clientHeight || itemRect.top < visibleTop) {
+                fileList.scrollTop += itemRect.top - visibleTop;
+            } else if (itemRect.bottom > visibleBottom) {
+                fileList.scrollTop += itemRect.bottom - visibleBottom;
+            }
+        }
+
         class VideoThumbnailPreview {
             constructor() {
                 this.currentVideo = null;
@@ -1775,31 +1791,27 @@
                         return; // 如果正在输入，跳过键盘事件
                     }
 
-                    // 如果没有加载视频，不响应键盘事件
+                    // 文件导航只依赖本地文件列表，不依赖视频加载和分页状态
+                    if (e.key === 'PageUp' || e.key === 'PageDown') {
+                        const isLocalTabActive = document.getElementById('localTab')?.classList.contains('active');
+                        const hasMultipleFiles = isLocalTabActive && !this.currentVideoUrl && this.videoFiles.length > 1;
+                        if (hasMultipleFiles) {
+                            e.preventDefault();
+                            const index = this.currentVideoIndex + (e.key === 'PageUp' ? -1 : 1);
+                            if (index >= 0 && index < this.videoFiles.length) {
+                                this.switchToFile(index);
+                            }
+                        }
+                        return;
+                    }
+
+                    // 视频分页仍需要已加载的视频
                     if (!this.originalVideo) return;
 
                     const { pageDuration } = this.getPageConfig();
                     const videoDuration = this.originalVideo.duration;
-                    const isLocalTabActive = document.getElementById('localTab')?.classList.contains('active');
-                    const hasMultipleFiles = isLocalTabActive && !this.currentVideoUrl && this.videoFiles.length > 1;
 
                     switch (e.key) {
-                        case 'PageUp':
-                            if (hasMultipleFiles) {
-                                e.preventDefault();
-                                if (this.currentVideoIndex > 0) {
-                                    this.switchToFile(this.currentVideoIndex - 1);
-                                }
-                            }
-                            break;
-                        case 'PageDown':
-                            if (hasMultipleFiles) {
-                                e.preventDefault();
-                                if (this.currentVideoIndex < this.videoFiles.length - 1) {
-                                    this.switchToFile(this.currentVideoIndex + 1);
-                                }
-                            }
-                            break;
                         case 'ArrowLeft':
                         case 'ArrowUp':
                             e.preventDefault();
@@ -3748,6 +3760,19 @@
                 });
             }
 
+            // 只更新列表选中状态，保留节点和已加载的文件信息
+            updateFileSelection() {
+                const fileList = document.getElementById('fileList');
+                if (!fileList) return;
+
+                const fileItems = fileList.querySelectorAll('.file-item');
+                fileItems.forEach((fileItem, index) => {
+                    fileItem.classList.toggle('active', index === this.currentVideoIndex);
+                });
+
+                ensureFileItemVisible(fileList, fileItems[this.currentVideoIndex]);
+            }
+
             // 切换到指定文件
             // 在 switchToFile 时也重置 URL
             async switchToFile(index) {
@@ -3759,7 +3784,7 @@
                 this.currentVideo = this.videoFiles[index];
 
                 // 更新文件列表的选中状态
-                this.updateFileList();
+                this.updateFileSelection();
 
                 // 重置分页状态
                 this.currentPage = 0;
