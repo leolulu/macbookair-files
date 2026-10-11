@@ -662,7 +662,7 @@
         /* 动态网格布局类 */
         .video-grid-dynamic {
             --grid-columns: 4;
-            --grid-rows: 4;
+            --grid-rows: 3;
             --row-height: 120px;
             grid-template-columns: repeat(var(--grid-columns), 1fr);
             grid-template-rows: repeat(var(--grid-rows), var(--row-height));
@@ -1295,7 +1295,7 @@
         <div class="control-section">
             <div class="control-group">
                 <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;">
-                    <input type="checkbox" id="autoCalculateCols" onchange="toggleAutoCalculateCols()"
+                    <input type="checkbox" id="autoCalculateCols" onchange="toggleAutoCalculateCols()" checked
                         style="width: 16px; height: 16px;">
                     <span style="font-size: 14px; color: #cccccc;">自动计算列数</span>
                 </label>
@@ -1303,7 +1303,7 @@
                     <div class="grid-control-row">
                         <span class="grid-label">行数:</span>
                         <div class="layout-flex-center layout-flex-center-tall">
-                            <input type="number" id="gridSize" min="1" max="6" value="4" onchange="updateGrid()">
+                            <input type="number" id="gridSize" min="1" max="6" value="3" onchange="updateGrid()">
                             <div class="controls-wrapper">
                                 <div class="number-controls vertical">
                                     <div class="number-btn" onclick="changeGridSize(1, 1)">▲</div>
@@ -1332,7 +1332,7 @@
                     </div>
                 </div>
             </div>
-            <div class="grid-size-display" id="gridDisplay">4×4 = 16个</div>
+            <div class="grid-size-display" id="gridDisplay">3×4 = 12个</div>
         </div>
 
         <div class="control-section">
@@ -4228,6 +4228,7 @@
 
         // 实例化应用
         const app = new VideoThumbnailPreview();
+        toggleAutoCalculateCols();
 
         function selectVideo() {
             app.selectVideo();
