@@ -75,6 +75,21 @@
             width: 100%;
         }
 
+        #duration {
+            transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #duration.temporary-duration {
+            background: #46453f;
+            border-color: rgba(247, 193, 55, 0.5);
+            box-shadow: 0 0 0 1px rgba(247, 193, 55, 0.14), 0 0 9px rgba(247, 193, 55, 0.12);
+        }
+
+        #duration.temporary-duration:focus {
+            border-color: rgba(247, 193, 55, 0.7);
+            box-shadow: 0 0 0 1px rgba(247, 193, 55, 0.2), 0 0 10px rgba(247, 193, 55, 0.18);
+        }
+
         .btn {
             background: #007acc;
             color: white;
@@ -710,6 +725,11 @@
             text-align: center;
         }
 
+        #effectiveDurationHint.temporary-duration-hint {
+            color: #b8a266;
+            text-shadow: 0 0 6px rgba(247, 193, 55, 0.16);
+        }
+
         /* 拖放效果类 */
         .btn.drag-over {
             background-color: #F7C137;
@@ -1339,6 +1359,7 @@
             <div class="control-group">
                 <label>每格时长(秒):</label>
                 <input type="number" id="duration" min="1" max="300" value="30" onchange="updatePreview()">
+                <div id="effectiveDurationHint" class="hint-text hidden" aria-live="polite"></div>
             </div>
             <div class="control-group">
                 <label>快捷选择:</label>
@@ -2648,6 +2669,7 @@
                     }
 
                     this.calculatePages();
+                    this.updateEffectiveDurationUI();
                     this.updatePaginationUI();
                     this.renderGrid();
                     this.updateFileProgress();
@@ -2666,14 +2688,55 @@
                 this.updatePreviewDebounced();
             }
 
-            // 获取页面配置参数
-            getPageConfig() {
+            // 获取输入框中的页面配置，不包含视频相关的临时状态
+            getConfiguredPageConfig() {
                 const rows = parseInt(document.getElementById('gridSize').value);
                 const cols = parseInt(document.getElementById('gridSize2').value);
-                const cellDuration = parseInt(document.getElementById('duration').value);
+                const configuredCellDuration = parseInt(document.getElementById('duration').value);
                 const totalCells = rows * cols;
-                const pageDuration = totalCells * cellDuration;
-                return { rows, cols, cellDuration, totalCells, pageDuration };
+                const configuredPageDuration = totalCells * configuredCellDuration;
+                return { rows, cols, configuredCellDuration, totalCells, configuredPageDuration };
+            }
+
+            // 获取页面运行时配置：单页短视频均分到所有格子，但不改动输入框
+            getPageConfig() {
+                const configured = this.getConfiguredPageConfig();
+                const videoDuration = this.originalVideo ? this.originalVideo.duration : 0;
+                const shouldDistributeSinglePage = Number.isFinite(videoDuration) &&
+                    videoDuration > 0 &&
+                    videoDuration < configured.configuredPageDuration;
+                const cellDuration = shouldDistributeSinglePage
+                    ? videoDuration / configured.totalCells
+                    : configured.configuredCellDuration;
+                const pageDuration = cellDuration * configured.totalCells;
+
+                return {
+                    ...configured,
+                    cellDuration,
+                    pageDuration,
+                    isTemporaryCellDuration: shouldDistributeSinglePage
+                };
+            }
+
+            updateEffectiveDurationUI() {
+                const hint = document.getElementById('effectiveDurationHint');
+                const durationInput = document.getElementById('duration');
+                if (!hint) return;
+
+                const { cellDuration, configuredCellDuration, isTemporaryCellDuration } = this.getPageConfig();
+                if (!isTemporaryCellDuration || !Number.isFinite(cellDuration) || cellDuration <= 0) {
+                    durationInput?.classList.remove('temporary-duration');
+                    hint.classList.remove('temporary-duration-hint');
+                    hint.textContent = '';
+                    hint.classList.add('hidden');
+                    return;
+                }
+
+                const formattedDuration = Number(cellDuration.toFixed(2));
+                durationInput?.classList.add('temporary-duration');
+                hint.classList.add('temporary-duration-hint');
+                hint.textContent = `当前视频未分页，临时按每格 ${formattedDuration} 秒显示（设置值 ${configuredCellDuration} 秒）`;
+                hint.classList.remove('hidden');
             }
 
             // 获取指定页面实际包含的视频格子数
@@ -2742,18 +2805,27 @@
             }
 
             calculatePages() {
-                const { rows, cols, cellDuration, totalCells, pageDuration } = this.getPageConfig();
+                const { configuredPageDuration } = this.getConfiguredPageConfig();
                 const videoDuration = this.originalVideo.duration;
 
                 // 确保数值有效性
-                if (!videoDuration || videoDuration <= 0 || pageDuration <= 0) {
+                if (!videoDuration || videoDuration <= 0 || configuredPageDuration <= 0) {
                     this.totalPages = 1;
                     this.currentPage = 0;
                     this.currentStartTime = 0;
                     return;
                 }
 
-                this.totalPages = Math.ceil(videoDuration / pageDuration);
+                this.totalPages = Math.ceil(videoDuration / configuredPageDuration);
+
+                // 单页时始终从视频开头开始，避免从分页状态切换后残留旧起点
+                if (this.totalPages === 1) {
+                    this.currentPage = 0;
+                    this.currentStartTime = 0;
+                    return;
+                }
+
+                const { pageDuration } = this.getPageConfig();
 
                 // 保底防止起始时间变成负数，确保第一页的第一个格子从0秒开始
                 this.currentStartTime = Math.max(0, this.currentStartTime);
@@ -3981,7 +4053,7 @@
                     return 0;
                 }
 
-                const cellDuration = parseInt(document.getElementById('duration').value);
+                const { cellDuration } = this.getPageConfig();
                 // 注意：createdVideos[0]是originalVideo，createdVideos[1]才是第一个格子的视频
                 const firstGridVideo = this.createdVideos[1];
 
