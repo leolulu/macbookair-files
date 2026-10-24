@@ -2663,13 +2663,13 @@
                         <input type="number" id="sideListSupHeight" value="28">
                     </div>
                 </div>
-                <div class="inline-block-element">
+                <form id="dufsUrlForm" class="inline-block-element">
                     <span class="dufs-url-history-wrapper">
                         <input type="text" id="dufsUrl" placeholder='dufs目录路径(结尾不用加"?simple")' autocomplete="off">
                         <div id="dufsUrlHistoryList" class="dufs-url-history-list"></div>
                     </span>
-                    <button id="fetchDufsFiles">获取Dufs列表</button>
-                </div>
+                    <button type="submit" id="fetchDufsFiles">获取Dufs列表</button>
+                </form>
                 <div class="inline-block-element">
                     <label for="toggleSubtileShade">字幕遮罩器</label>
                     <input type="checkbox" id="toggleSubtileShade" />
@@ -6511,7 +6511,9 @@
                 renderDufsTree();
             });
 
-            document.getElementById('fetchDufsFiles').addEventListener('click', async function () {
+            document.getElementById('dufsUrlForm').addEventListener('submit', async function (event) {
+                event.preventDefault();
+                hideDufsUrlHistory();
                 var dufsUrlElem = document.getElementById('dufsUrl');
                 var dufsUrl = dufsUrlElem.value;
                 if (!dufsUrl) {
