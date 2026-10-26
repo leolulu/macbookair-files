@@ -7615,6 +7615,10 @@
                 var hasUnreadReply = false;
                 var hasUnreadError = false;
                 var scrollOnNextOpen = false;
+                var aiStatusToastKey = null;
+                var aiStatusToastTimer = null;
+                var aiStatusToastSerial = 0;
+                var hasNotifiedBackgroundGeneration = false;
 
                 function generateConversationId() {
                     return 'svp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -7932,6 +7936,41 @@
                     toggleButton.classList.toggle('ai-chat-unread', showStatus && hasUnreadReply);
                 }
 
+                function dismissAiStatusToast() {
+                    clearTimeout(aiStatusToastTimer);
+                    aiStatusToastTimer = null;
+                    aiStatusToastKey = null;
+                    document.querySelectorAll('#toastContainer .floating-toast[data-toast-key^="ai-request-status-"]').forEach(function (toast) {
+                        toast.remove();
+                    });
+                }
+
+                function showAiStatusToast(message, type) {
+                    if (!chatWindow.hidden) {
+                        return;
+                    }
+                    if (!aiStatusToastKey) {
+                        aiStatusToastKey = 'ai-request-status-' + (++aiStatusToastSerial);
+                    }
+                    // 独立计时；淡出中的旧通知不复用 key，避免其移除回调误删新状态。
+                    clearTimeout(aiStatusToastTimer);
+                    upsertFloatingToast(aiStatusToastKey, message, type, 0);
+                    aiStatusToastTimer = setTimeout(function () {
+                        var key = aiStatusToastKey;
+                        aiStatusToastKey = null;
+                        aiStatusToastTimer = null;
+                        removeFloatingToastByKey(key);
+                    }, 2600);
+                }
+
+                function notifyBackgroundGeneration() {
+                    if (!isGenerating || !chatWindow.hidden || hasNotifiedBackgroundGeneration) {
+                        return;
+                    }
+                    hasNotifiedBackgroundGeneration = true;
+                    showAiStatusToast('AI 正在生成回答', 'info');
+                }
+
                 function dispatchChat(options) {
                     if (isGenerating) {
                         showFloatingToast('AI 正在回答，请稍候或点停止', 'warning', 2000);
@@ -7961,8 +8000,10 @@
                     isGenerating = true;
                     hasUnreadReply = false;
                     hasUnreadError = false;
+                    hasNotifiedBackgroundGeneration = false;
                     updateSendButtonState();
                     updateToggleButtonState();
+                    notifyBackgroundGeneration();
                     activeAbortController = new AbortController();
                     var requestController = activeAbortController;
                     var requestConversationId = conversationId;
@@ -8053,7 +8094,7 @@
                                 chatInput.value = options.restoreInputOnStop;
                                 autoGrowInput();
                             }
-                            finishGeneration();
+                            finishGeneration('stopped');
                         } else {
                             aiDiv.classList.add('ai-chat-msg-error');
                             var shouldKeepErrorPinned = isPinnedToBottom();
@@ -8086,7 +8127,7 @@
                     });
                 }
 
-                // status: 'success' | 'error'，用户停止时不传
+                // status: 'success' | 'error' | 'stopped'，旧会话请求结束时不传
                 function finishGeneration(status) {
                     isGenerating = false;
                     activeAbortController = null;
@@ -8094,9 +8135,17 @@
                     if (chatWindow.hidden) {
                         if (status === 'success') {
                             hasUnreadReply = true;
+                            showAiStatusToast('AI 回答已完成', 'success');
                         } else if (status === 'error') {
                             hasUnreadError = true;
+                            showAiStatusToast('AI 请求失败，请打开查看', 'error');
+                        } else if (status === 'stopped') {
+                            showAiStatusToast('AI 生成已停止', 'info');
+                        } else {
+                            dismissAiStatusToast();
                         }
+                    } else {
+                        dismissAiStatusToast();
                     }
                     updateToggleButtonState();
                 }
@@ -8172,6 +8221,7 @@
 
                 // ---------- 会话操作 ----------
                 newConversationButton.addEventListener('click', function () {
+                    dismissAiStatusToast();
                     if (lookupSpeech) lookupSpeech.stop();
                     if (sentenceAnalysis) sentenceAnalysis.reset();
                     if (isGenerating && activeAbortController) {
@@ -8450,6 +8500,7 @@
                 }
 
                 function openChatWindow(focusInput) {
+                    dismissAiStatusToast();
                     setFocusRegressionBlocker(FOCUS_BLOCKER_AI_CHAT, true);
                     chatWindow.hidden = false;
                     hasUnreadReply = false;
@@ -8473,6 +8524,7 @@
                     resetEudicAuthorizationInput();
                     chatWindow.hidden = true;
                     updateToggleButtonState();
+                    notifyBackgroundGeneration();
                     persistWindowState();
                     setFocusRegressionBlocker(FOCUS_BLOCKER_AI_CHAT, false);
                 }
