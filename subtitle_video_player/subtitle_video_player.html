@@ -2861,6 +2861,9 @@
                 <label title="每次提问自动附带当前播放时间和当前字幕，便于 AI 理解“这句”“刚才”等指代。问全局性问题时可以关闭，避免 AI 被当前位置带偏；防剧透开启时，此项会自动启用并锁定。">
                     <input type="checkbox" id="aiChatAttachPosition" checked> 提问附带播放位置
                 </label>
+                <label title="查词、析句时不自动打开 AI 窗口；已打开的窗口保持显示。">
+                    <input type="checkbox" id="aiChatBackgroundRequest"> 后台请求
+                </label>
             </div>
             <div class="ai-chat-selection-bubble-setting">
                 <label for="aiSelectionBubblePosition">划词气泡位置</label>
@@ -7011,6 +7014,7 @@
                 var modelHint = document.getElementById('aiChatModelHint');
                 var noSpoilerCheckbox = document.getElementById('aiChatNoSpoiler');
                 var attachPositionCheckbox = document.getElementById('aiChatAttachPosition');
+                var backgroundRequestCheckbox = document.getElementById('aiChatBackgroundRequest');
                 var selectionBubblePositionSelect = document.getElementById('aiSelectionBubblePosition');
                 var contextInfo = document.getElementById('aiChatContextInfo');
                 var quoteChip = document.getElementById('aiChatQuoteChip');
@@ -7073,6 +7077,7 @@
                     model: '',
                     noSpoiler: true,
                     attachPosition: true,
+                    backgroundRequest: false,
                     selectionBubblePosition: 'auto'
                 };
                 var availableProviderModels = [];
@@ -7110,6 +7115,9 @@
                             }
                             if (typeof parsed.attachPosition === 'boolean') {
                                 aiSettings.attachPosition = parsed.attachPosition;
+                            }
+                            if (typeof parsed.backgroundRequest === 'boolean') {
+                                aiSettings.backgroundRequest = parsed.backgroundRequest;
                             }
                             if (isValidSelectionBubblePosition(parsed.selectionBubblePosition)) {
                                 aiSettings.selectionBubblePosition = parsed.selectionBubblePosition;
@@ -7437,6 +7445,7 @@
 
                 function applySettingsToInputs() {
                     backendUrlInput.value = aiSettings.backendUrl;
+                    backgroundRequestCheckbox.checked = aiSettings.backgroundRequest;
                     syncContextSettingControls();
                     syncSelectionBubblePositionControl();
                     syncRoutingControls();
@@ -7605,6 +7614,7 @@
                 var activeAbortController = null;
                 var hasUnreadReply = false;
                 var hasUnreadError = false;
+                var scrollOnNextOpen = false;
 
                 function generateConversationId() {
                     return 'svp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -7938,6 +7948,9 @@
                     }
                     ensureConversationFreshness();
                     setConversationStarted(true);
+                    if (aiSettings.backgroundRequest && chatWindow.hidden) {
+                        scrollOnNextOpen = true;
+                    }
                     appendUserMessage(options.displayText, options.quote);
                     var aiDiv = appendAiMessage();
                     runStreamInto(aiDiv, options);
@@ -8229,6 +8242,11 @@
                     saveAiSettings();
                 });
 
+                backgroundRequestCheckbox.addEventListener('change', function () {
+                    aiSettings.backgroundRequest = backgroundRequestCheckbox.checked;
+                    saveAiSettings();
+                });
+
                 selectionBubblePositionSelect.addEventListener('change', function () {
                     if (!isPortraitLayout() || !isValidSelectionBubblePosition(selectionBubblePositionSelect.value)) {
                         syncSelectionBubblePositionControl();
@@ -8437,6 +8455,10 @@
                     hasUnreadReply = false;
                     hasUnreadError = false;
                     applyGeometry();
+                    if (scrollOnNextOpen) {
+                        scrollOnNextOpen = false;
+                        scrollToBottom();
+                    }
                     updateToggleButtonState();
                     persistWindowState();
                     if (focusInput) {
@@ -9210,7 +9232,9 @@
                         '- 只聚焦当前上下文使用的这一个义项；不要罗列其他词典义项，也不要提供属于其他义项的搭配\n' +
                         '- 不要对原句做整句中文翻译，这不利于培养外语思维方式\n' +
                         '回答保持简洁，按相关性组织内容，无需机械覆盖不适用的项目。';
-                    openChatWindow(false);
+                    if (!aiSettings.backgroundRequest || !chatWindow.hidden) {
+                        openChatWindow(false);
+                    }
                     dispatchChat({
                         payloadText: payload,
                         lookupText: info.text,
@@ -9220,12 +9244,14 @@
                     });
                 });
 
-                function dispatchSentenceAnalysis(context) {
+                function dispatchSentenceAnalysis(context, fromSelection) {
                     if (context.cueSource !== subtitles || context.fingerprint !== subtitleFingerprint()) {
                         showFloatingToast('字幕已更换，请在当前字幕中重新划选', 'warning', 2400);
                         return false;
                     }
-                    openChatWindow(false);
+                    if (!fromSelection || !aiSettings.backgroundRequest || !chatWindow.hidden) {
+                        openChatWindow(false);
+                    }
                     return dispatchChat({
                         payloadText: buildPositionPrefix() + window.SvpSentenceAnalysis.prompt(context),
                         displayText: '【析句】「' + context.source + '」',
@@ -9243,7 +9269,7 @@
                         var context = window.SvpSentenceAnalysis.buildRange(subtitles, info);
                         context.fingerprint = subtitleFingerprint();
                         context.cueSource = subtitles;
-                        if (dispatchSentenceAnalysis(context)) window.getSelection().removeAllRanges();
+                        if (dispatchSentenceAnalysis(context, true)) window.getSelection().removeAllRanges();
                     } catch (err) {
                         showFloatingToast(err.message || '无法确定解析范围，请重新划选', 'warning', 3000);
                     }
