@@ -2654,13 +2654,13 @@
                         <input type="number" id="sideListSupHeight" value="28">
                     </div>
                 </div>
-                <div class="inline-block-element">
+                <form id="dufsUrlForm" class="inline-block-element">
                     <span class="dufs-url-history-wrapper">
                         <input type="text" id="dufsUrl" placeholder='dufs目录路径(结尾不用加"?simple")' autocomplete="off">
                         <div id="dufsUrlHistoryList" class="dufs-url-history-list"></div>
                     </span>
-                    <button id="fetchDufsFiles">获取Dufs列表</button>
-                </div>
+                    <button type="submit" id="fetchDufsFiles">获取Dufs列表</button>
+                </form>
                 <div class="inline-block-element">
                     <label for="toggleSubtileShade">字幕遮罩器</label>
                     <input type="checkbox" id="toggleSubtileShade" />
@@ -3880,7 +3880,16 @@
                 });
             }
 
+            function hasJsonFile(files) {
+                return Array.from(files).some(function (file) {
+                    const name = file && file.name ? file.name : file;
+                    return String(name || '').toLowerCase().endsWith('.json');
+                });
+            }
+
             async function processFilesImpl(files) {
+                timelineBatchHasJson = hasJsonFile(files);
+                clearTimeline();
                 var orderedFiles = sortFilesVideoFirst(files);
                 svpSupLog('processFilesImpl ordered', { names: orderedFiles.map(function (f) { return f.name; }) });
                 for (var i = 0; i < orderedFiles.length; i++) {
@@ -4462,19 +4471,33 @@
                 reader.readAsText(file);
             }
 
-            function visualizeSpeakers(diarizationInfo, labelHeights, heightIncrement, labels, videoDuration) {
-                const video = document.getElementById('video');
-                const speakerContainerParent = document.getElementById('options-pane') || document.getElementById('video-player');
+            var timelineTimeUpdateHandler = null;
+            var pendingSubtitleTimelineItems = null;
+            var timelineBatchHasJson = false;
 
+            function clearTimeline() {
+                const video = document.getElementById('video');
                 const existingContainer = document.getElementById('speaker-container');
                 if (existingContainer) {
                     existingContainer.parentElement.removeChild(existingContainer);
                 }
+                if (timelineTimeUpdateHandler) {
+                    video.removeEventListener('timeupdate', timelineTimeUpdateHandler);
+                    timelineTimeUpdateHandler = null;
+                }
+                pendingSubtitleTimelineItems = null;
+            }
+
+            function visualizeTimeline(rows, videoDuration) {
+                const video = document.getElementById('video');
+                const speakerContainerParent = document.getElementById('options-pane') || document.getElementById('video-player');
+
+                clearTimeline();
 
                 const container = document.createElement('div');
                 container.id = 'speaker-container';  // Assigning an ID to the container for easy reference
                 container.style.border = '1px solid #aaa';
-                let speakerCount = Object.keys(labelHeights).length;
+                let speakerCount = rows.length;
                 let speakerDivHeight = speakerCount <= 4 ? 40 : (speakerCount <= 8 ? 30 : (speakerCount <= 16 ? 20 : 10));
                 container.style.height = (speakerCount * speakerDivHeight) + 'px'; // Adjust height based on number of speakers
                 container.style.position = 'relative';
@@ -4482,22 +4505,22 @@
                 container.style.overflow = 'hidden';
 
                 // Define a set of colors
-                const colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf'];
+                rows.forEach(row => {
+                    row.items.forEach(info => {
+                        const speakerDiv = document.createElement('div');
+                        const startPercentage = (info.start / videoDuration) * 100;
+                        const endPercentage = (info.end / videoDuration) * 100;
 
-                diarizationInfo.forEach(info => {
-                    const speakerDiv = document.createElement('div');
-                    const startPercentage = (info.start / videoDuration) * 100;
-                    const endPercentage = (info.end / videoDuration) * 100;
+                        speakerDiv.style.position = 'absolute';
+                        speakerDiv.style.top = row.top + '%';
+                        speakerDiv.style.height = row.height + '%';
+                        speakerDiv.style.left = startPercentage + '%';
+                        speakerDiv.style.width = (endPercentage - startPercentage) + '%';
+                        speakerDiv.style.background = row.color;
+                        speakerDiv.title = info.title;
 
-                    speakerDiv.style.position = 'absolute';
-                    speakerDiv.style.top = labelHeights[info.label] + '%';
-                    speakerDiv.style.height = heightIncrement + '%';
-                    speakerDiv.style.left = startPercentage + '%';
-                    speakerDiv.style.width = (endPercentage - startPercentage) + '%';
-                    speakerDiv.style.background = colors[labels.indexOf(info.label) % colors.length];
-                    speakerDiv.title = info.label;
-
-                    container.appendChild(speakerDiv);
+                        container.appendChild(speakerDiv);
+                    });
                 });
 
                 // Create and add the progress line to the container
@@ -4510,10 +4533,12 @@
                 container.appendChild(progressLine);
 
                 // Update the position of the progress line based on the video's current time
-                video.addEventListener('timeupdate', function () {
+                timelineTimeUpdateHandler = function () {
                     const progressPercentage = (video.currentTime / videoDuration) * 100;
                     progressLine.style.left = progressPercentage + '%';
-                });
+                };
+                video.addEventListener('timeupdate', timelineTimeUpdateHandler);
+                timelineTimeUpdateHandler();
 
                 // Jump to the clicked position in the video
                 container.addEventListener('click', function (event) {
@@ -4530,6 +4555,65 @@
 
                 speakerContainerParent.appendChild(container);
 
+            }
+
+            function visualizeSpeakers(diarizationInfo, labelHeights, heightIncrement, labels, videoDuration) {
+                pendingSubtitleTimelineItems = null;
+                const rows = labels.map(function (label) {
+                    return {
+                        top: labelHeights[label],
+                        height: heightIncrement,
+                        color: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf'][labels.indexOf(label) % 8],
+                        items: diarizationInfo.filter(function (info) { return info.label === label; }).map(function (info) {
+                            return { start: info.start, end: info.end, title: info.label };
+                        })
+                    };
+                });
+                visualizeTimeline(rows, videoDuration);
+            }
+
+            function visualizeSubtitles(subtitleItems) {
+                if (timelineBatchHasJson) {
+                    return;
+                }
+
+                const video = document.getElementById('video');
+                const videoDuration = video.duration;
+                pendingSubtitleTimelineItems = subtitleItems;
+                if (video.readyState < 1 || !Number.isFinite(videoDuration) || videoDuration <= 0) {
+                    if (!video.getAttribute('data-subtitle-timeline-bound')) {
+                        video.setAttribute('data-subtitle-timeline-bound', '1');
+                        video.addEventListener('loadedmetadata', function () {
+                            if (pendingSubtitleTimelineItems && !timelineBatchHasJson) {
+                                const items = pendingSubtitleTimelineItems;
+                                pendingSubtitleTimelineItems = null;
+                                visualizeSubtitles(items);
+                            }
+                        });
+                    }
+                    return;
+                }
+
+                const subtitleItemsForTimeline = subtitleItems.filter(function (subtitle) {
+                    return Number.isFinite(subtitle.start) && Number.isFinite(subtitle.end) && subtitle.end > subtitle.start;
+                });
+                if (!subtitleItemsForTimeline.length) {
+                    return;
+                }
+
+                pendingSubtitleTimelineItems = null;
+                visualizeTimeline([{
+                    top: 0,
+                    height: 100,
+                    color: '#e41a1c',
+                    items: subtitleItemsForTimeline.map(function (subtitle, index) {
+                        return {
+                            start: subtitle.start,
+                            end: subtitle.end,
+                            title: '字幕 ' + (index + 1) + '\n' + subtitle.start.toFixed(3) + 's --> ' + subtitle.end.toFixed(3) + 's\n' + subtitle.text
+                        };
+                    })
+                }], videoDuration);
             }
 
             function centerCaption(spanLastLeft = 0) {
@@ -5023,6 +5107,7 @@
 
                         loadSubtitlesImpl()
                         aiSubtitleLoading = false;
+                        visualizeSubtitles(tempSubtitles)
                         resolve();
                     };
                     reader.onerror = reject;
@@ -6448,7 +6533,9 @@
                 renderDufsTree();
             });
 
-            document.getElementById('fetchDufsFiles').addEventListener('click', async function () {
+            document.getElementById('dufsUrlForm').addEventListener('submit', async function (event) {
+                event.preventDefault();
+                hideDufsUrlHistory();
                 var dufsUrlElem = document.getElementById('dufsUrl');
                 var dufsUrl = dufsUrlElem.value;
                 if (!dufsUrl) {
@@ -6510,6 +6597,10 @@
                             displayName: input.dataset.displayName || input.value
                         };
                     });
+                timelineBatchHasJson = hasJsonFile(selectedFiles.map(function (file) {
+                    return file && file.value ? file.value : file;
+                }));
+                clearTimeline();
                 selectedFiles.sort(function (a, b) {
                     var av = isVideoLikeName(a && a.value ? a.value : '');
                     var bv = isVideoLikeName(b && b.value ? b.value : '');
