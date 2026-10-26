@@ -1,0 +1,46 @@
+.ai-chat-queue {
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: min(220px, 32vh);
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid #e3e6ee;
+    background: #f8f9fc;
+    color: #34405a;
+    font-size: 12px;
+}
+.ai-chat-queue[hidden], #aiChatQueueList[hidden], #aiChatStop[hidden], .ai-chat-queue-badge[hidden] { display: none; }
+.ai-chat-queue-header { display: flex; align-items: center; gap: 6px; padding: 5px 10px; }
+.ai-chat-queue button {
+    border: 1px solid #d6deeb;
+    border-radius: 5px;
+    background: #fff;
+    color: #34405a;
+    font: inherit;
+    cursor: pointer;
+    min-height: 27px;
+    padding: 2px 7px;
+    white-space: nowrap;
+}
+.ai-chat-queue button:hover { background: #edf3ff; }
+.ai-chat-queue button:disabled { opacity: 0.4; cursor: default; }
+#aiChatQueueToggle { flex: 1; min-width: 0; text-align: left; border-color: transparent; background: transparent; font-weight: 600; }
+#aiChatQueueResume { color: #2457b5; }
+#aiChatQueueList { overflow-y: auto; min-height: 0; padding: 0 10px 6px; }
+.ai-chat-queue-item { padding: 5px 0; border-top: 1px solid #e6ebf3; }
+.ai-chat-queue-row { display: flex; align-items: center; gap: 4px; }
+.ai-chat-queue-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ai-chat-queue-actions { display: flex; flex: 0 0 auto; gap: 3px; }
+.ai-chat-queue-actions button { min-width: 27px; padding: 2px 5px; }
+.ai-chat-queue-editor { display: block; width: 100%; min-height: 64px; max-height: 100px; resize: vertical; box-sizing: border-box; margin: 5px 0; padding: 6px; border: 1px solid #a8bde0; border-radius: 5px; font: inherit; background: #fff; color: #2b3245; }
+.ai-chat-queue-edit-actions { display: flex; gap: 6px; }
+.ai-chat-queue-badge { margin-left: 4px; font-size: 11px; padding: 0 4px; border-radius: 8px; background: #e4edff; color: #2457b5; }
+#aiChatStop { flex: 0 0 auto; height: 36px; min-width: 36px; padding: 0 8px; border: 1px solid #e5a29d; border-radius: 7px; background: #fdecea; color: #94261f; cursor: pointer; font-size: 16px; }
+#aiChatStop:hover { background: #f9ddda; }
+@media (max-width: 400px) {
+    .ai-chat-queue-header { padding-inline: 8px; }
+    #aiChatQueueList { padding-inline: 8px; }
+    .ai-chat-input-row { gap: 5px; }
+    #aiChatSend { padding-inline: 10px; }
+}

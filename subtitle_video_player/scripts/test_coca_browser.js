@@ -136,7 +136,7 @@ async function main() {
             await page.evaluate(() => { cocaTest.mode = 'stop'; });
             await selectLookup(page);
             await page.waitForFunction(() => cocaTest.requests.length === 3);
-            await page.locator('#aiChatSend').click();
+            await page.locator('#aiChatStop').click();
             await waitFinished(page);
             assert.doesNotMatch(await page.locator('.ai-chat-msg-ai').last().innerText(), /\[\[|COCA/);
 

@@ -8,6 +8,7 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/vendor/jquery/jquery-ui-1.13.2.css">
     <link rel="stylesheet" href="assets/sentence_analysis.css">
+    <link rel="stylesheet" href="assets/ai_queue.css">
     <style>
         body {
             margin: 0;
@@ -2027,17 +2028,6 @@
             box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.24);
         }
 
-        #aiChatSend.ai-chat-send-stop {
-            background: #fdecea;
-            border-color: #e5a29d;
-            color: #94261f;
-        }
-
-        #aiChatSend.ai-chat-send-stop:hover {
-            background: #f9ddda;
-            border-color: #dc8e88;
-        }
-
         #toggleAiChat.ai-chat-busy {
             animation: aiChatPulse 1.2s ease-in-out infinite;
         }
@@ -2893,6 +2883,14 @@
             <span id="aiChatContextInfo"></span>
         </div>
         <div id="aiChatMessages" class="ai-chat-messages"></div>
+        <section id="aiChatQueue" class="ai-chat-queue" aria-label="待发送请求" hidden>
+            <div class="ai-chat-queue-header">
+                <button id="aiChatQueueToggle" type="button" aria-expanded="true" aria-controls="aiChatQueueList">待发送 0 ▾</button>
+                <button id="aiChatQueueResume" type="button" hidden>继续</button>
+                <button id="aiChatQueueClear" type="button">清空</button>
+            </div>
+            <div id="aiChatQueueList"></div>
+        </section>
         <div id="aiChatQuoteChip" class="ai-chat-quote-chip" hidden>
             <span class="ai-chat-quote-text"></span>
             <button id="aiChatQuoteRemove" type="button" title="移除引用">×</button>
@@ -2900,6 +2898,7 @@
         <div class="ai-chat-input-row">
             <textarea id="aiChatInput" rows="1" placeholder="问问 AI…（Enter 发送，Shift+Enter 换行）"></textarea>
             <button id="aiChatSend" type="button">发送</button>
+            <button id="aiChatStop" type="button" title="停止当前回复并暂停队列" aria-label="停止当前回复并暂停队列" hidden>■</button>
         </div>
     </div>
 
@@ -2917,6 +2916,7 @@
     <script src="js/ai_markdown_compat.js"></script>
     <script src="js/lookup_speech.js"></script>
     <script src="js/sentence_analysis.js"></script>
+    <script src="js/ai_request_queue.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/eudic_integration.js"></script>
     <script src="js/coca_data.js"></script>
@@ -3460,6 +3460,7 @@
                 var videoUrl = document.getElementById('videoUrl').value;
                 var videoElement = document.getElementById('video');
                 if (videoUrl) {
+                    notifyAiContentChanged();
                     videoElement.src = videoUrl;
                     document.getElementById("VideoUrlWithFile").click();
                     document.title = extractFilename(videoUrl)
@@ -3480,6 +3481,12 @@
             var srtLoaded = false
             var currentMovieCacheId = 'no-movie';
             var toastTimers = {};
+            var aiSubtitleLoading = false;
+
+            function notifyAiContentChanged(loadingSubtitles) {
+                if (loadingSubtitles) aiSubtitleLoading = true;
+                document.dispatchEvent(new Event('svp-ai-content-change'));
+            }
             var supRunSeq = 0;
             var subtitleSyncOffset = 0;
             var currentSubtitleKind = 'none';
@@ -3878,6 +3885,7 @@
                 svpSupLog('processFilesImpl ordered', { names: orderedFiles.map(function (f) { return f.name; }) });
                 for (var i = 0; i < orderedFiles.length; i++) {
                     if (orderedFiles[i].name.toLowerCase().endsWith('.mp4') || orderedFiles[i].name.toLowerCase().endsWith('.webm')) {
+                        notifyAiContentChanged();
                         var url = URL.createObjectURL(orderedFiles[i]);
                         $('#video').attr('src', url);
                         document.title = orderedFiles[i].name;
@@ -3919,6 +3927,7 @@
             $('#VideoUrlWithFile').change(processFiles);
 
             function loadSupFromHtml(file) {
+                notifyAiContentChanged(true);
                 return new Promise((resolve, reject) => {
                     clearAllSub()
                     var reader = new FileReader();
@@ -3960,6 +3969,7 @@
             }
 
             function loadSupFromSup(file, sourceIdOverride) {
+                notifyAiContentChanged(true);
                 return new Promise((resolve, reject) => {
                     clearAllSub();
 
@@ -4284,6 +4294,7 @@
                     }
                 }
                 refreshLayout();
+                aiSubtitleLoading = false;
             }
 
             function loadSubtitlesFromJSONImpl(triggeredFromSentenceLength = false) {
@@ -4377,6 +4388,7 @@
 
 
             function loadSubtitlesFromJSON(file) {
+                notifyAiContentChanged(true);
                 return new Promise((resolve, reject) => {
                     clearAllSub()
                     const reader = new FileReader();
@@ -4390,6 +4402,7 @@
                         });
 
                         loadSubtitlesFromJSONImpl();
+                        aiSubtitleLoading = false;
                         resolve()
                     };
                     reader.onerror = reject;
@@ -4922,6 +4935,7 @@
 
 
             function loadSubtitlesImpl(triggeredFromSentenceLength = false) {
+                aiSubtitleLoading = false;
                 subtitles = [];
                 // Combine short subtitles
                 let minLength = parseInt(document.getElementById("textLength").value, 10);
@@ -4976,6 +4990,7 @@
             }
 
             function loadSubtitles(file, formatIsAss = false) {
+                notifyAiContentChanged(true);
                 return new Promise((resolve, reject) => {
                     clearAllSub()
                     var reader = new FileReader();
@@ -5007,6 +5022,7 @@
                         }
 
                         loadSubtitlesImpl()
+                        aiSubtitleLoading = false;
                         resolve();
                     };
                     reader.onerror = reject;
@@ -6507,6 +6523,7 @@
                     var fileName = file.value;
                     var fileUrl = getDufsFileUrl(formatDufsBaseUrl(document.getElementById('dufsUrl').value), fileName);
                     if (fileUrl.toLowerCase().endsWith('.mp4') || fileUrl.toLowerCase().endsWith('.webm')) {
+                        notifyAiContentChanged();
                         document.getElementById('video').src = fileUrl;
                         document.title = fileName;
                         setCurrentMovieCacheIdFromFile(null, fileUrl);
@@ -7005,7 +7022,17 @@
                 }) : null;
                 var chatInput = document.getElementById('aiChatInput');
                 var sendButton = document.getElementById('aiChatSend');
+                var stopButton = document.getElementById('aiChatStop');
+                var queuePanel = document.getElementById('aiChatQueue');
+                var queueList = document.getElementById('aiChatQueueList');
+                var queueToggle = document.getElementById('aiChatQueueToggle');
+                var queueResume = document.getElementById('aiChatQueueResume');
+                var queueClear = document.getElementById('aiChatQueueClear');
                 var toggleButton = document.getElementById('toggleAiChat');
+                var queueBadge = document.createElement('span');
+                queueBadge.className = 'ai-chat-queue-badge';
+                queueBadge.hidden = true;
+                toggleButton.appendChild(queueBadge);
                 var settingsPanel = document.getElementById('aiChatSettings');
                 var backendUrlInput = document.getElementById('aiChatBackendUrl');
                 var providerSelect = document.getElementById('aiChatProvider');
@@ -7619,6 +7646,10 @@
                 var aiStatusToastTimer = null;
                 var aiStatusToastSerial = 0;
                 var hasNotifiedBackgroundGeneration = false;
+                var queueCollapsed = false;
+                var queueEditDraft = '';
+                var contentVersion = 0;
+                var requestQueue = window.SvpAiRequestQueue.create({ onStart: startQueuedRequest, onChange: renderRequestQueue });
 
                 function generateConversationId() {
                     return 'svp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -7640,6 +7671,12 @@
                         return;
                     }
                     if (fp !== conversationFingerprint) {
+                        // 文件切换由加载入口清理；同一文件的 OCR 更新或重新分组不丢弃正在处理的队列。
+                        if (isGenerating || requestQueue.snapshot().pending.length) {
+                            conversationFingerprint = fp;
+                            return;
+                        }
+                        resetRequestQueue();
                         conversationFingerprint = fp;
                         conversationId = generateConversationId();
                         setConversationStarted(false);
@@ -7848,20 +7885,20 @@
                 }
 
                 // ---------- SSE 流式请求 ----------
-                async function streamChatRequest(userMessage, handlers, signal) {
+                async function streamChatRequest(userMessage, handlers, signal, context) {
                     var payload = {
-                        id: conversationId,
+                        id: context.conversationId,
                         preserve: true,
-                        system_message: buildSystemMessage(),
+                        system_message: context.systemMessage,
                         user_message: userMessage
                     };
-                    if (aiSettings.provider) {
-                        payload.provider = aiSettings.provider;
-                        if (aiSettings.model) {
-                            payload.model = aiSettings.model;
+                    if (context.provider) {
+                        payload.provider = context.provider;
+                        if (context.model) {
+                            payload.model = context.model;
                         }
                     }
-                    var response = await fetch(normalizeBackendUrl(aiSettings.backendUrl) + '/stream', {
+                    var response = await fetch(context.backendUrl + '/stream', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
@@ -7917,14 +7954,192 @@
                 }
 
                 // ---------- 发送与状态 ----------
-                function updateSendButtonState() {
-                    if (isGenerating) {
-                        sendButton.textContent = '停止';
-                        sendButton.classList.add('ai-chat-send-stop');
-                    } else {
-                        sendButton.textContent = '发送';
-                        sendButton.classList.remove('ai-chat-send-stop');
+                function requestLabel(options) {
+                    var kind = options.analysis ? '析句' : options.lookupText ? '查词' : '问答';
+                    var text = String(options.editText || options.displayText || '').replace(/\s+/g, ' ').trim();
+                    return (options.retryAiDiv ? '重试 · ' : '') + kind + '「' + (text.length > 28 ? text.slice(0, 28) + '…' : text) + '」';
+                }
+
+                function queueAction(text, action, id, disabled, label) {
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.textContent = text;
+                    button.dataset.queueAction = action;
+                    button.dataset.queueId = id;
+                    button.disabled = !!disabled;
+                    button.title = label || text;
+                    button.setAttribute('aria-label', label || text);
+                    return button;
+                }
+
+                function renderRequestQueue(state) {
+                    var focused = document.activeElement;
+                    var focusInQueue = queueList.contains(focused);
+                    var focusId = focusInQueue ? focused.dataset.queueId : '';
+                    var focusAction = focusInQueue ? focused.dataset.queueAction : '';
+                    var selectionStart = focusInQueue && focused.tagName === 'TEXTAREA' ? focused.selectionStart : null;
+                    var selectionEnd = selectionStart !== null ? focused.selectionEnd : null;
+                    queuePanel.hidden = !state.pending.length;
+                    var waitingEdit = !state.active && state.pending.length && state.pending[0].id === state.editingId;
+                    var status = state.paused === 'error' ? ' · 失败暂停' : state.paused ? ' · 已暂停' : waitingEdit ? ' · 等待编辑' : '';
+                    queueToggle.textContent = '待发送 ' + state.pending.length + status + (queueCollapsed ? ' ▸' : ' ▾');
+                    queueToggle.setAttribute('aria-expanded', String(!queueCollapsed));
+                    queueList.hidden = queueCollapsed;
+                    queueResume.hidden = !state.paused;
+                    queueResume.disabled = !!state.active || state.editingId !== null;
+                    queueBadge.hidden = !state.pending.length;
+                    queueBadge.textContent = state.pending.length;
+                    queueBadge.title = '待发送 ' + state.pending.length + ' 条' + status;
+                    queueList.replaceChildren();
+                    state.pending.forEach(function (entry, index) {
+                        var item = document.createElement('div');
+                        item.className = 'ai-chat-queue-item';
+                        item.dataset.queueItem = entry.id;
+                        var row = document.createElement('div');
+                        row.className = 'ai-chat-queue-row';
+                        var label = document.createElement('span');
+                        label.className = 'ai-chat-queue-label';
+                        label.textContent = (index + 1) + '. ' + requestLabel(entry.value) + ' · ' + entry.value.context.timeLabel;
+                        label.title = entry.value.displayText + '\n提交位置 ' + entry.value.context.timeLabel;
+                        var actions = document.createElement('span');
+                        actions.className = 'ai-chat-queue-actions';
+                        var editing = state.editingId !== null;
+                        actions.appendChild(queueAction('↑', 'up', entry.id, editing || index === 0, '上移'));
+                        actions.appendChild(queueAction('↓', 'down', entry.id, editing || index === state.pending.length - 1, '下移'));
+                        actions.appendChild(queueAction('编辑', 'edit', entry.id, editing));
+                        actions.appendChild(queueAction('×', 'remove', entry.id, false, '取消待发送请求'));
+                        row.appendChild(label);
+                        row.appendChild(actions);
+                        item.appendChild(row);
+                        if (entry.id === state.editingId) {
+                            var editor = document.createElement('textarea');
+                            editor.className = 'ai-chat-queue-editor';
+                            editor.value = queueEditDraft;
+                            editor.rows = 3;
+                            editor.dataset.queueId = entry.id;
+                            editor.dataset.queueAction = 'editor';
+                            editor.setAttribute('aria-label', '编辑待发送的' + (entry.value.analysis ? '解析原文' : entry.value.lookupText ? '目标词或词组' : '问题'));
+                            if (entry.value.analysis) editor.maxLength = 4000;
+                            var editActions = document.createElement('div');
+                            editActions.className = 'ai-chat-queue-edit-actions';
+                            editActions.appendChild(queueAction('保存', 'save', entry.id));
+                            editActions.appendChild(queueAction('取消编辑', 'cancel-edit', entry.id));
+                            item.appendChild(editor);
+                            item.appendChild(editActions);
+                        }
+                        queueList.appendChild(item);
+                    });
+                    if (focusInQueue && focusId) {
+                        var next = queueList.querySelector('[data-queue-id="' + focusId + '"][data-queue-action="' + focusAction + '"]');
+                        if (next && !next.disabled) {
+                            next.focus({ preventScroll: true });
+                            if (selectionStart !== null) next.setSelectionRange(selectionStart, selectionEnd);
+                        }
                     }
+                    messagesBox.querySelectorAll('.ai-chat-retry-btn').forEach(function (button) {
+                        button.disabled = state.pending.some(function (entry) { return entry.value.retryAiDiv === button.parentNode; });
+                    });
+                    updateSendButtonState();
+                }
+
+                function editQueuedRequest(options, text) {
+                    text = text.trim();
+                    if (!text) throw new Error('请输入要发送的内容');
+                    var next = Object.assign({}, options, { editText: text });
+                    if (options.retryAiDiv) next.retryAiDiv = null;
+                    if (options.analysis) {
+                        if (text.length > 4000) throw new Error('解析原文不能超过 4000 字符');
+                        next.analysis = Object.assign({}, options.analysis, { source: text, notes: ['解析原文已在队列中手动调整。'] });
+                        var selected = window.SvpSentenceAnalysis.locate(text, next.analysis.selection);
+                        next.analysis.selectionStart = selected ? selected.start : -1;
+                        next.analysis.selectionEnd = selected ? selected.end : -1;
+                        next.payloadText = options.positionPrefix + window.SvpSentenceAnalysis.prompt(next.analysis);
+                        next.displayText = '【析句】「' + text + '」';
+                    } else if (options.lookupText) {
+                        next.lookupText = text;
+                        next.lookupInfo = Object.assign({}, options.lookupInfo, { text: text });
+                        next.cocaContext = null;
+                        next.payloadText = buildLookupPrompt(next.lookupInfo, options.positionPrefix);
+                        next.displayText = '【查词】「' + text + '」';
+                    } else {
+                        next.displayText = text;
+                        next.restoreInputOnStop = text;
+                        next.payloadText = options.positionPrefix + (options.quote ? '【引用字幕 ' + options.quote.timeLabel + '】"' + options.quote.text + '"\n' : '') + text;
+                    }
+                    return next;
+                }
+
+                queueList.addEventListener('input', function (event) {
+                    if (event.target.dataset.queueAction === 'editor') queueEditDraft = event.target.value;
+                });
+                queueList.addEventListener('click', function (event) {
+                    var button = event.target.closest('button[data-queue-action]');
+                    if (!button || button.disabled) return;
+                    var id = Number(button.dataset.queueId);
+                    var action = button.dataset.queueAction;
+                    var entry = requestQueue.snapshot().pending.find(function (item) { return item.id === id; });
+                    if (!entry) return;
+                    if (action === 'edit') {
+                        queueEditDraft = entry.value.editText;
+                        if (requestQueue.beginEdit(id)) queueList.querySelector('textarea').focus();
+                    } else if (action === 'save') {
+                        try { requestQueue.saveEdit(id, editQueuedRequest(entry.value, queueEditDraft)); }
+                        catch (error) { showFloatingToast(error.message, 'warning', 2200); }
+                    } else if (action === 'cancel-edit') requestQueue.cancelEdit();
+                    else if (action === 'remove') requestQueue.remove(id);
+                    else requestQueue.move(id, action === 'up' ? -1 : 1);
+                });
+                queueList.addEventListener('keydown', function (event) {
+                    event.stopPropagation();
+                    if (event.isComposing || event.target.dataset.queueAction !== 'editor') return;
+                    if (event.key === 'Escape') { event.preventDefault(); requestQueue.cancelEdit(); }
+                    else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                        event.preventDefault();
+                        event.target.parentNode.querySelector('[data-queue-action="save"]').click();
+                    }
+                });
+                queueToggle.addEventListener('click', function () { queueCollapsed = !queueCollapsed; renderRequestQueue(requestQueue.snapshot()); });
+                queueResume.addEventListener('click', function () { requestQueue.resume(); });
+                queueClear.addEventListener('click', function () { requestQueue.clear(); });
+
+                function resetRequestQueue() {
+                    var controller = activeAbortController;
+                    var active = requestQueue.snapshot().active;
+                    contentVersion++;
+                    requestQueue.reset();
+                    isGenerating = false;
+                    activeAbortController = null;
+                    hasUnreadReply = false;
+                    hasUnreadError = false;
+                    scrollOnNextOpen = false;
+                    dismissAiStatusToast();
+                    if (controller) controller.abort();
+                    if (active && active.messageElement) {
+                        active.messageElement.classList.remove('ai-chat-streaming');
+                        if (active.messageElement.sentencePanel) active.messageElement.sentencePanel.update('', 'stopped');
+                    }
+                    updateSendButtonState();
+                    updateToggleButtonState();
+                }
+
+                document.addEventListener('svp-ai-content-change', function () {
+                    var hadWork = isGenerating || requestQueue.snapshot().pending.length;
+                    var hadConversation = conversationStarted;
+                    resetRequestQueue();
+                    conversationId = generateConversationId();
+                    conversationFingerprint = null;
+                    setConversationStarted(false);
+                    clearQuoteChip();
+                    if (hadConversation) appendMetaLine('视频或字幕已更换，已开启新对话');
+                    if (hadWork) showFloatingToast('视频或字幕已更换，旧请求及队列已清理', 'info', 2400);
+                });
+
+                function updateSendButtonState() {
+                    var state = requestQueue.snapshot();
+                    var queueing = isGenerating || state.pending.length || state.paused;
+                    sendButton.textContent = queueing ? '排队' : '发送';
+                    chatInput.placeholder = '问问 AI…（Enter ' + (queueing ? '排队' : '发送') + '，Shift+Enter 换行）';
+                    stopButton.hidden = !isGenerating;
                 }
 
                 function updateToggleButtonState() {
@@ -7937,12 +8152,21 @@
                 }
 
                 function dismissAiStatusToast() {
-                    clearTimeout(aiStatusToastTimer);
-                    aiStatusToastTimer = null;
-                    aiStatusToastKey = null;
+                    dismissAiProgressToast();
                     document.querySelectorAll('#toastContainer .floating-toast[data-toast-key^="ai-request-status-"]').forEach(function (toast) {
+                        removeFloatingToastByKey(toast.dataset.toastKey);
                         toast.remove();
                     });
+                }
+
+                function dismissAiProgressToast() {
+                    clearTimeout(aiStatusToastTimer);
+                    aiStatusToastTimer = null;
+                    if (aiStatusToastKey) {
+                        var toast = document.querySelector('#toastContainer [data-toast-key="' + aiStatusToastKey + '"]');
+                        if (toast) toast.remove();
+                    }
+                    aiStatusToastKey = null;
                 }
 
                 function showAiStatusToast(message, type) {
@@ -7972,41 +8196,66 @@
                 }
 
                 function dispatchChat(options) {
-                    if (isGenerating) {
-                        showFloatingToast('AI 正在回答，请稍候或点停止', 'warning', 2000);
-                        return false;
-                    }
                     if ((modelDiscoveryState === 'idle' || modelDiscoveryState === 'loading')
                         && (aiSettings.provider || aiSettings.model)) {
                         showFloatingToast('正在获取可用模型，请稍候', 'info', 1800);
                         return false;
                     }
-                    if (!collectTranscriptLines().length) {
+                    if (aiSubtitleLoading || !collectTranscriptLines().length) {
                         showFloatingToast(subtitles.length ? 'SUP 字幕还没有可用文本，OCR 完成后再试' : '请先加载字幕再使用 AI 对话', 'warning', 2600);
                         return false;
                     }
                     ensureConversationFreshness();
                     setConversationStarted(true);
-                    if (aiSettings.backgroundRequest && chatWindow.hidden) {
-                        scrollOnNextOpen = true;
-                    }
-                    appendUserMessage(options.displayText, options.quote);
-                    var aiDiv = appendAiMessage();
-                    runStreamInto(aiDiv, options);
+                    options = Object.assign({}, options, {
+                        editText: options.editText || options.lookupText || (options.analysis ? options.analysis.source : options.displayText),
+                        quote: options.quote ? Object.assign({}, options.quote) : null,
+                        analysis: options.analysis ? Object.assign({}, options.analysis) : null,
+                        context: {
+                            conversationId: conversationId, contentVersion: contentVersion,
+                            systemMessage: buildSystemMessage(), backendUrl: normalizeBackendUrl(aiSettings.backendUrl),
+                            provider: aiSettings.provider, model: aiSettings.model,
+                            timeLabel: formatClock(getSubtitleTimelineTime(videoElement.currentTime || 0))
+                        }
+                    });
+                    requestQueue.enqueue(options);
                     return true;
                 }
 
-                function runStreamInto(aiDiv, options) {
+                function isCurrentRequest(entry) {
+                    var active = requestQueue.snapshot().active;
+                    return active && active.id === entry.id && entry.value.context.contentVersion === contentVersion;
+                }
+
+                function startQueuedRequest(entry) {
+                    var options = entry.value;
+                    if (options.context.contentVersion !== contentVersion || options.context.conversationId !== conversationId) {
+                        resetRequestQueue();
+                        return;
+                    }
+                    if (chatWindow.hidden) scrollOnNextOpen = true;
+                    var aiDiv = options.retryAiDiv;
+                    if (aiDiv) {
+                        aiDiv.classList.remove('ai-chat-msg-error');
+                        aiDiv.textContent = '';
+                        aiDiv.classList.add('ai-chat-streaming');
+                    } else {
+                        appendUserMessage(options.displayText, options.quote);
+                        aiDiv = appendAiMessage();
+                    }
+                    entry.messageElement = aiDiv;
+                    runStreamInto(aiDiv, options, entry);
+                }
+
+                function runStreamInto(aiDiv, options, entry) {
                     isGenerating = true;
-                    hasUnreadReply = false;
-                    hasUnreadError = false;
+                    if (!chatWindow.hidden) { hasUnreadReply = false; hasUnreadError = false; }
                     hasNotifiedBackgroundGeneration = false;
                     updateSendButtonState();
                     updateToggleButtonState();
                     notifyBackgroundGeneration();
                     activeAbortController = new AbortController();
                     var requestController = activeAbortController;
-                    var requestConversationId = conversationId;
                     aiDiv.isVocabularyLookup = !!options.lookupText;
                     aiDiv.cocaContext = options.lookupText ? (options.cocaContext || { candidates: [] }) : null;
                     if (aiDiv.sentencePanel) aiDiv.sentencePanel.dispose();
@@ -8019,6 +8268,7 @@
                     // 流式期间全量重渲染 markdown,节流至约 100ms 一次
                     function renderStreamingNow() {
                         streamRenderTimer = null;
+                        if (!isCurrentRequest(entry)) return;
                         lastStreamRenderAt = Date.now();
                         var pinned = isPinnedToBottom();
                         renderAiMessageContent(aiDiv, accumulated, false);
@@ -8049,24 +8299,21 @@
                                 console.warn('COCA 本地数据加载失败，继续查词:', err);
                             }
                         }
-                        if (requestController.signal.aborted || requestConversationId !== conversationId) {
+                        if (requestController.signal.aborted || !isCurrentRequest(entry)) {
                             throw new DOMException('Request cancelled', 'AbortError');
                         }
                         return streamChatRequest(payloadText, {
                             onDelta: function (textChunk) {
-                                if (requestController.signal.aborted || requestConversationId !== conversationId) return;
+                                if (requestController.signal.aborted || !isCurrentRequest(entry)) return;
                                 accumulated += textChunk;
                                 if (!streamRenderTimer) {
                                     streamRenderTimer = setTimeout(renderStreamingNow, Math.max(0, 100 - (Date.now() - lastStreamRenderAt)));
                                 }
                             }
-                        }, requestController.signal);
+                        }, requestController.signal, options.context);
                     }).then(function () {
                         cancelStreamingRender();
-                        if (requestConversationId !== conversationId) {
-                            finishGeneration();
-                            return;
-                        }
+                        if (!isCurrentRequest(entry)) return;
                         aiDiv.classList.remove('ai-chat-streaming');
                         aiDiv.analysisPhase = 'done';
                         var shouldKeepPinned = isPinnedToBottom();
@@ -8074,13 +8321,10 @@
                         if (shouldKeepPinned) {
                             scrollToBottom();
                         }
-                        finishGeneration('success');
+                        finishGeneration('success', entry);
                     }).catch(function (err) {
                         cancelStreamingRender();
-                        if (requestConversationId !== conversationId) {
-                            finishGeneration();
-                            return;
-                        }
+                        if (!isCurrentRequest(entry)) return;
                         aiDiv.classList.remove('ai-chat-streaming');
                         aiDiv.analysisPhase = err && err.name === 'AbortError' ? 'stopped' : 'error';
                         if (err && err.name === 'AbortError') {
@@ -8090,11 +8334,11 @@
                                 aiDiv.textContent = '（未收到回答）';
                             }
                             appendMetaLine('已停止，本轮未计入对话记忆');
-                            if (options.restoreInputOnStop) {
+                            if (options.restoreInputOnStop && !chatInput.value && !pendingQuote) {
                                 chatInput.value = options.restoreInputOnStop;
                                 autoGrowInput();
                             }
-                            finishGeneration('stopped');
+                            finishGeneration('stopped', entry);
                         } else {
                             aiDiv.classList.add('ai-chat-msg-error');
                             var shouldKeepErrorPinned = isPinnedToBottom();
@@ -8110,43 +8354,41 @@
                             retryButton.className = 'ai-chat-retry-btn';
                             retryButton.textContent = '重试';
                             retryButton.onclick = function () {
-                                if (isGenerating) {
+                                if (options.context.contentVersion !== contentVersion) {
+                                    showFloatingToast('视频或字幕已更换，请在当前内容中重新提问', 'warning', 2400);
                                     return;
                                 }
-                                aiDiv.classList.remove('ai-chat-msg-error');
-                                aiDiv.textContent = '';
-                                aiDiv.classList.add('ai-chat-streaming');
-                                runStreamInto(aiDiv, options);
+                                requestQueue.retry(Object.assign({}, options, { retryAiDiv: aiDiv }), entry.id);
                             };
                             aiDiv.appendChild(retryButton);
                             if (shouldKeepErrorPinned) {
                                 scrollToBottom();
                             }
-                            finishGeneration('error');
+                            finishGeneration('error', entry);
                         }
                     });
                 }
 
-                // status: 'success' | 'error' | 'stopped'，旧会话请求结束时不传
-                function finishGeneration(status) {
+                function finishGeneration(status, entry) {
+                    if (!isCurrentRequest(entry)) return;
                     isGenerating = false;
                     activeAbortController = null;
-                    updateSendButtonState();
+                    dismissAiProgressToast();
                     if (chatWindow.hidden) {
                         if (status === 'success') {
                             hasUnreadReply = true;
-                            showAiStatusToast('AI 回答已完成', 'success');
+                            hasUnreadError = false;
                         } else if (status === 'error') {
+                            hasUnreadReply = false;
                             hasUnreadError = true;
-                            showAiStatusToast('AI 请求失败，请打开查看', 'error');
-                        } else if (status === 'stopped') {
-                            showAiStatusToast('AI 生成已停止', 'info');
-                        } else {
-                            dismissAiStatusToast();
                         }
-                    } else {
-                        dismissAiStatusToast();
+                        var suffix = status === 'success' ? '已完成' : status === 'error' ? '请求失败' : '已停止';
+                        if (status !== 'success' && requestQueue.snapshot().pending.length) suffix += '，队列已暂停';
+                        upsertFloatingToast('ai-request-status-result-' + (++aiStatusToastSerial), requestLabel(entry.value) + suffix,
+                            status === 'success' ? 'success' : status === 'error' ? 'error' : 'info', 2600);
                     }
+                    requestQueue.complete(entry.id, status);
+                    updateSendButtonState();
                     updateToggleButtonState();
                 }
 
@@ -8156,7 +8398,8 @@
                         return;
                     }
                     var quote = pendingQuote;
-                    var payload = buildPositionPrefix();
+                    var positionPrefix = buildPositionPrefix();
+                    var payload = positionPrefix;
                     if (quote) {
                         payload += '【引用字幕 ' + quote.timeLabel + '】"' + quote.text + '"\n';
                     }
@@ -8164,6 +8407,7 @@
                     var accepted = dispatchChat({
                         payloadText: payload,
                         displayText: raw,
+                        positionPrefix: positionPrefix,
                         quote: quote,
                         restoreInputOnStop: raw
                     });
@@ -8183,11 +8427,10 @@
                 chatInput.addEventListener('input', autoGrowInput);
 
                 chatInput.addEventListener('keydown', function (event) {
+                    if (event.isComposing) { event.stopPropagation(); return; }
                     if (event.key === 'Enter' && !event.shiftKey) {
                         event.preventDefault();
-                        if (!isGenerating) {
-                            sendFromInput();
-                        }
+                        sendFromInput();
                     } else if (event.key === 'Escape') {
                         chatInput.blur();
                         videoElement.focus();
@@ -8195,14 +8438,11 @@
                     event.stopPropagation();
                 });
 
-                sendButton.addEventListener('click', function () {
-                    if (isGenerating) {
-                        if (activeAbortController) {
-                            activeAbortController.abort();
-                        }
-                        return;
-                    }
-                    sendFromInput();
+                sendButton.addEventListener('click', sendFromInput);
+                stopButton.addEventListener('click', function () {
+                    if (!isGenerating || !activeAbortController) return;
+                    requestQueue.pause();
+                    activeAbortController.abort();
                 });
 
                 // ---------- 引用条 ----------
@@ -8221,12 +8461,9 @@
 
                 // ---------- 会话操作 ----------
                 newConversationButton.addEventListener('click', function () {
-                    dismissAiStatusToast();
+                    resetRequestQueue();
                     if (lookupSpeech) lookupSpeech.stop();
                     if (sentenceAnalysis) sentenceAnalysis.reset();
-                    if (isGenerating && activeAbortController) {
-                        activeAbortController.abort();
-                    }
                     conversationId = generateConversationId();
                     conversationFingerprint = subtitleFingerprint();
                     setConversationStarted(false);
@@ -9260,14 +9497,8 @@
                     }
                 }, true);
 
-                selectionLookupButton.addEventListener('click', function () {
-                    var info = currentSelectionInfo;
-                    hideSelectionBubble();
-                    if (!info) {
-                        return;
-                    }
-                    window.getSelection().removeAllRanges();
-                    var payload = buildPositionPrefix() +
+                function buildLookupPrompt(info, positionPrefix) {
+                    return positionPrefix +
                         '【查词】「' + info.text + '」\n' +
                         '出处 ' + info.timeLabel + '："' + info.sentence + '"\n\n' +
                         '这是一次英语词汇学习，请把选中内容当作要学的词汇来讲解。按以下三部分组织回答：\n' +
@@ -9284,12 +9515,23 @@
                         '- 只聚焦当前上下文使用的这一个义项；不要罗列其他词典义项，也不要提供属于其他义项的搭配\n' +
                         '- 不要对原句做整句中文翻译，这不利于培养外语思维方式\n' +
                         '回答保持简洁，按相关性组织内容，无需机械覆盖不适用的项目。';
+                }
+
+                selectionLookupButton.addEventListener('click', function () {
+                    var info = currentSelectionInfo;
+                    hideSelectionBubble();
+                    if (!info) return;
+                    window.getSelection().removeAllRanges();
+                    var positionPrefix = buildPositionPrefix();
+                    var payload = buildLookupPrompt(info, positionPrefix);
                     if (!aiSettings.backgroundRequest || !chatWindow.hidden) {
                         openChatWindow(false);
                     }
                     dispatchChat({
                         payloadText: payload,
                         lookupText: info.text,
+                        lookupInfo: Object.assign({}, info),
+                        positionPrefix: positionPrefix,
                         displayText: '【查词】「' + info.text + '」',
                         quote: null,
                         restoreInputOnStop: ''
@@ -9304,8 +9546,10 @@
                     if (!fromSelection || !aiSettings.backgroundRequest || !chatWindow.hidden) {
                         openChatWindow(false);
                     }
+                    var positionPrefix = buildPositionPrefix();
                     return dispatchChat({
-                        payloadText: buildPositionPrefix() + window.SvpSentenceAnalysis.prompt(context),
+                        payloadText: positionPrefix + window.SvpSentenceAnalysis.prompt(context),
+                        positionPrefix: positionPrefix,
                         displayText: '【析句】「' + context.source + '」',
                         quote: { text: context.selection, timeLabel: '[' + formatClock(context.time) + ']' },
                         analysis: context,
@@ -9389,6 +9633,7 @@
                 loadAiSettings();
                 loadEudicAuthorization();
                 applySettingsToInputs();
+                renderRequestQueue(requestQueue.snapshot());
                 updateSendButtonState();
                 loadModelDiscovery();
                 try {

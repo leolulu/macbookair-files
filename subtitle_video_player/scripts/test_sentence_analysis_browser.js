@@ -207,8 +207,8 @@ async function main() {
                 await page.evaluate(mode => { saTest.mode = mode; }, mode);
                 await select(page, 'submitted');
                 if (mode === 'stop') {
-                    await page.waitForFunction(() => document.querySelector('#aiChatSend').textContent === '停止');
-                    await page.locator('#aiChatSend').click();
+                    await page.waitForFunction(() => !document.querySelector('#aiChatStop').hidden);
+                    await page.locator('#aiChatStop').click();
                 }
                 await done(page);
                 const last = page.locator('.ai-chat-msg-ai').last();
