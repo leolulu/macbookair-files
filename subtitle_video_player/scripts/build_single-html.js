@@ -127,6 +127,8 @@ function build() {
     `<style>\n${cssText}\n</style>`,
     'Failed to inline jquery-ui CSS link'
   );
+  html = replaceOnce(html, '<link rel="stylesheet" href="assets/sentence_analysis.css">',
+    `<style>\n${readText(path.join(ROOT, 'assets/sentence_analysis.css'))}\n</style>\n<script type="text/plain" id="svp-readfrog-license">\n${readText(path.join(ROOT, 'assets/READFROG-LICENSE'))}\n</script>`, 'Failed to inline sentence analysis CSS');
 
   // Only small, OCR-independent scripts are inlined into the base file.
   // ort.min.js / opencv.js / esearch-ocr.js / models / wasm are intentionally
@@ -137,6 +139,7 @@ function build() {
     'assets/vendor/marked/marked.umd.js': readText(path.join(ROOT, 'assets/vendor/marked/marked.umd.js')),
     'js/ai_markdown_compat.js': readText(path.join(ROOT, 'js/ai_markdown_compat.js')),
     'js/lookup_speech.js': readText(path.join(ROOT, 'js/lookup_speech.js')),
+    'js/sentence_analysis.js': readText(path.join(ROOT, 'js/sentence_analysis.js')),
     'assets/vendor/dompurify/purify.min.js': readText(path.join(ROOT, 'assets/vendor/dompurify/purify.min.js')),
     'js/eudic_integration.js': readText(path.join(ROOT, 'js/eudic_integration.js')),
     'js/coca_data.js': readText(path.join(ROOT, 'js/coca_data.js')),
@@ -147,7 +150,7 @@ function build() {
   };
 
   const workerSource = patchWorkerJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr_worker.js')));
-  ['js/coca_data.js', 'js/coca_rank.js', 'js/lookup_speech.js'].forEach((script) => {
+  ['js/coca_data.js', 'js/coca_rank.js', 'js/lookup_speech.js', 'js/sentence_analysis.js'].forEach((script) => {
     html = replaceOnce(html, `<script src="${script}"></script>`, `<script>\n${inlineScripts[script]}\n</script>`, `Failed to inline ${script}`);
   });
   const bootstrap = `<script>\nwindow.__SVP_SINGLE_FILE_BUNDLE__ = ${JSON.stringify({ workerSource })};\n</script>`;

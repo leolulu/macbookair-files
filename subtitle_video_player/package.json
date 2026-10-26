@@ -6,6 +6,11 @@
     "build:single-html": "node ./scripts/build_single-html.js",
     "test": "node --test ./test/*.test.js",
     "test:eudic": "node --test ./test/eudic_integration.test.js",
-    "test:markdown": "node --test ./test/ai_markdown_compat.test.js"
+    "test:markdown": "node --test ./test/ai_markdown_compat.test.js",
+    "test:sentence": "node --test ./test/sentence_analysis.test.js",
+    "test:sentence:browser": "node ./scripts/test_sentence_analysis_browser.js",
+    "test:sentence:layout": "node ./scripts/test_sentence_analysis_layout.js",
+    "test:sentence:reference": "node ./scripts/test_sentence_analysis_reference.js",
+    "test:sentence:live": "node ./scripts/test_sentence_analysis_live.js"
   }
 }

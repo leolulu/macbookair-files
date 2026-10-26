@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/vendor/jquery/jquery-ui-1.13.2.css">
+    <link rel="stylesheet" href="assets/sentence_analysis.css">
     <style>
         body {
             margin: 0;
@@ -2902,6 +2903,7 @@
     <div id="aiSelectionBubble" class="ai-selection-bubble" hidden>
         <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI</button>
         <button id="aiSelectionLookup" type="button" title="在整个字幕语境中讲解选中词/词组的含义与用法">查词</button>
+        <button id="aiSelectionAnalyze" type="button" title="解析所在句子的结构、词组和修饰关系">析句</button>
         <button id="aiSelectionAddEudic" type="button" title="将选中单词或词组和前后字幕添加到欧路词典">加生词</button>
     </div>
 
@@ -2911,6 +2913,7 @@
     <script src="assets/vendor/marked/marked.umd.js"></script>
     <script src="js/ai_markdown_compat.js"></script>
     <script src="js/lookup_speech.js"></script>
+    <script src="js/sentence_analysis.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/eudic_integration.js"></script>
     <script src="js/coca_data.js"></script>
@@ -6989,8 +6992,10 @@
                 var chatWindow = document.getElementById('aiChatWindow');
                 var chatHeader = document.getElementById('aiChatHeader');
                 var messagesBox = document.getElementById('aiChatMessages');
+                var sentenceAnalysis = null;
                 var lookupSpeech = window.SvpLookupSpeech ? window.SvpLookupSpeech.createController(window, messagesBox, {
                     beforeSpeak: function () {
+                        if (sentenceAnalysis) sentenceAnalysis.stopSpeech();
                         if (!videoElement.paused) videoElement.pause();
                     },
                     onError: function (message) { showFloatingToast(message, 'info', 3000); }
@@ -7041,10 +7046,25 @@
                 var eudicContextSubmitButton = document.getElementById('eudicContextSubmit');
                 var selectionBubble = document.getElementById('aiSelectionBubble');
                 var selectionLookupButton = document.getElementById('aiSelectionLookup');
+                var selectionAnalyzeButton = document.getElementById('aiSelectionAnalyze');
                 var selectionAskButton = document.getElementById('aiSelectionAsk');
                 var selectionAddEudicButton = document.getElementById('aiSelectionAddEudic');
                 var subtitlesContainer = document.getElementById('subtitles');
                 var videoElement = document.getElementById('video');
+                sentenceAnalysis = window.SvpSentenceAnalysis ? window.SvpSentenceAnalysis.createController(window, messagesBox, {
+                    beforeSpeak: function () {
+                        if (lookupSpeech) lookupSpeech.stop();
+                        if (!videoElement.paused) videoElement.pause();
+                    },
+                    onSeek: function (time) {
+                        videoElement.currentTime = getShiftedSubtitleTime(time);
+                        if ($('#clickToPlay').prop('checked')) videoElement.play();
+                    },
+                    getCue: function (index, context) {
+                        return context.cueSource === subtitles && context.fingerprint === subtitleFingerprint() ? subtitles[index] : null;
+                    },
+                    onAnalyze: dispatchSentenceAnalysis
+                }) : null;
 
                 // ---------- 设置 ----------
                 var aiSettings = {
@@ -7770,6 +7790,10 @@
                 }
 
                 function renderAiMessageContent(div, fullText, reportSanitizedRemoval) {
+                    if (div.sentencePanel) {
+                        div.sentencePanel.update(fullText, div.analysisPhase || 'streaming');
+                        return;
+                    }
                     var focusedSpeech = div.contains(document.activeElement) && document.activeElement.classList.contains('lookup-speech-button')
                         ? document.activeElement.getAttribute('aria-label') : null;
                     if (window.SvpCocaRank) {
@@ -7931,6 +7955,9 @@
                     var requestConversationId = conversationId;
                     aiDiv.isVocabularyLookup = !!options.lookupText;
                     aiDiv.cocaContext = options.lookupText ? (options.cocaContext || { candidates: [] }) : null;
+                    if (aiDiv.sentencePanel) aiDiv.sentencePanel.dispose();
+                    aiDiv.sentencePanel = options.analysis && sentenceAnalysis ? sentenceAnalysis.mount(aiDiv, options.analysis) : null;
+                    aiDiv.analysisPhase = 'streaming';
                     var accumulated = '';
                     var streamRenderTimer = null;
                     var lastStreamRenderAt = 0;
@@ -7987,6 +8014,7 @@
                             return;
                         }
                         aiDiv.classList.remove('ai-chat-streaming');
+                        aiDiv.analysisPhase = 'done';
                         var shouldKeepPinned = isPinnedToBottom();
                         renderAiMessageContent(aiDiv, accumulated);
                         if (shouldKeepPinned) {
@@ -8000,8 +8028,9 @@
                             return;
                         }
                         aiDiv.classList.remove('ai-chat-streaming');
+                        aiDiv.analysisPhase = err && err.name === 'AbortError' ? 'stopped' : 'error';
                         if (err && err.name === 'AbortError') {
-                            if (accumulated) {
+                            if (accumulated || aiDiv.sentencePanel) {
                                 renderAiMessageContent(aiDiv, accumulated);
                             } else {
                                 aiDiv.textContent = '（未收到回答）';
@@ -8131,6 +8160,7 @@
                 // ---------- 会话操作 ----------
                 newConversationButton.addEventListener('click', function () {
                     if (lookupSpeech) lookupSpeech.stop();
+                    if (sentenceAnalysis) sentenceAnalysis.reset();
                     if (isGenerating && activeAbortController) {
                         activeAbortController.abort();
                     }
@@ -8416,6 +8446,7 @@
 
                 function closeChatWindow() {
                     if (lookupSpeech) lookupSpeech.stop();
+                    if (sentenceAnalysis) sentenceAnalysis.blur();
                     captureGeometry();
                     resetEudicAuthorizationInput();
                     chatWindow.hidden = true;
@@ -8967,6 +8998,20 @@
                             selectionEnd = Math.max(selectionStart, selectionEnd - leadingWhitespaceLength);
                         } catch (err) { }
                     }
+                    if (startIdx !== endIdx) {
+                        try {
+                            var analysisStartRange = range.cloneRange();
+                            analysisStartRange.selectNodeContents(startDiv);
+                            analysisStartRange.setEnd(range.startContainer, range.startOffset);
+                            var analysisEndRange = range.cloneRange();
+                            analysisEndRange.selectNodeContents(endDiv);
+                            analysisEndRange.setEnd(range.endContainer, range.endOffset);
+                            var analysisStartText = String(subtitles[startIdx].text || '');
+                            var analysisEndText = String(subtitles[endIdx].text || '');
+                            selectionStart = Math.max(0, analysisStartRange.toString().length - (analysisStartText.length - analysisStartText.trimStart().length));
+                            selectionEnd = Math.max(0, analysisEndRange.toString().length - (analysisEndText.length - analysisEndText.trimStart().length));
+                        } catch (err) { }
+                    }
                     return {
                         text: text,
                         timeLabel: timeLabel,
@@ -9173,6 +9218,35 @@
                         quote: null,
                         restoreInputOnStop: ''
                     });
+                });
+
+                function dispatchSentenceAnalysis(context) {
+                    if (context.cueSource !== subtitles || context.fingerprint !== subtitleFingerprint()) {
+                        showFloatingToast('字幕已更换，请在当前字幕中重新划选', 'warning', 2400);
+                        return false;
+                    }
+                    openChatWindow(false);
+                    return dispatchChat({
+                        payloadText: buildPositionPrefix() + window.SvpSentenceAnalysis.prompt(context),
+                        displayText: '【析句】「' + context.source + '」',
+                        quote: { text: context.selection, timeLabel: '[' + formatClock(context.time) + ']' },
+                        analysis: context,
+                        restoreInputOnStop: ''
+                    });
+                }
+
+                selectionAnalyzeButton.addEventListener('click', function () {
+                    var info = currentSelectionInfo;
+                    hideSelectionBubble();
+                    if (!info || !sentenceAnalysis) return;
+                    try {
+                        var context = window.SvpSentenceAnalysis.buildRange(subtitles, info);
+                        context.fingerprint = subtitleFingerprint();
+                        context.cueSource = subtitles;
+                        if (dispatchSentenceAnalysis(context)) window.getSelection().removeAllRanges();
+                    } catch (err) {
+                        showFloatingToast(err.message || '无法确定解析范围，请重新划选', 'warning', 3000);
+                    }
                 });
 
                 selectionAskButton.addEventListener('click', function () {
