@@ -3950,6 +3950,7 @@
 
             // 清空视频显示
             clearVideoDisplay() {
+                // 新增视频相关的临时状态、提示或高亮时，需同步补齐此处的清理和界面刷新，避免清空视频后残留。
                 this.temporaryGridLayout = null;
                 this.cropSourceIdentity = null;
                 this.cropRect = null;
@@ -3960,6 +3961,7 @@
                 document.getElementById('pagination').classList.add('hidden');
                 document.getElementById('pagination').classList.remove('visible');
                 this.updateGridDisplay();
+                this.updateEffectiveDurationUI();
                 this.syncCropUI();
             }
 
