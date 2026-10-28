@@ -9,6 +9,10 @@
     'use strict';
 
 
+    function makeUrlSourceId(url, baseUrl) {
+        return new URL(url, baseUrl).pathname;
+    }
+
     function formatTime(seconds) {
         var total = Math.max(0, Math.floor(Number(seconds) || 0));
         var hours = Math.floor(total / 3600);
@@ -355,6 +359,7 @@
     return {
         createFirebaseClient: createFirebaseClient,
         createController: createController,
+        makeUrlSourceId: makeUrlSourceId,
         formatTime: formatTime,
         restorableRecord: restorableRecord
     };

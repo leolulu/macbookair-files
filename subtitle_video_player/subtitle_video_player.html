@@ -969,10 +969,51 @@
         .floating-toast.toast-error {
             border-left: 4px solid #E5484D;
         }
+
+        .floating-toast.ai-result-toast {
+            min-width: min(280px, calc(100vw - 32px));
+            padding: 0;
+            pointer-events: auto;
+        }
+
+        .ai-result-toast-open {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+            min-height: 64px;
+            box-sizing: border-box;
+            padding: 14px 18px;
+            border: 0;
+            border-radius: inherit;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: 15px;
+            text-align: left;
+            overflow-wrap: anywhere;
+            cursor: pointer;
+        }
+
+        .ai-result-toast-open:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .ai-result-toast-open:focus-visible {
+            outline: 2px solid #80AFFF;
+            outline-offset: 2px;
+        }
+
+        .ai-result-toast-hint {
+            color: #B9C9E4;
+            font-size: 12px;
+        }
+
         .resume-progress-prompt {
             position: absolute;
-            top: 12px;
-            right: 12px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             z-index: 30;
             width: min(330px, calc(100% - 24px));
             box-sizing: border-box;
@@ -1040,14 +1081,12 @@
         }
 
         @keyframes resume-progress-enter {
-            from { opacity: 0; transform: translateY(-6px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translate(-50%, -50%) translateY(-6px); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
         }
 
         @media (max-width: 700px) {
             .resume-progress-prompt {
-                top: 8px;
-                right: 8px;
                 width: calc(100% - 16px);
             }
         }
@@ -1474,6 +1513,28 @@
             flex-shrink: 0;
             white-space: nowrap;
             cursor: pointer;
+        }
+
+        .ai-chat-background-settings {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 0 0 100%;
+            min-width: 0;
+        }
+
+        .ai-chat-background-options {
+            min-width: 0;
+        }
+
+        .ai-chat-background-options label {
+            width: auto;
+            white-space: normal;
+        }
+
+        .ai-chat-background-options[aria-disabled="true"] label {
+            color: #8A91A0;
+            cursor: default;
         }
 
         .ai-chat-selection-bubble-setting {
@@ -2914,7 +2975,7 @@
                 </span>
             </span>
             <span class="ai-chat-header-drag-space" aria-hidden="true"></span>
-            <button id="aiChatClose" type="button" title="收起（后台生成不受影响）">─</button>
+            <button id="aiChatClose" type="button" title="收起（Esc；后台生成不受影响）">─</button>
         </div>
         <div id="aiChatSettings" class="ai-chat-settings" hidden>
             <label>后端URL
@@ -2950,9 +3011,16 @@
                 <label title="每次提问自动附带当前播放时间和当前字幕，便于 AI 理解“这句”“刚才”等指代。问全局性问题时可以关闭，避免 AI 被当前位置带偏；防剧透开启时，此项会自动启用并锁定。">
                     <input type="checkbox" id="aiChatAttachPosition" checked> 提问附带播放位置
                 </label>
-                <label title="查词、析句时不自动打开 AI 窗口；已打开的窗口保持显示。">
-                    <input type="checkbox" id="aiChatBackgroundRequest"> 后台请求
-                </label>
+                <div class="ai-chat-background-settings">
+                    <label title="查词、析句时先在后台生成；已打开的窗口保持显示。">
+                        <input type="checkbox" id="aiChatBackgroundRequest" aria-controls="aiChatBackgroundOptions"> 后台请求
+                    </label>
+                    <div id="aiChatBackgroundOptions" class="ai-chat-background-options" aria-disabled="true">
+                        <label title="后台请求成功完成后自动展开窗口，保留当前输入焦点。">
+                            <input type="checkbox" id="aiChatBackgroundAutoOpen" disabled> 完成后自动打开 AI 对话窗口
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="ai-chat-selection-bubble-setting">
                 <label for="aiSelectionBubblePosition">划词气泡位置</label>
@@ -3564,7 +3632,7 @@
                     notifyAiContentChanged();
                     if (window.svpPlaybackProgress) {
                         window.svpPlaybackProgress.setSource({
-                            id: window.SupOcrCache.makeMovieId(null, videoUrl),
+                            id: window.SvpPlaybackProgress.makeUrlSourceId(videoUrl, document.baseURI),
                             name: extractFilename(videoUrl)
                         });
                     }
@@ -6730,7 +6798,7 @@
                         notifyAiContentChanged();
                         if (window.svpPlaybackProgress) {
                             window.svpPlaybackProgress.setSource({
-                                id: window.SupOcrCache.makeMovieId(null, fileUrl),
+                                id: window.SvpPlaybackProgress.makeUrlSourceId(fileUrl, document.baseURI),
                                 name: fileName
                             });
                         }
@@ -7096,7 +7164,8 @@
                 });
 
                 document.addEventListener('keydown', function (event) {
-                    if (event.key === 'Escape' && !popover.hidden) {
+                    if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && !popover.hidden) {
+                        event.preventDefault();
                         setPopoverOpen(false);
                         control.focus();
                     }
@@ -7252,6 +7321,8 @@
                 var noSpoilerCheckbox = document.getElementById('aiChatNoSpoiler');
                 var attachPositionCheckbox = document.getElementById('aiChatAttachPosition');
                 var backgroundRequestCheckbox = document.getElementById('aiChatBackgroundRequest');
+                var backgroundOptions = document.getElementById('aiChatBackgroundOptions');
+                var backgroundAutoOpenCheckbox = document.getElementById('aiChatBackgroundAutoOpen');
                 var selectionBubblePositionSelect = document.getElementById('aiSelectionBubblePosition');
                 var contextInfo = document.getElementById('aiChatContextInfo');
                 var quoteChip = document.getElementById('aiChatQuoteChip');
@@ -7315,6 +7386,7 @@
                     noSpoiler: true,
                     attachPosition: true,
                     backgroundRequest: false,
+                    backgroundAutoOpen: false,
                     selectionBubblePosition: 'auto'
                 };
                 var availableProviderModels = [];
@@ -7355,6 +7427,9 @@
                             }
                             if (typeof parsed.backgroundRequest === 'boolean') {
                                 aiSettings.backgroundRequest = parsed.backgroundRequest;
+                            }
+                            if (typeof parsed.backgroundAutoOpen === 'boolean') {
+                                aiSettings.backgroundAutoOpen = parsed.backgroundAutoOpen;
                             }
                             if (isValidSelectionBubblePosition(parsed.selectionBubblePosition)) {
                                 aiSettings.selectionBubblePosition = parsed.selectionBubblePosition;
@@ -7680,9 +7755,17 @@
                     attachPositionCheckbox.disabled = aiSettings.noSpoiler;
                 }
 
+                function syncBackgroundRequestControls() {
+                    if (!aiSettings.backgroundRequest) aiSettings.backgroundAutoOpen = false;
+                    backgroundRequestCheckbox.checked = aiSettings.backgroundRequest;
+                    backgroundAutoOpenCheckbox.checked = aiSettings.backgroundAutoOpen;
+                    backgroundAutoOpenCheckbox.disabled = !aiSettings.backgroundRequest;
+                    backgroundOptions.setAttribute('aria-disabled', String(!aiSettings.backgroundRequest));
+                }
+
                 function applySettingsToInputs() {
                     backendUrlInput.value = aiSettings.backendUrl;
-                    backgroundRequestCheckbox.checked = aiSettings.backgroundRequest;
+                    syncBackgroundRequestControls();
                     syncContextSettingControls();
                     syncSelectionBubblePositionControl();
                     syncRoutingControls();
@@ -8300,6 +8383,7 @@
                     else requestQueue.move(id, action === 'up' ? -1 : 1);
                 });
                 queueList.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && event.target.dataset.queueAction !== 'editor') return;
                     event.stopPropagation();
                     if (event.isComposing || event.target.dataset.queueAction !== 'editor') return;
                     if (event.key === 'Escape') { event.preventDefault(); requestQueue.cancelEdit(); }
@@ -8403,6 +8487,37 @@
                     }
                     hasNotifiedBackgroundGeneration = true;
                     showAiStatusToast('AI 正在生成回答', 'info');
+                }
+
+                function showAiResultToast(message, type) {
+                    var key = 'ai-request-status-result-' + (++aiStatusToastSerial);
+                    upsertFloatingToast(key, '', type, 6000);
+                    var toast = document.querySelector('#toastContainer [data-toast-key="' + key + '"]');
+                    toast.classList.add('ai-result-toast');
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'ai-result-toast-open';
+                    var title = document.createElement('span');
+                    title.textContent = message;
+                    var hint = document.createElement('span');
+                    hint.className = 'ai-result-toast-hint';
+                    hint.textContent = '点击查看 AI 对话';
+                    button.append(title, hint);
+                    button.onclick = function () { openChatWindow(!isPortraitLayout()); };
+                    toast.appendChild(button);
+                    function pauseDismissal() {
+                        clearTimeout(toastTimers[key]);
+                        delete toastTimers[key];
+                    }
+                    function resumeDismissal() {
+                        if (toast.matches(':hover') || toast.contains(document.activeElement)) return;
+                        pauseDismissal();
+                        toastTimers[key] = setTimeout(function () { removeFloatingToastByKey(key); }, 6000);
+                    }
+                    toast.addEventListener('mouseenter', pauseDismissal);
+                    toast.addEventListener('mouseleave', resumeDismissal);
+                    toast.addEventListener('focusin', pauseDismissal);
+                    toast.addEventListener('focusout', resumeDismissal);
                 }
 
                 function dispatchChat(options) {
@@ -8592,10 +8707,14 @@
                             hasUnreadReply = false;
                             hasUnreadError = true;
                         }
-                        var suffix = status === 'success' ? '已完成' : status === 'error' ? '请求失败' : '已停止';
-                        if (status !== 'success' && requestQueue.snapshot().pending.length) suffix += '，队列已暂停';
-                        upsertFloatingToast('ai-request-status-result-' + (++aiStatusToastSerial), requestLabel(entry.value) + suffix,
-                            status === 'success' ? 'success' : status === 'error' ? 'error' : 'info', 2600);
+                        if (status === 'success' && aiSettings.backgroundRequest && aiSettings.backgroundAutoOpen) {
+                            openChatWindow(false);
+                        } else {
+                            var suffix = status === 'success' ? '已完成' : status === 'error' ? '请求失败' : '已停止';
+                            if (status !== 'success' && requestQueue.snapshot().pending.length) suffix += '，队列已暂停';
+                            showAiResultToast(requestLabel(entry.value) + suffix,
+                                status === 'success' ? 'success' : status === 'error' ? 'error' : 'info');
+                        }
                     }
                     requestQueue.complete(entry.id, status);
                     updateSendButtonState();
@@ -8642,8 +8761,7 @@
                         event.preventDefault();
                         sendFromInput();
                     } else if (event.key === 'Escape') {
-                        chatInput.blur();
-                        videoElement.focus();
+                        return;
                     }
                     event.stopPropagation();
                 });
@@ -8741,6 +8859,12 @@
 
                 backgroundRequestCheckbox.addEventListener('change', function () {
                     aiSettings.backgroundRequest = backgroundRequestCheckbox.checked;
+                    syncBackgroundRequestControls();
+                    saveAiSettings();
+                });
+
+                backgroundAutoOpenCheckbox.addEventListener('change', function () {
+                    aiSettings.backgroundAutoOpen = backgroundAutoOpenCheckbox.checked;
                     saveAiSettings();
                 });
 
@@ -9692,10 +9816,22 @@
                 eudicContextSubmitButton.addEventListener('click', submitEudicContextDraft);
 
                 document.addEventListener('keydown', function (event) {
-                    if (event.key === 'Escape' && !eudicContextOverlay.hidden && !eudicSubmissionPending) {
+                    // 局部编辑和浮层先处理；收起窗口只接收尚未被消费的普通 Esc。
+                    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat
+                        || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || document.fullscreenElement) return;
+                    if (!eudicContextOverlay.hidden) {
                         event.preventDefault();
+                        event.stopImmediatePropagation();
                         closeEudicContextDialog();
+                        return;
                     }
+                    if (chatWindow.hidden || event.target.tagName === 'SELECT'
+                        || document.getElementById('modalOverlay').getClientRects().length) return;
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    if (sentenceAnalysis && sentenceAnalysis.dismissTip()) return;
+                    closeChatWindow();
+                    videoElement.focus({ preventScroll: true });
                 });
 
                 // 有选区时拦截字幕区所有点击跳转（捕获阶段，覆盖各类字幕的 seek 处理器）
@@ -9866,7 +10002,8 @@
             var resumeProgressDismiss = document.getElementById('resumeProgressDismiss');
             var resumeProgressDismissHandler = null;
             document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape' && !resumeProgressElement.hidden && resumeProgressDismissHandler) {
+                if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && !event.repeat
+                    && !resumeProgressElement.hidden && resumeProgressDismissHandler) {
                     event.preventDefault();
                     resumeProgressDismissHandler();
                 }

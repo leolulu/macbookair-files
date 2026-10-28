@@ -658,9 +658,16 @@
         }
         function reset() { stopSpeech(); Array.from(panels).forEach(function (panel) { panel.dispose(); }); }
         function blur() { stopSpeech(); panels.forEach(function (panel) { panel.clearTip(); }); }
+        function dismissTip() {
+            var dismissed = false;
+            panels.forEach(function (panel) {
+                if (panel.active) { panel.clearTip(); dismissed = true; }
+            });
+            return dismissed;
+        }
         host.addEventListener('pagehide', blur);
         doc.addEventListener('visibilitychange', function () { if (doc.hidden) blur(); });
-        return { mount: mount, reset: reset, blur: blur, stopSpeech: stopSpeech };
+        return { mount: mount, reset: reset, blur: blur, dismissTip: dismissTip, stopSpeech: stopSpeech };
     }
     return { buildRange: buildRange, parseResult: parseResult, prompt: prompt, locate: locate, createController: createController };
 });

@@ -4,7 +4,24 @@ const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { createFirebaseClient, createController, formatTime, restorableRecord } = require('../js/playback_progress');
+const { createFirebaseClient, createController, makeUrlSourceId, formatTime, restorableRecord } = require('../js/playback_progress');
+
+test('online identities use only the URL path across protocols, hosts, ports and query parameters', () => {
+    const expected = '/media/%E7%94%B5%E5%BD%B1.mp4';
+    for (const url of [
+        'http://192.168.123.222:1127/media/电影.mp4?token=first#t=10',
+        'https://example.com:8443/media/电影.mp4?token=second#t=20',
+        'http://another.example/media/%E7%94%B5%E5%BD%B1.mp4',
+        '//another.example:1234/media/电影.mp4?download=1',
+        '/media/电影.mp4?token=third',
+        '电影.mp4?token=fourth'
+    ]) {
+        assert.equal(makeUrlSourceId(url, 'http://localhost/media/'), expected);
+    }
+    assert.notEqual(makeUrlSourceId('https://example.com/other/电影.mp4'), expected);
+    assert.notEqual(makeUrlSourceId('https://example.com/media/另一部电影.mp4'), expected);
+    assert.notEqual(makeUrlSourceId('https://example.com/media/Movie.mp4'), makeUrlSourceId('https://example.com/media/movie.mp4'));
+});
 
 function eventTarget() {
     const listeners = new Map();

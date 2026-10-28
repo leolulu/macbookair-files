@@ -4,6 +4,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const { pathToFileURL } = require('node:url');
 const root = path.resolve(__dirname, '..');
+const singleHtml = process.env.SVP_SINGLE_HTML || path.join(root, 'subtitle_video_player.single.html');
 const output = path.join(root, 'test-results', 'ai-queue');
 const temp = path.join(output, 'tmp');
 fs.mkdirSync(temp, { recursive: true }); process.env.TEMP = temp; process.env.TMP = temp;
@@ -71,6 +72,7 @@ async function show(page) { if (await page.locator('#aiChatWindow').evaluate(nod
 async function hide(page) { if (!await page.locator('#aiChatWindow').evaluate(node => node.hidden)) await page.locator('#aiChatClose').click(); }
 async function submit(page, text) { await show(page); await page.locator('#aiChatInput').fill(text); await page.locator('#aiChatInput').press('Enter'); }
 async function finish(page, next = false) {
+    await page.waitForFunction(() => queueTest.active && !queueTest.active.closed);
     const before = await requests(page); await page.evaluate(() => queueTest.active.finish());
     if (next) await waitRequests(page, before + 1); else await idle(page);
 }
@@ -94,6 +96,24 @@ async function load(page, name = 'queue.srt') {
 }
 async function fresh(page) { await show(page); await page.locator('#aiChatNewConversation').click(); await idle(page); await waitPending(page, 0); }
 async function action(page, index, action) { await rows(page).nth(index).locator('[data-queue-action="' + action + '"]').click(); }
+async function background(page, autoOpen) {
+    await show(page);
+    if (await page.locator('#aiChatSettings').evaluate(node => node.hidden)) await page.locator('#aiChatSettingsToggle').click();
+    await page.locator('#aiChatBackgroundRequest').check();
+    await page.locator('#aiChatBackgroundAutoOpen').setChecked(autoOpen);
+    await page.locator('#aiChatSettingsToggle').click();
+}
+async function backgroundLayout(page) {
+    return page.evaluate(() => {
+        const parent = document.querySelector('#aiChatBackgroundRequest').getBoundingClientRect();
+        const child = document.querySelector('#aiChatBackgroundAutoOpen').getBoundingClientRect();
+        return {
+            height: document.querySelector('#aiChatSettings').getBoundingClientRect().height,
+            nextTop: document.querySelector('.ai-chat-selection-bubble-setting').getBoundingClientRect().top,
+            parentY: parent.y + parent.height / 2, childY: child.y + child.height / 2
+        };
+    });
+}
 
 async function main() {
     const browser = await chromium.launch({ channel: 'chrome', headless: true, downloadsPath: path.join(temp, 'downloads') });
@@ -103,9 +123,18 @@ async function main() {
             const context = await browser.newContext({ viewport: { width: 1280, height: 1000 }, reducedMotion: 'reduce' });
             const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
             await mock(page); await page.route(/^https?:/, route => route.abort());
-            await page.goto(pathToFileURL(path.join(root, file)).href);
+            await page.goto(pathToFileURL(file.endsWith('.single.html') ? singleHtml : path.join(root, file)).href);
             await load(page); await show(page); await page.locator('#aiChatSettingsToggle').click();
+            assert.equal(await page.locator('#aiChatBackgroundOptions').isVisible(), true);
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isChecked(), false);
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isDisabled(), true);
+            const disabledLayout = await backgroundLayout(page);
             await page.locator('#aiChatBackgroundRequest').check();
+            assert.equal(await page.locator('#aiChatBackgroundOptions').isVisible(), true);
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isDisabled(), false);
+            assert.deepEqual(await backgroundLayout(page), disabledLayout);
+            assert.ok(Math.abs(disabledLayout.parentY - disabledLayout.childY) < 1);
+            checks.push('auto-open stays inline, defaults off, and changes enabled state without shifting following settings');
             await page.locator('#aiChatProvider').selectOption('mock'); await page.locator('#aiChatModel').selectOption('mock-model');
             await page.locator('#aiChatSettingsToggle').click();
             await submit(page, '第一条普通问答'); const first = await requests(page); await waitRequests(page, first);
@@ -157,7 +186,8 @@ async function main() {
             checks.push('editing head blocks automatic delivery without losing editor text or composer draft');
             await fresh(page); await submit(page, '取消编辑当前项'); await submit(page, '原始待发送问题');
             await action(page, 0, 'edit'); await page.locator('.ai-chat-queue-editor').fill('不保存的修改');
-            await finish(page); const beforeCancel = await requests(page); await action(page, 0, 'cancel-edit'); await waitRequests(page, beforeCancel + 1);
+            await finish(page); const beforeCancel = await requests(page); await page.locator('.ai-chat-queue-editor').press('Escape'); await waitRequests(page, beforeCancel + 1);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             assert.match(await page.evaluate(() => queueTest.requests.at(-1).payload.user_message), /原始待发送问题/); await finish(page);
             checks.push('cancel edit restores original item and resumes waiting head');
 
@@ -287,7 +317,218 @@ async function main() {
             await page.locator('#aiChatQueueClear').click(); await finish(page);
             assert.equal(await page.getByText('保留原有常驻 toast', { exact: true }).count(), 1);
             checks.push('queue and notification cleanup preserve unrelated toast');
-            assert.equal(await page.evaluate(() => queueTest.maxLive), 1); assert.deepEqual(errors, []);
+
+            await fresh(page); await background(page, false); await hide(page);
+            await page.clock.install();
+            await selection(page, '#aiSelectionLookup'); await finish(page);
+            const notice = page.locator('.ai-result-toast-open').last();
+            await page.clock.runFor(250);
+            await page.waitForFunction(() => getComputedStyle(document.querySelector('.ai-result-toast')).opacity === '1');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread')), true);
+            assert.ok((await notice.boundingBox()).height >= 64);
+            const noticeBox = await notice.boundingBox(); assert.ok(noticeBox.x >= 0 && noticeBox.x + noticeBox.width <= 390);
+            await page.screenshot({ path: path.join(output, file + '-clickable-toast-mobile.png') });
+            await page.locator('.ai-result-toast').last().screenshot({ path: path.join(output, file + '-clickable-toast.png') });
+            await notice.hover(); await page.clock.fastForward(6500);
+            assert.equal(await notice.isVisible(), true);
+            await page.mouse.move(0, 500); await notice.focus(); await page.clock.fastForward(6500);
+            assert.equal(await notice.isVisible(), true);
+            await notice.press(file.endsWith('.single.html') ? 'Space' : 'Enter');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('.ai-result-toast-open').count(), 0);
+            assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread')), false);
+            assert.equal(await page.getByText('保留原有常驻 toast', { exact: true }).count(), 1);
+            checks.push('larger completion target fits 390px; hover and focus pause dismissal; keyboard opens and clears AI notices only');
+
+            await hide(page); await selection(page, '#aiSelectionLookup'); await finish(page);
+            await page.mouse.move(0, 500); await page.clock.fastForward(6300);
+            await page.clock.runFor(250);
+            assert.equal(await page.locator('.ai-result-toast-open').count(), 0);
+            assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread')), true);
+            checks.push('completion toast expires after six seconds without clearing the unread marker');
+
+            await page.setViewportSize({ width: 1280, height: 1000 });
+            await fresh(page); await background(page, true);
+            await page.locator('#aiChatSettingsToggle').click();
+            await page.locator('#aiChatSettings').screenshot({ path: path.join(output, file + '-background-options.png') });
+            for (const width of [390, 320]) {
+                await page.setViewportSize({ width, height: 844 });
+                await page.locator('#aiChatBackgroundRequest').check();
+                const optionsBox = await page.locator('#aiChatBackgroundOptions label').boundingBox();
+                assert.ok(optionsBox.x >= 0 && optionsBox.x + optionsBox.width <= width);
+                const enabledLayout = await backgroundLayout(page);
+                assert.ok(Math.abs(enabledLayout.parentY - enabledLayout.childY) < 1);
+                await page.locator('#aiChatSettings').screenshot({ path: path.join(output, file + '-background-options-' + width + '.png'), style: '#toastContainer { visibility: hidden; }' });
+                await page.locator('#aiChatBackgroundRequest').uncheck();
+                assert.deepEqual(await backgroundLayout(page), enabledLayout);
+                assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isChecked(), false);
+                await page.locator('#aiChatSettings').screenshot({ path: path.join(output, file + '-background-disabled-' + width + '.png'), style: '#toastContainer { visibility: hidden; }' });
+            }
+            await page.setViewportSize({ width: 1280, height: 1000 });
+            await page.locator('#aiChatBackgroundRequest').uncheck();
+            assert.equal(await page.locator('#aiChatBackgroundOptions').isVisible(), true);
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isChecked(), false);
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isDisabled(), true);
+            assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('AI_CHAT_SETTINGS_V1')).backgroundAutoOpen), false);
+            await page.evaluate(() => {
+                const settings = JSON.parse(localStorage.getItem('AI_CHAT_SETTINGS_V1'));
+                settings.backgroundAutoOpen = true;
+                localStorage.setItem('AI_CHAT_SETTINGS_V1', JSON.stringify(settings));
+            });
+            await page.reload(); await load(page); await show(page); await page.locator('#aiChatSettingsToggle').click();
+            assert.equal(await page.locator('#aiChatBackgroundRequest').isChecked(), false);
+            assert.equal(await page.locator('#aiChatBackgroundOptions').isVisible(), true);
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isChecked(), false);
+            await page.locator('#aiChatBackgroundRequest').check();
+            assert.equal(await page.locator('#aiChatBackgroundAutoOpen').isChecked(), false);
+            await page.locator('#aiChatBackgroundRequest').uncheck();
+            await page.locator('#aiChatSettingsToggle').click();
+            await submit(page, '关闭后台请求后保持收起'); await hide(page); await finish(page);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            await page.locator('.ai-result-toast-open').last().click();
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            checks.push('disabled background resets auto-open; old checked-disabled settings load unchecked and stay off when re-enabled');
+
+            await background(page, true); await fresh(page); await hide(page);
+            await selection(page, '#aiSelectionLookup'); await selection(page, '#aiSelectionAnalyze'); await waitPending(page, 1);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            await page.locator('#video').focus();
+            const focusBefore = await page.evaluate(() => document.activeElement.id);
+            await finish(page, true);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.evaluate(() => document.activeElement.id), focusBefore);
+            assert.equal(await page.locator('.ai-result-toast-open').count(), 0);
+            assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread')), false);
+            await finish(page);
+            checks.push('auto-open waits for success, preserves focus, consumes unread state, and allows queued analysis to continue');
+
+            await fresh(page); await page.evaluate(() => { queueTest.nextMode = 'error'; });
+            await hide(page); await selection(page, '#aiSelectionLookup'); await finish(page);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread-error')), true);
+            await page.locator('.ai-result-toast-open').last().click();
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread-error')), false);
+            checks.push('failure stays hidden with a clickable error notice even when auto-open is enabled');
+
+            await fresh(page); await hide(page); await selection(page, '#aiSelectionLookup');
+            await background(page, false); await hide(page); await finish(page);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            checks.push('turning auto-open off during generation takes effect at completion');
+
+            await fresh(page); await background(page, true); await hide(page); await selection(page, '#aiSelectionLookup');
+            const stale = await page.evaluate(() => { queueTest.active.ignoreAbort = true; return queueTest.entries.length - 1; });
+            await fresh(page); await hide(page); await page.evaluate(index => queueTest.entries[index].finish(), stale);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            assert.equal(await page.locator('.ai-result-toast-open').count(), 0);
+            checks.push('cancelled stale completion cannot auto-open a new conversation');
+
+            await fresh(page); await background(page, false);
+            await submit(page, 'Esc 收起时继续生成'); await submit(page, 'Esc 收起后继续排队');
+            await page.locator('#aiChatInput').fill('收起后保留的草稿');
+            await page.waitForFunction(() => queueTest.active && !queueTest.active.closed);
+            await page.locator('#aiChatInput').press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'video');
+            assert.equal(await page.locator('#aiChatInput').inputValue(), '收起后保留的草稿');
+            assert.equal(await page.evaluate(() => !!queueTest.active.aborted), false);
+            await waitPending(page, 1); await finish(page, true); await finish(page);
+            await show(page);
+            assert.equal(await page.locator('#aiChatInput').inputValue(), '收起后保留的草稿');
+            checks.push('Esc from composer hides window, returns video focus, preserves draft and continues active and queued requests');
+
+            for (const extra of [{ isComposing: true }, { repeat: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }, { metaKey: true }]) {
+                await page.locator('#aiChatInput').evaluate((node, extra) => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...extra })), extra);
+                assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            }
+            await fresh(page); await page.locator('#aiChatSettingsToggle').click(); await page.locator('#aiChatProvider').click();
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await page.locator('#aiChatSettingsToggle').click();
+            checks.push('IME, held-key repeats, modified Esc and native select dismissal never hide the window');
+
+            await page.locator('#videoPlaybackRateControl').click();
+            await page.locator('#fastForwardLimit').press('Escape');
+            assert.equal(await page.locator('#fastForwardLimitPopover').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            checks.push('playback popover consumes its own Esc; the following press can hide AI from outside the window');
+
+            await fresh(page); await submit(page, '队列按钮 Esc 当前项'); await submit(page, '队列按钮 Esc 等待项');
+            await rows(page).first().locator('[data-queue-action="edit"]').focus();
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            await waitPending(page, 1); await finish(page, true); await finish(page);
+            checks.push('Esc on queue controls hides the window without editing, removing or stopping queued work');
+
+            await fresh(page); await selection(page, '#aiSelectionAnalyze'); await finish(page);
+            const escapeCard = page.locator('.svp-sa').last();
+            await page.locator('#aiChatInput').focus();
+            await escapeCard.locator('[data-sa-annotation="3"] > .sa-text').first().hover();
+            assert.equal(await escapeCard.locator('.sa-tip').isVisible(), true);
+            await page.keyboard.press('Escape');
+            assert.equal(await escapeCard.locator('.sa-tip').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            checks.push('hovered analysis tooltip has Esc priority even while keyboard focus remains in composer');
+
+            await show(page);
+            await page.evaluate(() => document.querySelector('#container').requestFullscreen());
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen(); });
+            await page.locator('#modalOverlay').evaluate(node => { node.style.display = 'block'; });
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await page.locator('#modalOverlay').evaluate(node => { node.style.display = 'none'; });
+            checks.push('fullscreen Esc and an existing file-selection modal keep their existing behavior');
+
+            assert.equal(await page.evaluate(() => queueTest.maxLive), 1);
+            await page.evaluate(() => {
+                localStorage.setItem('svp.dufsUrlHistory.v1', JSON.stringify([{ url: 'http://example.invalid/videos/' }]));
+                localStorage.setItem('EUDIC_STUDY_AUTHORIZATION_V1', 'NIS isolated-escape-test');
+            });
+            await page.reload(); await load(page); await show(page);
+            await page.locator('#dufsUrl').focus(); await page.locator('#dufsUrlHistoryList.visible').waitFor();
+            await page.locator('#dufsUrl').press('Escape');
+            assert.equal(await page.locator('#dufsUrlHistoryList').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await selection(page, '#aiSelectionAddEudic'); await page.locator('#eudicContextOverlay').waitFor({ state: 'visible' });
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#eudicContextOverlay').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await selection(page, '#aiSelectionAddEudic');
+            await page.evaluate(() => { window.SvpEudic.submitWord = () => new Promise((resolve, reject) => { queueTest.rejectEudic = reject; }); });
+            await page.locator('#eudicContextSubmit').click(); await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#eudicContextOverlay').isVisible(), true);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await page.evaluate(() => queueTest.rejectEudic(new Error('isolated submission cancelled by test')));
+            await page.waitForFunction(() => !document.querySelector('#eudicContextSubmit').disabled);
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#eudicContextOverlay').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            checks.push('DUFS history and Eudic dialog consume Esc first; pending Eudic submission protects both layers');
+
+            await page.route('https://subtitle-video-player-default-rtdb.asia-southeast1.firebasedatabase.app/progress/**', route => route.fulfill({ json: { position: 12, duration: 52.208 } }));
+            await page.evaluate(() => {
+                const video = document.querySelector('#video'); Object.defineProperty(video, 'duration', { value: 52.208, configurable: true });
+                window.svpPlaybackProgress.setSource({ id: 'isolated-escape-priority', name: 'Esc priority fixture' });
+                video.dispatchEvent(new Event('loadedmetadata'));
+            });
+            await page.locator('#resumeProgressPrompt').waitFor({ state: 'visible' });
+            await page.locator('#video').focus(); await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            assert.equal(await page.locator('#resumeProgressPrompt').isVisible(), true);
+            await page.locator('#video').evaluate(node => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true })));
+            assert.equal(await page.locator('#resumeProgressPrompt').isVisible(), true);
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#resumeProgressPrompt').isVisible(), false);
+            await page.evaluate(() => window.svpPlaybackProgress.destroy());
+            checks.push('one Esc hides only AI; held-key repeats preserve the resume prompt; a separate Esc keeps its original dismissal');
+            assert.equal(await requests(page), 0); assert.deepEqual(errors, []);
             checks.push('never more than one logical request, no page errors, no live AI calls');
             report.push({ file, result: 'passed', checks, layout });
             fs.writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2));

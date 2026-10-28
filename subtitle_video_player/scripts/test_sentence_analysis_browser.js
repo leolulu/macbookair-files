@@ -4,6 +4,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const { pathToFileURL } = require('node:url');
 const root = path.resolve(__dirname, '..');
+const singleHtml = process.env.SVP_SINGLE_HTML || path.join(root, 'subtitle_video_player.single.html');
 const output = path.join(root, 'test-results', 'sentence-analysis');
 const temp = path.join(output, 'tmp');
 fs.mkdirSync(temp, { recursive: true });
@@ -96,7 +97,7 @@ async function main() {
             page.on('pageerror', err => errors.push(err.message));
             await mock(page);
             await page.route(/^https?:/, route => route.abort());
-            await page.goto(pathToFileURL(path.join(root, file)).href);
+            await page.goto(pathToFileURL(file.endsWith('.single.html') ? singleHtml : path.join(root, file)).href);
             const srt = '1\n00:00:01,000 --> 00:00:04,000\nThe committee rejected the proposal submitted yesterday,\n\n2\n00:00:04,100 --> 00:00:10,000\nfearing that the plan, if implemented hastily, would undermine public trust.\n\n3\n00:00:12,000 --> 00:00:15,000\nPlease reconsider.\n';
             await page.locator('#videoFile').setInputFiles({ name: 'sentence-analysis.srt', mimeType: 'text/plain', buffer: Buffer.from(srt) });
             await page.waitForFunction(() => document.querySelector('#subtitles').textContent.includes('submitted'));
@@ -142,6 +143,7 @@ async function main() {
             await clause.click();
             await page.keyboard.press('Escape');
             assert.equal(await card.locator('.sa-tip').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             await card.locator('.sa-header strong').hover();
             await card.locator('[data-sa-annotation="8"] > .sa-chip').hover();
             assert.match(await card.locator('.sa-tip').innerText(), /还原.*if the plan was implemented hastily/);
@@ -165,6 +167,7 @@ async function main() {
             assert.match(await card.locator('.sa-tip').innerText(), /主语/);
             await page.keyboard.press('Escape');
             assert.equal(await card.locator('.sa-tip').isVisible(), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             await card.locator('.sa-header strong').hover();
             await clause.hover();
             await clause.click();
