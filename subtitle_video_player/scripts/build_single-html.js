@@ -149,12 +149,15 @@ function build() {
     'js/coca_data.js': readText(path.join(ROOT, 'js/coca_data.js')),
     'js/coca_rank.js': readText(path.join(ROOT, 'js/coca_rank.js')),
     'js/cache/sup_ocr_cache.js': readText(path.join(ROOT, 'js/cache/sup_ocr_cache.js')),
+    'assets/vendor/js-sha256/sha256-1.0.0.min.js': '/*\n' + readText(path.join(ROOT, 'assets/vendor/js-sha256/LICENSE')) + '\n*/\n' +
+      readText(path.join(ROOT, 'assets/vendor/js-sha256/sha256-1.0.0.min.js')),
+    'js/playback_progress.js': readText(path.join(ROOT, 'js/playback_progress.js')),
     'js/sup/pgs_parser.js': readText(path.join(ROOT, 'js/sup/pgs_parser.js')),
     'js/ocr/paddle_ocr.js': patchMainOcrJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr.js')))
   };
 
   const workerSource = patchWorkerJs(readText(path.join(ROOT, 'js/ocr/paddle_ocr_worker.js')));
-  ['js/coca_data.js', 'js/coca_rank.js', 'js/lookup_speech.js', 'js/pos_highlight.js', 'js/sentence_analysis.js', 'js/ai_request_queue.js'].forEach((script) => {
+  ['js/coca_data.js', 'js/coca_rank.js', 'js/lookup_speech.js', 'js/pos_highlight.js', 'js/sentence_analysis.js', 'js/ai_request_queue.js', 'assets/vendor/js-sha256/sha256-1.0.0.min.js', 'js/playback_progress.js'].forEach((script) => {
     html = replaceOnce(html, `<script src="${script}"></script>`, `<script>\n${inlineScripts[script]}\n</script>`, `Failed to inline ${script}`);
   });
   const bootstrap = `<script>\nwindow.__SVP_SINGLE_FILE_BUNDLE__ = ${JSON.stringify({ workerSource })};\n</script>`;
