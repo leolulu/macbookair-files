@@ -562,3 +562,14 @@ System Prompt 在字幕全文之前增加 `<资料边界>`：文件名、视频�
 - **拿回的行为边界**（本次新增）：① 若关键实义词是专有名词（人名、地名、组织、物品、虚构概念等），结合当前语境简要说明它指什么；② 讲解词源、构词或文化历史背景等依据难核实的词汇知识时，不确定的说明不确定，不要编造。② 尤为必要——系统层 `buildSystemMessage` 的「禁止补造」只约束作品设定/世界观，并不约束查词新增的词源/文化典故这类易编造知识。
 - **边界**：只改划词气泡「查词」入口生成的用户消息字符串，不动普通 AI 问答共用的系统 Prompt（`buildSystemMessage`）。防剧透、字幕外知识授权、不确定不胡诌等通用行为准则仍由系统层兜底；查词只在缺失词汇知识的防编造边界处补充。
 - **验证**：真实浏览器 + AI 后端端到端回归（自建测试字幕），覆盖 `staged`、`clip`、`sus`（Among Us 梗）、`throw shade`（Ballroom 亚文化典故）、`legendary`、专有名词 `HAME CHANNEL`。均为「一句话定义 → 词汇详解（主体，含来源构词/灵活元素/语气/搭配）→ 作品语境（殿后克制）」结构；`sus`/`throw shade` 确认文化梗被作为词汇学习讲透而非剧情分析。
+
+## 2026-10-28
+
+### 查词回答的词性英语简写改为红色加粗
+
+- **需求**：查词回答里的词性英语简写（`adj.`、`adv.`、`vt.`、`vi.`、`n.` 等，Prompt 已要求用英语简写标注）在实际渲染后统一显示为红色加粗。
+- **落点**：放在 `renderAiMessageContent()` 的 DOM 后处理层，与 `linkifyTimestamps()`、`lookupSpeech.decorate()` 同层，新增 `js/pos_highlight.js`（UMD，挂在 `window.SvpPosHighlight`），样式为 `.ai-chat-msg-ai .ai-pos-abbr { color: #c62828; font-weight: 700; }`。不动查词 Prompt、COCA 标记协议和消息存储，普通版与 single HTML 共用同一模块。
+- **为什么不在 Prompt 里加 `[[POS:...]]` 标记**：这是纯展示需求，为一种样式新增模型侧标记协议，会让每次回答都多一层模型遵循风险（漏标即失效），且历史回答不会生效；本地白名单识别覆盖既有内容与流式重渲染，改动面更小。COCA 的 `[[COCA:...]]`、发音的 `[[SPEAK:...]]` 仍各自保留原有职责。
+- **识别规则**：只认小写白名单缩写（`adj`/`adv`/`art`/`aux`/`compar`/`conj`/`det`/`interj`/`n`/`num`/`phr`/`pl`/`prep`/`pron`/`sing`/`superl`/`v`/`vi`/`vt`）。左侧不能紧贴拉丁字母、数字或点，右侧同理，因此 `e.g.`、`etc.`、`No.`、`vs.`、网址和 `vt..` 不会被误染；中文字符不算边界，兼容 `作vt.表示` 这类无空格写法。装饰跳过 `pre`/`code`/`a` 与已有装饰，重复调用不会二次包裹。
+- **已知取舍**：`Roe v. Wade` 这类法律/引用写法里的 `v.` 会被当成词性染色；如需收紧可调整白名单或增加语境判断。首字母大写的 `Adj.` 暂不处理（当前 Prompt 与实测输出均为小写）。
+- **验证**：`node --test test/pos_highlight.test.js` 覆盖白名单、普通缩写、边界与切分还原，`pnpm test` 83 项全部通过。Headless Chrome 加载真实页面（先载入测试 SRT，再 mock `/stream` 分块 SSE）确认：6 处词性简写计算样式为 `rgb(198, 40, 40)` / `font-weight: 700`，代码块、行内代码与链接内不被装饰，二次装饰数量不变；开发版与 `pnpm run build:single-html` 产物均通过同一回归。
