@@ -23,6 +23,7 @@
 
         .preview-area {
             flex: 1;
+            min-width: 0;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -1882,6 +1883,11 @@
                         if (checkbox && checkbox.checked && this.originalVideo) {
                             calculateAndSetCols();
                             updateGrid();
+                        } else if (this.originalVideo) {
+                            const { rows, cols } = this.getPageConfig();
+                            const videoAspectRatio = this.getEffectiveVideoAspectRatio();
+                            const { width, height } = this.calculateCellDimensions(rows, cols, videoAspectRatio);
+                            this.updateGridStyles(cols, rows, height, width);
                         }
                     }, 300);
                 });
