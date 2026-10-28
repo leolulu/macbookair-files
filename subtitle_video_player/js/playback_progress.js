@@ -1,8 +1,11 @@
 (function (root, factory) {
-    var api = factory(root);
+    var hash = typeof module === 'object' && module.exports
+        ? require('../assets/vendor/js-sha256/sha256-1.0.0.min.js').sha256
+        : root && root.sha256;
+    var api = factory(root, hash);
     if (typeof module === 'object' && module.exports) module.exports = api;
     if (root) root.SvpPlaybackProgress = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (root, sha256) {
     'use strict';
 
 
@@ -34,21 +37,17 @@
         var baseUrl = url ? url.replace(/\/+$/, '') + '/progress/' : '';
         var fetchImpl = options.fetch || (root && root.fetch ? root.fetch.bind(root) : null);
         if (!baseUrl || !fetchImpl) throw new Error('Firebase progress storage is unavailable');
-        if (!root.crypto || !root.crypto.subtle) throw new Error('Firebase progress storage requires Web Crypto');
+        if (typeof sha256 !== 'function') throw new Error('SHA-256 hashing is unavailable');
         var encoder = new TextEncoder();
         var keyUrls = new Map();
         var schedule = options.setTimeout || root.setTimeout.bind(root);
         var unschedule = options.clearTimeout || root.clearTimeout.bind(root);
 
-        async function keyUrl(sourceId) {
-            var digest = await root.crypto.subtle.digest('SHA-256', encoder.encode(String(sourceId)));
-            var bytes = new Uint8Array(digest);
-            var hex = '';
-            for (var index = 0; index < bytes.length; index += 1) {
-                hex += bytes[index].toString(16).padStart(2, '0');
-            }
-            var result = baseUrl + hex + '.json';
-            keyUrls.set(String(sourceId), result);
+        function keyUrl(sourceId) {
+            var id = String(sourceId);
+            if (keyUrls.has(id)) return keyUrls.get(id);
+            var result = baseUrl + sha256(encoder.encode(id)) + '.json';
+            keyUrls.set(id, result);
             return result;
         }
 
@@ -63,8 +62,8 @@
                 init.headers['Content-Type'] = 'application/json';
                 init.body = JSON.stringify(body);
             }
-            // A prepared URL lets lifecycle saves start fetch before yielding.
-            var requestUrl = keyUrls.get(String(sourceId)) || await keyUrl(sourceId);
+            // Synchronous hashing lets lifecycle saves start fetch before yielding.
+            var requestUrl = keyUrl(sourceId);
             var controller = new AbortController();
             init.signal = controller.signal;
             var timer = schedule(function () { controller.abort(); }, 10000);

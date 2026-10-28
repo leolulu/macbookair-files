@@ -1,5 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const { createFirebaseClient, createController, formatTime, restorableRecord } = require('../js/playback_progress');
 
 function eventTarget() {
@@ -435,10 +439,7 @@ function jsonResponse(payload) {
     return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
 }
 
-test('Firebase reuses the read URL and starts a prepared save before yielding', async (t) => {
-    const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
-    let hashes = 0;
-    t.mock.method(globalThis.crypto.subtle, 'digest', (...args) => { hashes++; return digest(...args); });
+test('Firebase preserves SHA-256 record URLs and starts saves before yielding', async () => {
     const requests = [];
     const f = firebaseFixture(async (url, init) => {
         requests.push({ url, init });
@@ -447,13 +448,35 @@ test('Firebase reuses the read URL and starts a prepared save before yielding', 
     await f.client.load('movie-a');
     const save = f.client.save('movie-a', { position: 15 }, { keepalive: true });
     assert.equal(requests.length, 2);
-    assert.equal(hashes, 1);
-    assert.match(requests[0].url, /^https:\/\/example\.invalid\/progress\/[a-f0-9]{64}\.json$/);
+    const expectedKey = createHash('sha256').update('movie-a').digest('hex');
+    assert.equal(requests[0].url, 'https://example.invalid/progress/' + expectedKey + '.json');
     assert.equal(requests[1].url, requests[0].url);
     assert.equal(requests[1].init.method, 'PUT');
     assert.equal(requests[1].init.keepalive, true);
     await save;
     assert.equal(f.timers.size, 0);
+});
+
+test('browser hashing preserves existing keys without using Web Crypto', async () => {
+    const rootDir = path.resolve(__dirname, '..');
+    const vendor = fs.readFileSync(path.join(rootDir, 'assets/vendor/js-sha256/sha256-1.0.0.min.js'), 'utf8');
+    const progress = fs.readFileSync(path.join(rootDir, 'js/playback_progress.js'), 'utf8');
+    const identities = ['', 'abc', '中文视频🎬.mp4|4372373|1234567890', 'https://example.com/movie.mp4?token=' + 'x'.repeat(1000), '\ud800', ...[55, 56, 63, 64, 65].map(length => 'x'.repeat(length))];
+    for (const crypto of [undefined, { subtle: { digest() { throw new Error('Native hashing must not be called'); } } }]) {
+        const requests = [];
+        const sandbox = {
+            crypto, TextEncoder, AbortController, setTimeout, clearTimeout,
+            fetch: async (url, init) => { requests.push({ url, init }); return jsonResponse(null); }
+        };
+        vm.runInNewContext(vendor, sandbox);
+        vm.runInNewContext(progress, sandbox);
+        const client = sandbox.SvpPlaybackProgress.createFirebaseClient({ url: 'https://example.invalid' });
+        for (const identity of identities) {
+            await client.load(identity);
+            const expectedKey = createHash('sha256').update(identity).digest('hex');
+            assert.equal(requests.at(-1).url, 'https://example.invalid/progress/' + expectedKey + '.json');
+        }
+    }
 });
 
 test('a stalled Firebase read aborts after ten seconds and the controller can then save', async () => {
