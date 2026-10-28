@@ -969,6 +969,95 @@
         .floating-toast.toast-error {
             border-left: 4px solid #E5484D;
         }
+        .resume-progress-prompt {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 30;
+            width: min(330px, calc(100% - 24px));
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px;
+            color: #F7F9FC;
+            background: rgba(28, 32, 40, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-left: 4px solid #4D8DFF;
+            border-radius: 10px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+            font-size: 14px;
+            line-height: 1.5;
+            animation: resume-progress-enter 0.2s ease-out;
+        }
+
+        .resume-progress-prompt[hidden] {
+            display: none;
+        }
+
+        .resume-progress-copy strong {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 15px;
+        }
+
+        .resume-progress-copy span {
+            color: #D6DDEA;
+        }
+
+        .resume-progress-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .resume-progress-actions button {
+            padding: 6px 14px;
+            color: #F7F9FC;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.26);
+            border-radius: 6px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .resume-progress-actions button:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .resume-progress-actions button:focus-visible {
+            outline: 2px solid #9DB9FF;
+            outline-offset: 2px;
+        }
+
+        .resume-progress-actions .resume-progress-primary {
+            background: #336DF4;
+            border-color: #336DF4;
+        }
+
+        .resume-progress-actions .resume-progress-primary:hover {
+            background: #285FD9;
+        }
+
+        @keyframes resume-progress-enter {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 700px) {
+            .resume-progress-prompt {
+                top: 8px;
+                right: 8px;
+                width: calc(100% - 16px);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .resume-progress-prompt {
+                animation: none;
+            }
+        }
+
 
         /* ===== AI 对话浮窗 ===== */
         .ai-chat-window {
@@ -2555,6 +2644,16 @@
                 </video>
                 <span id="caption">字幕（默认不显示），播放时更新</span>
                 <div id="ff-sign" class="hide-element">⏩</div>
+                <section id="resumeProgressPrompt" class="resume-progress-prompt" role="dialog" aria-modal="false" aria-labelledby="resumeProgressTitle" aria-describedby="resumeProgressDetail" hidden>
+                    <div class="resume-progress-copy">
+                        <strong id="resumeProgressTitle">继续上次播放？</strong>
+                        <span id="resumeProgressDetail"></span>
+                    </div>
+                    <div class="resume-progress-actions">
+                        <button id="resumeProgressConfirm" class="resume-progress-primary" type="button">跳转</button>
+                        <button id="resumeProgressDismiss" type="button">不跳转</button>
+                    </div>
+                </section>
                 <div id="resizable-shade"></div>
             </div>
             <div id="horizontal-divider"></div>
@@ -2922,6 +3021,7 @@
     <script src="js/coca_data.js"></script>
     <script src="js/coca_rank.js"></script>
     <script src="js/cache/sup_ocr_cache.js"></script>
+    <script src="js/playback_progress.js"></script>
     <script src="js/sup/pgs_parser.js"></script>
     <script src="js/ocr/paddle_ocr.js"></script>
     <script>
@@ -3461,6 +3561,12 @@
                 var videoElement = document.getElementById('video');
                 if (videoUrl) {
                     notifyAiContentChanged();
+                    if (window.svpPlaybackProgress) {
+                        window.svpPlaybackProgress.setSource({
+                            id: window.SupOcrCache.makeMovieId(null, videoUrl),
+                            name: extractFilename(videoUrl)
+                        });
+                    }
                     videoElement.src = videoUrl;
                     document.getElementById("VideoUrlWithFile").click();
                     document.title = extractFilename(videoUrl)
@@ -3895,6 +4001,12 @@
                 for (var i = 0; i < orderedFiles.length; i++) {
                     if (orderedFiles[i].name.toLowerCase().endsWith('.mp4') || orderedFiles[i].name.toLowerCase().endsWith('.webm')) {
                         notifyAiContentChanged();
+                        if (window.svpPlaybackProgress) {
+                            window.svpPlaybackProgress.setSource({
+                                id: window.SupOcrCache.makeMovieId(orderedFiles[i], orderedFiles[i].name),
+                                name: orderedFiles[i].name
+                            });
+                        }
                         var url = URL.createObjectURL(orderedFiles[i]);
                         $('#video').attr('src', url);
                         document.title = orderedFiles[i].name;
@@ -6615,6 +6727,12 @@
                     var fileUrl = getDufsFileUrl(formatDufsBaseUrl(document.getElementById('dufsUrl').value), fileName);
                     if (fileUrl.toLowerCase().endsWith('.mp4') || fileUrl.toLowerCase().endsWith('.webm')) {
                         notifyAiContentChanged();
+                        if (window.svpPlaybackProgress) {
+                            window.svpPlaybackProgress.setSource({
+                                id: window.SupOcrCache.makeMovieId(null, fileUrl),
+                                name: fileName
+                            });
+                        }
                         document.getElementById('video').src = fileUrl;
                         document.title = fileName;
                         setCurrentMovieCacheIdFromFile(null, fileUrl);
@@ -9738,6 +9856,39 @@
                 } catch (err) { }
                 updateToggleButtonState();
             })()
+            var firebaseProgressClient = window.SvpPlaybackProgress.createFirebaseClient({
+                url: 'https://subtitle-video-player-default-rtdb.asia-southeast1.firebasedatabase.app'
+            });
+            var resumeProgressElement = document.getElementById('resumeProgressPrompt');
+            var resumeProgressDetail = document.getElementById('resumeProgressDetail');
+            var resumeProgressConfirm = document.getElementById('resumeProgressConfirm');
+            var resumeProgressDismiss = document.getElementById('resumeProgressDismiss');
+            var resumeProgressDismissHandler = null;
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && !resumeProgressElement.hidden && resumeProgressDismissHandler) {
+                    event.preventDefault();
+                    resumeProgressDismissHandler();
+                }
+            });
+            window.svpPlaybackProgress = window.SvpPlaybackProgress.createController({
+                video: document.getElementById('video'),
+                client: firebaseProgressClient,
+                onPrompt: function (prompt) {
+                    resumeProgressConfirm.onclick = null;
+                    resumeProgressDismiss.onclick = null;
+                    resumeProgressDismissHandler = null;
+                    if (!prompt) {
+                        resumeProgressElement.hidden = true;
+                        return;
+                    }
+                    var timeLabel = window.SvpPlaybackProgress.formatTime(prompt.position);
+                    resumeProgressDetail.textContent = '上次播放到 ' + timeLabel + '，是否跳转？';
+                    resumeProgressConfirm.onclick = prompt.resume;
+                    resumeProgressDismiss.onclick = prompt.dismiss;
+                    resumeProgressDismissHandler = prompt.dismiss;
+                    resumeProgressElement.hidden = false;
+                }
+            });
 
 
         });

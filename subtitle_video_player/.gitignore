@@ -1,0 +1,5 @@
+# Browser test reports, screenshots, and temporary profiles
+/test-results/
+
+# Local JavaScript dependencies
+/node_modules/
