@@ -2036,6 +2036,12 @@
             color: #1a63d6;
         }
 
+        /* 查词回答里的词性英语简写：最终呈现为红色加粗 */
+        .ai-chat-msg-ai .ai-pos-abbr {
+            color: #c62828;
+            font-weight: 700;
+        }
+
         .ai-chat-msg-meta {
             font-size: 12px;
             color: #9aa1ad;
@@ -3082,6 +3088,7 @@
     <script src="assets/vendor/marked/marked.umd.js"></script>
     <script src="js/ai_markdown_compat.js"></script>
     <script src="js/lookup_speech.js"></script>
+    <script src="js/pos_highlight.js"></script>
     <script src="js/sentence_analysis.js"></script>
     <script src="js/ai_request_queue.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
@@ -8092,6 +8099,13 @@
                     });
                 }
 
+                // 回答中的词性英语简写(adj.、vt.、n. 等)统一转为红色加粗；代码与链接内部不动
+                function highlightPosAbbreviations(root) {
+                    if (window.SvpPosHighlight) {
+                        window.SvpPosHighlight.decorate(root);
+                    }
+                }
+
                 // 流式中途未闭合的代码围栏会把后续内容全部吞进代码块,渲染前补一个临时闭合(不改原文)
                 function repairUnclosedFences(text) {
                     var fences = text.match(/^[ \t]{0,3}(```|~~~)/gm) || [];
@@ -8147,6 +8161,7 @@
                     fullText = speechContent.text;
                     if (!markdownReady) {
                         renderPlainTextWithTimeLinks(div, fullText);
+                        highlightPosAbbreviations(div);
                         return;
                     }
                     var html;
@@ -8155,6 +8170,7 @@
                     } catch (err) {
                         div.classList.remove('ai-chat-md');
                         renderPlainTextWithTimeLinks(div, fullText);
+                        highlightPosAbbreviations(div);
                         return;
                     }
                     div.classList.add('ai-chat-md');
@@ -8163,6 +8179,7 @@
                         console.warn('AI 回复中有内容被消毒移除:', DOMPurify.removed);
                     }
                     linkifyTimestamps(div);
+                    highlightPosAbbreviations(div);
                     if (div.isVocabularyLookup && lookupSpeech) {
                         lookupSpeech.decorate(div, speechContent.references, function (prefix) {
                             return DOMPurify.sanitize(marked.parse(repairUnclosedFences(prefix)), AI_SANITIZE_CONFIG);
