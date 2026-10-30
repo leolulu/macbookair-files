@@ -10,6 +10,7 @@
     "test:sentence": "node --test ./test/sentence_analysis.test.js",
     "test:sentence:browser": "node ./scripts/test_sentence_analysis_browser.js",
     "test:queue:browser": "node ./scripts/test_ai_queue_browser.js",
+    "test:word-video:browser": "node ./scripts/test_word_video_browser.js",
     "test:sentence:layout": "node ./scripts/test_sentence_analysis_layout.js",
     "test:sentence:reference": "node ./scripts/test_sentence_analysis_reference.js",
     "test:sentence:live": "node ./scripts/test_sentence_analysis_live.js"
