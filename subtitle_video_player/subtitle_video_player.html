@@ -949,6 +949,10 @@
             transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
+        .floating-toast.ai-request-status-toast {
+            white-space: pre-line;
+        }
+
         .floating-toast.show {
             opacity: 1;
             transform: translateY(0);
@@ -8490,12 +8494,29 @@
                     // 独立计时；淡出中的旧通知不复用 key，避免其移除回调误删新状态。
                     clearTimeout(aiStatusToastTimer);
                     upsertFloatingToast(aiStatusToastKey, message, type, 0);
+                    var toast = document.querySelector('#toastContainer [data-toast-key="' + aiStatusToastKey + '"]');
+                    if (toast) toast.classList.add('ai-request-status-toast');
                     aiStatusToastTimer = setTimeout(function () {
                         var key = aiStatusToastKey;
                         aiStatusToastKey = null;
                         aiStatusToastTimer = null;
                         removeFloatingToastByKey(key);
                     }, 2600);
+                }
+
+                function notifyBackgroundQueued(entry, state) {
+                    if (!chatWindow.hidden || !aiSettings.backgroundRequest || !state.active) {
+                        return;
+                    }
+                    var index = state.pending.findIndex(function (item) { return item.id === entry.id; });
+                    if (index < 0) {
+                        return;
+                    }
+                    var status = state.paused === 'error' ? '队列因前序请求失败而暂停'
+                        : state.paused ? '队列已暂停' : '当前正在回答上一项';
+                    var message = requestLabel(entry.value) + '已提交，' + status;
+                    message += '\n' + (index > 0 ? '前面还有 ' + index + ' 项待发送，' : '') + '排队第 ' + (index + 1) + ' 项';
+                    showAiStatusToast(message, 'info');
                 }
 
                 function notifyBackgroundGeneration() {
@@ -8560,7 +8581,8 @@
                             timeLabel: formatClock(getSubtitleTimelineTime(videoElement.currentTime || 0))
                         }
                     });
-                    requestQueue.enqueue(options);
+                    var entry = requestQueue.enqueue(options);
+                    notifyBackgroundQueued(entry, requestQueue.snapshot());
                     return true;
                 }
 

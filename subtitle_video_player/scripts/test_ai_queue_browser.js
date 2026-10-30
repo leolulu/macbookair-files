@@ -165,7 +165,25 @@ async function main() {
             checks.push('each completion has its own background toast, preserved when the next request starts');
             checks.push('automatic dequeue preserves hidden window and unread marker');
 
-            await fresh(page); await submit(page, '编辑测试当前项'); await waitRequests(page, first + 4);
+            await fresh(page); await background(page, false); await hide(page);
+            const beforeBackgroundQueue = await requests(page);
+            await selection(page, '#aiSelectionLookup'); await waitRequests(page, beforeBackgroundQueue + 1);
+            await selection(page, '#aiSelectionAnalyze'); await waitPending(page, 1);
+            await selection(page, '#aiSelectionLookup'); await waitPending(page, 2);
+            const queuedToast = page.locator('#toastContainer [data-toast-key^="ai-request-status-"]:not([data-toast-key^="ai-request-status-result-"])');
+            await queuedToast.waitFor({ state: 'visible' });
+            await queuedToast.getByText('已提交').waitFor();
+            assert.match(await queuedToast.textContent(), /查词「submitted」/);
+            assert.match(await queuedToast.textContent(), /当前正在回答上一项/);
+            assert.match(await queuedToast.textContent(), /当前正在回答上一项\n前面还有 1 项待发送，排队第 2 项/);
+            assert.equal(await queuedToast.evaluate(node => getComputedStyle(node).whiteSpace), 'pre-line');
+            assert.equal(await requests(page), beforeBackgroundQueue + 1);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            await finish(page, true); await finish(page, true); await finish(page);
+            checks.push('hidden background lookup/analyze queue submission confirms type, acceptance, active work and queue position');
+
+            const beforeEditBatch = await requests(page);
+            await fresh(page); await submit(page, '编辑测试当前项'); await waitRequests(page, beforeEditBatch + 1);
             await submit(page, '将被取消的问答'); await selection(page, '#aiSelectionLookup'); await selection(page, '#aiSelectionAnalyze');
             await waitPending(page, 3); await page.locator('#aiChatInput').fill('保留这份未发送草稿');
             await action(page, 2, 'up'); await action(page, 0, 'remove'); await waitPending(page, 2);
