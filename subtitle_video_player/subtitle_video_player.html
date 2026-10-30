@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="assets/vendor/jquery/jquery-ui-1.13.2.css">
     <link rel="stylesheet" href="assets/sentence_analysis.css">
     <link rel="stylesheet" href="assets/ai_queue.css">
+    <link rel="stylesheet" href="assets/word_video.css">
     <style>
         body {
             margin: 0;
@@ -3095,6 +3096,7 @@
     <script src="js/pos_highlight.js"></script>
     <script src="js/sentence_analysis.js"></script>
     <script src="js/ai_request_queue.js"></script>
+    <script src="js/word_video.js"></script>
     <script src="assets/vendor/dompurify/purify.min.js"></script>
     <script src="js/eudic_integration.js"></script>
     <script src="js/coca_data.js"></script>
@@ -3499,10 +3501,10 @@
 
             const hideControlsStyle = document.createElement('style');
             hideControlsStyle.innerHTML = `
-                video::-webkit-media-controls-panel {
+                #video::-webkit-media-controls-panel {
                     display: none !important;
                 }
-                video::-webkit-media-controls-play-button {
+                #video::-webkit-media-controls-play-button {
                     display: none !important;
                 }
             `;
@@ -7303,8 +7305,15 @@
                 var chatHeader = document.getElementById('aiChatHeader');
                 var messagesBox = document.getElementById('aiChatMessages');
                 var sentenceAnalysis = null;
+                var wordVideos = null;
+                function updateWordVideo(action) {
+                    if (!wordVideos) return;
+                    try { wordVideos[action].apply(wordVideos, Array.prototype.slice.call(arguments, 1)); }
+                    catch (error) { console.warn('单词视频附加功能失败:', error); }
+                }
                 var lookupSpeech = window.SvpLookupSpeech ? window.SvpLookupSpeech.createController(window, messagesBox, {
                     beforeSpeak: function () {
+                        updateWordVideo('pause');
                         if (sentenceAnalysis) sentenceAnalysis.stopSpeech();
                         if (!videoElement.paused) videoElement.pause();
                     },
@@ -7376,6 +7385,7 @@
                 var videoElement = document.getElementById('video');
                 sentenceAnalysis = window.SvpSentenceAnalysis ? window.SvpSentenceAnalysis.createController(window, messagesBox, {
                     beforeSpeak: function () {
+                        updateWordVideo('pause');
                         if (lookupSpeech) lookupSpeech.stop();
                         if (!videoElement.paused) videoElement.pause();
                     },
@@ -7389,6 +7399,21 @@
                     onAnalyze: dispatchSentenceAnalysis
                 }) : null;
 
+                // ---------- 独立的查词视频附件 ----------
+                if (window.SvpWordVideo) {
+                    try {
+                        wordVideos = window.SvpWordVideo.createController(window, messagesBox, {
+                            mainVideo: videoElement,
+                            beforeChange: isPinnedToBottom,
+                            afterChange: function (pinned) { if (pinned) scrollToBottom(); },
+                            beforePlay: function () {
+                                if (lookupSpeech) lookupSpeech.stop();
+                                if (sentenceAnalysis) sentenceAnalysis.stopSpeech();
+                                if (!videoElement.paused) videoElement.pause();
+                            }
+                        });
+                    } catch (error) { console.warn('单词视频附加功能未启用:', error); }
+                }
                 // ---------- 设置 ----------
                 var aiSettings = {
                     backendUrl: AI_DEFAULT_BACKEND_URL,
@@ -8418,6 +8443,7 @@
                 queueClear.addEventListener('click', function () { requestQueue.clear(); });
 
                 function resetRequestQueue() {
+                    updateWordVideo('reset');
                     var controller = activeAbortController;
                     var active = requestQueue.snapshot().active;
                     contentVersion++;
@@ -8609,6 +8635,11 @@
                     }
                     entry.messageElement = aiDiv;
                     runStreamInto(aiDiv, options, entry);
+                    if (options.lookupText) updateWordVideo('mount', aiDiv, {
+                        word: options.lookupText,
+                        sentence: options.lookupInfo && options.lookupInfo.sentence,
+                        context: options.context
+                    });
                 }
 
                 function runStreamInto(aiDiv, options, entry) {
@@ -8808,6 +8839,8 @@
                 sendButton.addEventListener('click', sendFromInput);
                 stopButton.addEventListener('click', function () {
                     if (!isGenerating || !activeAbortController) return;
+                    var active = requestQueue.snapshot().active;
+                    if (active) updateWordVideo('cancel', active.messageElement);
                     requestQueue.pause();
                     activeAbortController.abort();
                 });
@@ -9128,6 +9161,7 @@
                 }
 
                 function closeChatWindow() {
+                    updateWordVideo('pause');
                     if (lookupSpeech) lookupSpeech.stop();
                     if (sentenceAnalysis) sentenceAnalysis.blur();
                     captureGeometry();
