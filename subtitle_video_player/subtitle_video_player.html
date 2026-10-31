@@ -2630,13 +2630,18 @@
         }
 
         .ai-selection-bubble {
+            --selection-gap: 3px;
+            --selection-padding: 4px;
+            --selection-border: 1px;
+
             position: fixed;
             z-index: 950;
             display: flex;
             gap: 4px;
-            background: #2b3245;
-            padding: 4px;
-            border-radius: 8px;
+            background: #293243;
+            padding: var(--selection-padding);
+            border: var(--selection-border) solid #3c4b60;
+            border-radius: 0 0 8px 8px;
             box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
         }
 
@@ -2644,10 +2649,88 @@
             display: none;
         }
 
+        .ai-selection-ask-quick {
+            flex: 0 0 auto;
+        }
+
+        .ai-selection-quick-form {
+            position: absolute;
+            left: calc(0px - var(--selection-border));
+            bottom: calc(100% + var(--selection-gap));
+            display: none;
+            align-items: center;
+            gap: 4px;
+            box-sizing: border-box;
+            width: calc(100% + var(--selection-border) + var(--selection-border));
+            height: 36px;
+            padding: 4px;
+            border: 1px solid #65758a;
+            border-radius: 8px;
+            background: #46566b;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+        }
+
+        .ai-selection-quick-form[data-placement="below"] {
+            top: calc(100% + var(--selection-gap));
+            bottom: auto;
+        }
+
+        .ai-selection-quick-form::before,
+        .ai-selection-quick-form::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            left: 0;
+            height: calc(var(--selection-gap) + var(--selection-padding));
+        }
+
+        .ai-selection-quick-form::before {
+            bottom: 100%;
+        }
+
+        .ai-selection-quick-form::after {
+            top: 100%;
+        }
+
+        .ai-selection-quick-form input {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 26px;
+            box-sizing: border-box;
+            padding: 3px 7px;
+            border: 1px solid #596b82;
+            border-radius: 5px;
+            outline: none;
+            background: #37455a;
+            color: #f7faff;
+            font: inherit;
+            font-size: 13px;
+        }
+
+        .ai-selection-quick-form input::placeholder {
+            color: #b5c0ce;
+        }
+
+        .ai-selection-quick-form input:focus {
+            border-color: #7fa8f3;
+            box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.16);
+        }
+
+        .ai-selection-quick-form button {
+            flex: 0 0 auto;
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .ai-selection-ask-quick:hover .ai-selection-quick-form,
+            .ai-selection-ask-quick:focus-within .ai-selection-quick-form {
+                display: flex;
+            }
+        }
+
         .ai-selection-bubble button {
             background: transparent;
-            border: none;
-            color: #f0f3f9;
+            border: 1px solid transparent;
+            color: #cbd4df;
             font-size: 13px;
             padding: 3px 8px;
             cursor: pointer;
@@ -2656,7 +2739,14 @@
         }
 
         .ai-selection-bubble button:hover {
-            background: #44507a;
+            background: #3f5069;
+            color: #f7faff;
+        }
+
+        #aiSelectionAsk {
+            background: #506785;
+            border-color: #6682a5;
+            color: #f7faff;
         }
 
         .ai-selection-bubble button:disabled {
@@ -3077,7 +3167,13 @@
     </div>
 
     <div id="aiSelectionBubble" class="ai-selection-bubble" hidden>
-        <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI</button>
+        <div id="aiSelectionAskQuick" class="ai-selection-ask-quick">
+            <div id="aiSelectionQuickForm" class="ai-selection-quick-form" role="group" aria-label="快捷提问">
+                <input id="aiSelectionQuickInput" type="text" placeholder="就选中字幕提问…" autocomplete="off" aria-label="就选中字幕向 AI 提问">
+                <button id="aiSelectionQuickSend" type="button">发送</button>
+            </div>
+            <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI</button>
+        </div>
         <button id="aiSelectionLookup" type="button" title="在整个字幕语境中讲解选中词/词组的含义与用法">查词</button>
         <button id="aiSelectionAnalyze" type="button" title="解析所在句子的结构、词组和修饰关系">析句</button>
         <button id="aiSelectionAddEudic" type="button" title="将选中单词或词组和前后字幕添加到欧路词典">加生词</button>
@@ -7376,6 +7472,10 @@
                 var selectionLookupButton = document.getElementById('aiSelectionLookup');
                 var selectionAnalyzeButton = document.getElementById('aiSelectionAnalyze');
                 var selectionAskButton = document.getElementById('aiSelectionAsk');
+                var selectionAskQuick = document.getElementById('aiSelectionAskQuick');
+                var selectionQuickForm = document.getElementById('aiSelectionQuickForm');
+                var selectionQuickInput = document.getElementById('aiSelectionQuickInput');
+                var selectionQuickSend = document.getElementById('aiSelectionQuickSend');
                 var selectionAddEudicButton = document.getElementById('aiSelectionAddEudic');
                 var subtitlesContainer = document.getElementById('subtitles');
                 var videoElement = document.getElementById('video');
@@ -8475,6 +8575,7 @@
                     var state = requestQueue.snapshot();
                     var queueing = isGenerating || state.pending.length || state.paused;
                     sendButton.textContent = queueing ? '排队' : '发送';
+                    selectionQuickSend.textContent = queueing ? '排队' : '发送';
                     chatInput.placeholder = '问问 AI…（Enter ' + (queueing ? '排队' : '发送') + '，Shift+Enter 换行）';
                     stopButton.hidden = !isGenerating;
                 }
@@ -8769,25 +8870,29 @@
                     updateToggleButtonState();
                 }
 
-                function sendFromInput() {
-                    var raw = chatInput.value.trim();
+                function submitQuestion(raw, quote) {
+                    raw = raw.trim();
                     if (!raw) {
-                        return;
+                        return false;
                     }
-                    var quote = pendingQuote;
                     var positionPrefix = buildPositionPrefix();
                     var payload = positionPrefix;
                     if (quote) {
                         payload += '【引用字幕 ' + quote.timeLabel + '】"' + quote.text + '"\n';
                     }
                     payload += raw;
-                    var accepted = dispatchChat({
+                    return dispatchChat({
                         payloadText: payload,
                         displayText: raw,
                         positionPrefix: positionPrefix,
                         quote: quote,
                         restoreInputOnStop: raw
                     });
+                }
+
+                function sendFromInput() {
+                    var raw = chatInput.value.trim();
+                    var accepted = submitQuestion(raw, pendingQuote);
                     if (accepted) {
                         chatInput.value = '';
                         autoGrowInput();
@@ -9328,6 +9433,7 @@
 
                 // ---------- 划选字幕气泡 ----------
                 var currentSelectionInfo = null;
+                var selectionQuickInfo = null;
                 var eudicSubmissionPending = false;
                 var eudicContextDraft = null;
 
@@ -9720,8 +9826,43 @@
                     };
                 }
 
+                function isSelectionQuickActive() {
+                    return selectionAskQuick.matches(':hover') || selectionAskQuick.contains(document.activeElement);
+                }
+
+                function positionSelectionQuickForm() {
+                    if (!isSelectionQuickActive()) return;
+                    selectionQuickForm.style.left = '';
+                    selectionQuickForm.style.transform = '';
+                    selectionQuickForm.dataset.placement = 'above';
+                    var rect = selectionQuickForm.getBoundingClientRect();
+                    if (!rect.width) return;
+                    var askRect = selectionAskButton.getBoundingClientRect();
+                    var targetLeft = askRect.left + askRect.width / 2 - rect.width / 3;
+                    targetLeft = Math.min(Math.max(targetLeft, 8), window.innerWidth - rect.width - 8);
+                    var shift = targetLeft - rect.left;
+                    if (shift) {
+                        selectionQuickForm.style.transform = 'translateX(' + shift + 'px)';
+                    }
+                    if (rect.top < 8) {
+                        selectionQuickForm.dataset.placement = 'below';
+                    }
+                }
+
+                function prepareSelectionQuickAsk() {
+                    if (!currentSelectionInfo || selectionBubble.hidden) return;
+                    selectionQuickInfo = Object.assign({}, currentSelectionInfo);
+                    positionSelectionQuickForm();
+                }
+
+                function releaseSelectionQuickAsk() {
+                    if (isSelectionQuickActive()) return;
+                    selectionQuickInfo = null;
+                    refreshSelectionBubble();
+                }
+
                 function refreshSelectionBubble() {
-                    var info = readSubtitleSelection();
+                    var info = isSelectionQuickActive() && selectionQuickInfo ? selectionQuickInfo : readSubtitleSelection();
                     if (!info) {
                         hideSelectionBubble();
                         return;
@@ -9768,10 +9909,13 @@
                     top = Math.min(Math.max(top, 8), window.innerHeight - bubbleRect.height - 8);
                     selectionBubble.style.left = left + 'px';
                     selectionBubble.style.top = top + 'px';
+                    positionSelectionQuickForm();
                 }
 
                 function hideSelectionBubble() {
                     currentSelectionInfo = null;
+                    selectionQuickInfo = null;
+                    selectionQuickInput.value = '';
                     selectionBubble.hidden = true;
                 }
 
@@ -9809,14 +9953,25 @@
                 var selectionRefreshTimer = null;
                 document.addEventListener('selectionchange', function () {
                     clearTimeout(selectionRefreshTimer);
-                    selectionRefreshTimer = setTimeout(refreshSelectionBubble, 180);
+                    selectionRefreshTimer = setTimeout(function () {
+                        if (isSelectionQuickActive()) return;
+                        selectionQuickInfo = null;
+                        refreshSelectionBubble();
+                    }, 180);
                 });
 
                 subtitlesContainer.addEventListener('scroll', hideSelectionBubble);
 
-                // 点击气泡按钮时防止选区先被清除
+                selectionAskQuick.addEventListener('pointerenter', prepareSelectionQuickAsk);
+                selectionAskQuick.addEventListener('focusin', prepareSelectionQuickAsk);
+                selectionAskQuick.addEventListener('pointerleave', releaseSelectionQuickAsk);
+                selectionAskQuick.addEventListener('focusout', function () {
+                    setTimeout(releaseSelectionQuickAsk, 0);
+                });
+
+                // 点击气泡按钮时防止选区先被清除；快捷输入需要正常获得焦点。
                 selectionBubble.addEventListener('pointerdown', function (event) {
-                    event.preventDefault();
+                    if (!selectionQuickForm.contains(event.target)) event.preventDefault();
                 });
 
                 eudicContextPreviousInclude.addEventListener('change', function () {
@@ -9967,6 +10122,28 @@
                         showFloatingToast(err.message || '无法确定解析范围，请重新划选', 'warning', 3000);
                     }
                 });
+
+                function sendFromSelectionQuickInput() {
+                    var info = selectionQuickInfo;
+                    var raw = selectionQuickInput.value.trim();
+                    if (!info || !raw) return;
+                    var accepted = submitQuestion(raw, { text: info.text, timeLabel: info.timeLabel });
+                    if (!accepted) return;
+                    hideSelectionBubble();
+                    window.getSelection().removeAllRanges();
+                    openChatWindow(false);
+                }
+
+                selectionQuickInput.addEventListener('keydown', function (event) {
+                    if (event.isComposing) { event.stopPropagation(); return; }
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        sendFromSelectionQuickInput();
+                    }
+                    event.stopPropagation();
+                });
+
+                selectionQuickSend.addEventListener('click', sendFromSelectionQuickInput);
 
                 selectionAskButton.addEventListener('click', function () {
                     var info = currentSelectionInfo;

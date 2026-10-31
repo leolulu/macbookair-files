@@ -76,7 +76,7 @@ async function finish(page, next = false) {
     const before = await requests(page); await page.evaluate(() => queueTest.active.finish());
     if (next) await waitRequests(page, before + 1); else await idle(page);
 }
-async function selection(page, button, text = 'submitted') {
+async function selectSubtitle(page, text = 'submitted') {
     await page.evaluate(text => {
         const walker = document.createTreeWalker(document.querySelector('#subtitles'), NodeFilter.SHOW_TEXT); let node;
         while ((node = walker.nextNode())) {
@@ -87,7 +87,15 @@ async function selection(page, button, text = 'submitted') {
         throw Error('Missing selection: ' + text);
     }, text);
     await page.waitForFunction(() => !document.querySelector('#aiSelectionBubble').hidden);
+}
+async function selection(page, button, text = 'submitted') {
+    await selectSubtitle(page, text);
     await page.locator(button).click({ force: true });
+}
+async function quickSelection(page, text = 'submitted') {
+    await selectSubtitle(page, text);
+    await page.locator('#aiSelectionAsk').hover();
+    await page.locator('#aiSelectionQuickInput').waitFor({ state: 'visible' });
 }
 async function load(page, name = 'queue.srt') {
     const srt = '1\n00:00:01,000 --> 00:00:04,000\nThe committee rejected the proposal submitted yesterday,\n\n2\n00:00:04,100 --> 00:00:10,000\nfearing that the plan, if implemented hastily, would undermine public trust.\n\n3\n00:00:12,000 --> 00:00:15,000\nPlease reconsider.\n';
@@ -137,6 +145,89 @@ async function main() {
             checks.push('auto-open stays inline, defaults off, and changes enabled state without shifting following settings');
             await page.locator('#aiChatProvider').selectOption('mock'); await page.locator('#aiChatModel').selectOption('mock-model');
             await page.locator('#aiChatSettingsToggle').click();
+            const quickStart = await requests(page);
+            await selection(page, '#aiSelectionAsk');
+            assert.equal(await requests(page), quickStart);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
+            await page.locator('#aiChatInput').fill('保留大浮窗草稿');
+            await hide(page); await quickSelection(page);
+            const quickGeometry = await page.evaluate(() => {
+                const form = document.querySelector('#aiSelectionQuickForm').getBoundingClientRect();
+                const bubble = document.querySelector('#aiSelectionBubble').getBoundingClientRect();
+                const button = document.querySelector('#aiSelectionAsk').getBoundingClientRect();
+                return {
+                    formWidth: form.width, oneThird: form.left + form.width / 3, formBottom: form.bottom,
+                    bubbleWidth: bubble.width, buttonCenter: button.left + button.width / 2, buttonTop: button.top
+                };
+            });
+            assert.ok(Math.abs(quickGeometry.formWidth - quickGeometry.bubbleWidth) < 1);
+            assert.ok(Math.abs(quickGeometry.oneThird - quickGeometry.buttonCenter) < 1);
+            assert.ok(quickGeometry.formBottom <= quickGeometry.buttonTop - 2);
+            await page.screenshot({ path: path.join(output, file + '-quick-ask.png') });
+            await page.locator('#aiSelectionAsk').hover();
+            const askBox = await page.locator('#aiSelectionAsk').boundingBox();
+            await page.mouse.move(askBox.x + askBox.width / 2, askBox.y - 4, { steps: 8 });
+            assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
+            const quickInputBox = await page.locator('#aiSelectionQuickInput').boundingBox();
+            await page.mouse.move(quickInputBox.x + quickInputBox.width / 2, quickInputBox.y + quickInputBox.height / 2, { steps: 8 });
+            assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
+            checks.push('quick ask stays menu-width, places the ask button at its left third, and keeps the hover corridor through a visible panel gap');
+            await page.locator('#aiSelectionQuickInput').press('Enter');
+            assert.equal(await requests(page), quickStart);
+            await page.locator('#aiSelectionQuickInput').fill('输入法草稿');
+            await page.locator('#aiSelectionQuickInput').evaluate(node => node.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'Enter', isComposing: true, bubbles: true, cancelable: true
+            })));
+            assert.equal(await requests(page), quickStart);
+            assert.equal(await page.locator('#aiSelectionQuickInput').inputValue(), '输入法草稿');
+            await page.evaluate(() => {
+                const bubble = document.querySelector('#aiSelectionBubble');
+                bubble.style.left = (window.innerWidth - bubble.getBoundingClientRect().width - 8) + 'px';
+                bubble.style.top = '8px';
+                document.querySelector('#aiSelectionQuickInput').dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+            });
+            const quickEdge = await page.evaluate(() => {
+                const form = document.querySelector('#aiSelectionQuickForm').getBoundingClientRect();
+                const button = document.querySelector('#aiSelectionAsk').getBoundingClientRect();
+                return { left: form.left, right: form.right, top: form.top, buttonBottom: button.bottom, width: window.innerWidth };
+            });
+            assert.ok(quickEdge.left >= 8 && quickEdge.right <= quickEdge.width - 8);
+            assert.ok(quickEdge.top >= quickEdge.buttonBottom - 1);
+            await page.locator('#aiSelectionQuickInput').fill('快捷引用提问');
+            await page.mouse.move(0, 500);
+            assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
+            await page.locator('#aiSelectionQuickInput').press('Enter'); await waitRequests(page, quickStart + 1);
+            const quickPayload = await page.evaluate(() => queueTest.requests.at(-1).payload.user_message);
+            assert.match(quickPayload, /当前播放到 0:00:02/);
+            assert.match(quickPayload, /【引用字幕 [^\n]+】"submitted"\n快捷引用提问/);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('#aiSelectionBubble').evaluate(node => node.hidden), true);
+            assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
+            assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
+            await hide(page); await quickSelection(page);
+            await page.locator('#aiSelectionQuickInput').fill('快捷排队提问');
+            await page.locator('#aiSelectionQuickSend').click(); await waitPending(page, 1);
+            assert.equal(await requests(page), quickStart + 1);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('#aiSelectionQuickSend').textContent(), '排队');
+            await finish(page, true); await finish(page);
+            assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
+            assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
+            checks.push('quick ask preserves selection through focus, submits the same quote payload, and protects the main draft and quote');
+            checks.push('quick ask ignores enabled background mode, flips at viewport edges, handles empty and composing Enter, and joins FIFO');
+
+            await page.locator('#aiChatSettingsToggle').click(); await page.locator('#aiChatBackgroundRequest').uncheck();
+            await page.locator('#aiChatSettingsToggle').click(); await hide(page);
+            const quickBackgroundOff = await requests(page);
+            await quickSelection(page); await page.locator('#aiSelectionQuickInput').fill('关闭后台快捷提问');
+            await page.locator('#aiSelectionQuickInput').press('Enter'); await waitRequests(page, quickBackgroundOff + 1);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            await finish(page);
+            await page.locator('#aiChatSettingsToggle').click(); await page.locator('#aiChatBackgroundRequest').check();
+            await page.locator('#aiChatSettingsToggle').click();
+            checks.push('quick ask also opens the chat with background mode disabled; original ask still only prepares a quote');
+            await fresh(page); await page.locator('#aiChatInput').fill('');
             await submit(page, '第一条普通问答'); const first = await requests(page); await waitRequests(page, first);
             await selection(page, '#aiSelectionLookup');
             await page.evaluate(() => { document.querySelector('#video').currentTime = 6; });
