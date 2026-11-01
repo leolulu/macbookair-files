@@ -2668,10 +2668,13 @@
             width: calc(100% + var(--selection-border) + var(--selection-border));
             height: 36px;
             padding: 4px;
-            border: 1px solid #65758a;
+            border: 1px solid #5f6e80;
             border-radius: 8px;
-            background: #46566b;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(180deg, #414b59 0%, #222a36 100%);
+            box-shadow:
+                0 6px 18px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 #ffffff2c,
+                inset 0 -1px 0 #00000024;
         }
 
         .ai-selection-quick-form[data-placement="below"] {
