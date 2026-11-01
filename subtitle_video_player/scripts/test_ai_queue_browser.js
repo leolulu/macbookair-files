@@ -157,12 +157,12 @@ async function main() {
                 const bubble = document.querySelector('#aiSelectionBubble').getBoundingClientRect();
                 const button = document.querySelector('#aiSelectionAsk').getBoundingClientRect();
                 return {
-                    formWidth: form.width, oneThird: form.left + form.width / 3, formBottom: form.bottom,
-                    bubbleWidth: bubble.width, buttonCenter: button.left + button.width / 2, buttonTop: button.top
+                    formWidth: form.width, formLeft: form.left, formBottom: form.bottom,
+                    bubbleWidth: bubble.width, bubbleLeft: bubble.left, buttonTop: button.top
                 };
             });
             assert.ok(Math.abs(quickGeometry.formWidth - quickGeometry.bubbleWidth) < 1);
-            assert.ok(Math.abs(quickGeometry.oneThird - quickGeometry.buttonCenter) < 1);
+            assert.ok(Math.abs(quickGeometry.formLeft - quickGeometry.bubbleLeft) < 1);
             assert.ok(quickGeometry.formBottom <= quickGeometry.buttonTop - 2);
             await page.screenshot({ path: path.join(output, file + '-quick-ask.png') });
             await page.locator('#aiSelectionAsk').hover();
@@ -172,7 +172,7 @@ async function main() {
             const quickInputBox = await page.locator('#aiSelectionQuickInput').boundingBox();
             await page.mouse.move(quickInputBox.x + quickInputBox.width / 2, quickInputBox.y + quickInputBox.height / 2, { steps: 8 });
             assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
-            checks.push('quick ask stays menu-width, places the ask button at its left third, and keeps the hover corridor through a visible panel gap');
+            checks.push('quick ask aligns with the menu edges and keeps the hover corridor through a visible panel gap');
             await page.locator('#aiSelectionQuickInput').press('Enter');
             assert.equal(await requests(page), quickStart);
             await page.locator('#aiSelectionQuickInput').fill('输入法草稿');
@@ -201,7 +201,7 @@ async function main() {
             const quickPayload = await page.evaluate(() => queueTest.requests.at(-1).payload.user_message);
             assert.match(quickPayload, /当前播放到 0:00:02/);
             assert.match(quickPayload, /【引用字幕 [^\n]+】"submitted"\n快捷引用提问/);
-            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#aiSelectionBubble').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
             assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
@@ -209,13 +209,16 @@ async function main() {
             await page.locator('#aiSelectionQuickInput').fill('快捷排队提问');
             await page.locator('#aiSelectionQuickSend').click(); await waitPending(page, 1);
             assert.equal(await requests(page), quickStart + 1);
-            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            const quickQueuedToast = page.locator('#toastContainer [data-toast-key^="ai-request-status-"]:not([data-toast-key^="ai-request-status-result-"])');
+            await quickQueuedToast.getByText('已提交').waitFor();
+            assert.match(await quickQueuedToast.textContent(), /问答「快捷排队提问」已提交/);
             assert.equal(await page.locator('#aiSelectionQuickSend').textContent(), '排队');
             await finish(page, true); await finish(page);
             assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
             assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
             checks.push('quick ask preserves selection through focus, submits the same quote payload, and protects the main draft and quote');
-            checks.push('quick ask ignores enabled background mode, flips at viewport edges, handles empty and composing Enter, and joins FIFO');
+            checks.push('quick ask respects enabled background mode, flips at viewport edges, handles empty and composing Enter, and joins FIFO');
 
             await page.locator('#aiChatSettingsToggle').click(); await page.locator('#aiChatBackgroundRequest').uncheck();
             await page.locator('#aiChatSettingsToggle').click(); await hide(page);
@@ -227,6 +230,20 @@ async function main() {
             await page.locator('#aiChatSettingsToggle').click(); await page.locator('#aiChatBackgroundRequest').check();
             await page.locator('#aiChatSettingsToggle').click();
             checks.push('quick ask also opens the chat with background mode disabled; original ask still only prepares a quote');
+
+            await fresh(page); await background(page, true); await hide(page);
+            const beforeQuickAutoOpen = await requests(page);
+            await quickSelection(page); await page.locator('#aiSelectionQuickInput').fill('后台快捷提问自动展开');
+            await page.locator('#aiSelectionQuickInput').press('Enter'); await waitRequests(page, beforeQuickAutoOpen + 1);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            await page.locator('#video').focus();
+            const quickAutoFocus = await page.evaluate(() => document.activeElement.id);
+            await finish(page);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await page.evaluate(() => document.activeElement.id), quickAutoFocus);
+            await background(page, false);
+            checks.push('quick ask uses background queue notices and success-only auto-open without stealing focus');
+
             await fresh(page); await page.locator('#aiChatInput').fill('');
             await submit(page, '第一条普通问答'); const first = await requests(page); await waitRequests(page, first);
             await selection(page, '#aiSelectionLookup');

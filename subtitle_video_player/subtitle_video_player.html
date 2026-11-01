@@ -3152,7 +3152,7 @@
                     <input type="checkbox" id="aiChatAttachPosition" checked> 提问附带播放位置
                 </label>
                 <div class="ai-chat-background-settings">
-                    <label title="查词、析句时先在后台生成；已打开的窗口保持显示。">
+                    <label title="查词、析句、快捷输入提问时先在后台生成；已打开的窗口保持显示。">
                         <input type="checkbox" id="aiChatBackgroundRequest" aria-controls="aiChatBackgroundOptions"> 后台请求
                     </label>
                     <div id="aiChatBackgroundOptions" class="ai-chat-background-options" aria-disabled="true">
@@ -10186,7 +10186,9 @@
                     if (!accepted) return;
                     hideSelectionBubble();
                     window.getSelection().removeAllRanges();
-                    openChatWindow(false);
+                    if (!aiSettings.backgroundRequest || !chatWindow.hidden) {
+                        openChatWindow(false);
+                    }
                 }
 
                 selectionQuickInput.addEventListener('keydown', function (event) {
