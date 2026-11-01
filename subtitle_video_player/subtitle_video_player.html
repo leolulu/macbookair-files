@@ -3156,7 +3156,7 @@
                         <input type="checkbox" id="aiChatBackgroundRequest" aria-controls="aiChatBackgroundOptions"> 后台请求
                     </label>
                     <div id="aiChatBackgroundOptions" class="ai-chat-background-options" aria-disabled="true">
-                        <label title="后台请求成功完成后自动展开窗口，保留当前输入焦点。">
+                        <label title="后台请求成功完成后暂停视频并自动展开窗口，保留当前输入焦点。">
                             <input type="checkbox" id="aiChatBackgroundAutoOpen" disabled> 完成后自动打开 AI 对话窗口
                         </label>
                     </div>
@@ -8708,7 +8708,13 @@
                     hint.className = 'ai-result-toast-hint';
                     hint.textContent = '点击查看 AI 对话';
                     button.append(title, hint);
-                    button.onclick = function () { openChatWindow(!isPortraitLayout()); };
+                    button.onclick = function () {
+                        if (type === 'success' && aiSettings.backgroundRequest) {
+                            openChatWindowPausingVideo(!isPortraitLayout());
+                        } else {
+                            openChatWindow(!isPortraitLayout());
+                        }
+                    };
                     toast.appendChild(button);
                     function pauseDismissal() {
                         clearTimeout(toastTimers[key]);
@@ -8919,7 +8925,7 @@
                             hasUnreadError = true;
                         }
                         if (status === 'success' && aiSettings.backgroundRequest && aiSettings.backgroundAutoOpen) {
-                            openChatWindow(false);
+                            openChatWindowPausingVideo(false);
                         } else {
                             var suffix = status === 'success' ? '已完成' : status === 'error' ? '请求失败' : '已停止';
                             if (status !== 'success' && requestQueue.snapshot().pending.length) suffix += '，队列已暂停';
@@ -9303,6 +9309,11 @@
                     if (focusInput) {
                         chatInput.focus();
                     }
+                }
+
+                function openChatWindowPausingVideo(focusInput) {
+                    if (!videoElement.paused) videoElement.pause();
+                    openChatWindow(focusInput);
                 }
 
                 function closeChatWindow() {

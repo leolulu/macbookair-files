@@ -123,6 +123,27 @@ async function backgroundLayout(page) {
     });
 }
 
+async function watchVideoPause(page, initiallyPaused = false) {
+    await page.evaluate(pausedAtStart => {
+        const video = document.querySelector('#video');
+        let paused = pausedAtStart;
+        window.__svpVideoPauseCount = 0;
+        Object.defineProperty(video, 'paused', { configurable: true, get: () => paused });
+        video.pause = () => { paused = true; window.__svpVideoPauseCount++; };
+    }, initiallyPaused);
+}
+
+async function restoreVideoPause(page) {
+    return page.evaluate(() => {
+        const video = document.querySelector('#video');
+        const result = { calls: window.__svpVideoPauseCount, paused: video.paused };
+        delete video.paused;
+        delete video.pause;
+        delete window.__svpVideoPauseCount;
+        return result;
+    });
+}
+
 async function main() {
     const browser = await chromium.launch({ channel: 'chrome', headless: true, downloadsPath: path.join(temp, 'downloads') });
     try {
@@ -238,11 +259,13 @@ async function main() {
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             await page.locator('#video').focus();
             const quickAutoFocus = await page.evaluate(() => document.activeElement.id);
+            await watchVideoPause(page);
             await finish(page);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             assert.equal(await page.evaluate(() => document.activeElement.id), quickAutoFocus);
+            assert.deepEqual(await restoreVideoPause(page), { calls: 1, paused: true });
             await background(page, false);
-            checks.push('quick ask uses background queue notices and success-only auto-open without stealing focus');
+            checks.push('quick ask uses background queue notices and success-only auto-open, pauses playback and preserves focus');
 
             await fresh(page); await page.locator('#aiChatInput').fill('');
             await submit(page, '第一条普通问答'); const first = await requests(page); await waitRequests(page, first);
@@ -460,12 +483,14 @@ async function main() {
             assert.equal(await notice.isVisible(), true);
             await page.mouse.move(0, 500); await notice.focus(); await page.clock.fastForward(6500);
             assert.equal(await notice.isVisible(), true);
+            await watchVideoPause(page);
             await notice.press(file.endsWith('.single.html') ? 'Space' : 'Enter');
+            assert.deepEqual(await restoreVideoPause(page), { calls: 1, paused: true });
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             assert.equal(await page.locator('.ai-result-toast-open').count(), 0);
             assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread')), false);
             assert.equal(await page.getByText('保留原有常驻 toast', { exact: true }).count(), 1);
-            checks.push('larger completion target fits 390px; hover and focus pause dismissal; keyboard opens and clears AI notices only');
+            checks.push('background success toast pauses playback when opened by keyboard, preserves focus timeout and clears AI notices only');
 
             await hide(page); await selection(page, '#aiSelectionLookup'); await finish(page);
             await page.mouse.move(0, 500); await page.clock.fastForward(6300);
@@ -512,7 +537,9 @@ async function main() {
             await page.locator('#aiChatSettingsToggle').click();
             await submit(page, '关闭后台请求后保持收起'); await hide(page); await finish(page);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+            await watchVideoPause(page);
             await page.locator('.ai-result-toast-open').last().click();
+            assert.deepEqual(await restoreVideoPause(page), { calls: 0, paused: false });
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             checks.push('disabled background resets auto-open; old checked-disabled settings load unchecked and stay off when re-enabled');
 
@@ -521,25 +548,39 @@ async function main() {
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             await page.locator('#video').focus();
             const focusBefore = await page.evaluate(() => document.activeElement.id);
+            await watchVideoPause(page);
             await finish(page, true);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             assert.equal(await page.evaluate(() => document.activeElement.id), focusBefore);
+            assert.deepEqual(await restoreVideoPause(page), { calls: 1, paused: true });
             assert.equal(await page.locator('.ai-result-toast-open').count(), 0);
             assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread')), false);
             await finish(page);
-            checks.push('auto-open waits for success, preserves focus, consumes unread state, and allows queued analysis to continue');
+            checks.push('auto-open pauses an active video, preserves focus, consumes unread state, and allows queued analysis to continue');
+
+            await fresh(page); await hide(page); await selection(page, '#aiSelectionLookup');
+            await watchVideoPause(page, true); await finish(page);
+            assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.deepEqual(await restoreVideoPause(page), { calls: 0, paused: true });
+            checks.push('auto-open keeps already-paused playback unchanged');
 
             await fresh(page); await page.evaluate(() => { queueTest.nextMode = 'error'; });
-            await hide(page); await selection(page, '#aiSelectionLookup'); await finish(page);
+            await hide(page); await selection(page, '#aiSelectionLookup');
+            await watchVideoPause(page); await finish(page);
+            assert.deepEqual(await restoreVideoPause(page), { calls: 0, paused: false });
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread-error')), true);
+            await watchVideoPause(page);
             await page.locator('.ai-result-toast-open').last().click();
+            assert.deepEqual(await restoreVideoPause(page), { calls: 0, paused: false });
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             assert.equal(await page.locator('#toggleAiChat').evaluate(node => node.classList.contains('ai-chat-unread-error')), false);
             checks.push('failure stays hidden with a clickable error notice even when auto-open is enabled');
 
             await fresh(page); await hide(page); await selection(page, '#aiSelectionLookup');
-            await background(page, false); await hide(page); await finish(page);
+            await background(page, false); await hide(page);
+            await watchVideoPause(page); await finish(page);
+            assert.deepEqual(await restoreVideoPause(page), { calls: 0, paused: false });
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             checks.push('turning auto-open off during generation takes effect at completion');
 
