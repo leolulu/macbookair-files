@@ -2635,18 +2635,23 @@
 
         .ai-selection-bubble {
             --selection-gap: 3px;
-            --selection-padding: 4px;
+            --selection-padding: 5px;
             --selection-border: 1px;
 
             position: fixed;
             z-index: 950;
-            display: flex;
-            gap: 4px;
-            background: #293243;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1.25fr;
+            align-items: center;
+            gap: 3px;
+            box-sizing: border-box;
+            width: 256px;
+            min-height: 38px;
+            background: #252e3d;
             padding: var(--selection-padding);
-            border: var(--selection-border) solid #3c4b60;
-            border-radius: 0 0 8px 8px;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+            border: var(--selection-border) solid #303e51;
+            border-radius: 4px 4px 10px 10px;
+            filter: drop-shadow(0 5px 8px #121d2a38);
         }
 
         .ai-selection-bubble[hidden] {
@@ -2654,7 +2659,7 @@
         }
 
         .ai-selection-ask-quick {
-            flex: 0 0 auto;
+            min-width: 0;
         }
 
         .ai-selection-quick-form {
@@ -2663,16 +2668,15 @@
             bottom: calc(100% + var(--selection-gap));
             display: none;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
             box-sizing: border-box;
             width: calc(100% + var(--selection-border) + var(--selection-border));
-            height: 36px;
-            padding: 4px;
+            height: 40px;
+            padding: 5px 6px 5px 10px;
             border: 1px solid #5f6e80;
-            border-radius: 8px;
+            border-radius: 11px 11px 5px 5px;
             background: linear-gradient(180deg, #414b59 0%, #222a36 100%);
             box-shadow:
-                0 6px 18px rgba(0, 0, 0, 0.3),
                 inset 0 1px 0 #ffffff2c,
                 inset 0 -1px 0 #00000024;
         }
@@ -2699,32 +2703,60 @@
             top: 100%;
         }
 
+        .ai-selection-quick-gap-blur {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            left: 0;
+            height: var(--selection-gap);
+            pointer-events: none;
+            background: rgba(37, 46, 61, 0.8);
+            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(18px);
+        }
+
+        .ai-selection-quick-form[data-placement="below"] .ai-selection-quick-gap-blur {
+            top: auto;
+            bottom: 100%;
+            right: 12px;
+            left: 12px;
+        }
+
         .ai-selection-quick-form input {
             flex: 1 1 auto;
             min-width: 0;
-            height: 26px;
             box-sizing: border-box;
-            padding: 3px 7px;
-            border: 1px solid #596b82;
-            border-radius: 5px;
+            padding: 1px 2px;
+            border: none;
             outline: none;
-            background: #37455a;
+            background: transparent;
             color: #f7faff;
-            font: inherit;
-            font-size: 13px;
+            font: 500 12px system-ui, "Microsoft YaHei", sans-serif;
         }
 
         .ai-selection-quick-form input::placeholder {
-            color: #b5c0ce;
+            color: #d2d9e1;
+            opacity: 1;
         }
 
         .ai-selection-quick-form input:focus {
-            border-color: #7fa8f3;
-            box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.16);
+            box-shadow: none;
         }
 
-        .ai-selection-quick-form button {
+        .ai-selection-bubble .ai-selection-quick-form button {
             flex: 0 0 auto;
+            padding: 5px 9px;
+            border: 1px solid #ffffff13;
+            border-radius: 5px;
+            background: #293441;
+            color: #f9fbff;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .ai-selection-bubble .ai-selection-quick-form button:hover {
+            background: #293441;
+            filter: brightness(1.2);
         }
 
         @media (hover: hover) and (pointer: fine) {
@@ -2739,7 +2771,9 @@
             border: 1px solid transparent;
             color: #cbd4df;
             font-size: 13px;
-            padding: 3px 8px;
+            font-weight: 600;
+            line-height: 1.15;
+            padding: 6px 2px;
             cursor: pointer;
             border-radius: 5px;
             white-space: nowrap;
@@ -2751,9 +2785,11 @@
         }
 
         #aiSelectionAsk {
+            width: 100%;
             background: #506785;
             border-color: #6682a5;
             color: #f7faff;
+            box-shadow: inset 0 1px #ffffff0b;
         }
 
         .ai-selection-bubble button:disabled {
@@ -3176,6 +3212,7 @@
     <div id="aiSelectionBubble" class="ai-selection-bubble" hidden>
         <div id="aiSelectionAskQuick" class="ai-selection-ask-quick">
             <div id="aiSelectionQuickForm" class="ai-selection-quick-form" role="group" aria-label="快捷提问">
+                <span class="ai-selection-quick-gap-blur" aria-hidden="true"></span>
                 <input id="aiSelectionQuickInput" type="text" placeholder="就选中字幕提问…" autocomplete="off" aria-label="就选中字幕向 AI 提问">
                 <button id="aiSelectionQuickSend" type="button">发送</button>
             </div>
@@ -9862,13 +9899,6 @@
                     selectionQuickForm.dataset.placement = 'above';
                     var rect = selectionQuickForm.getBoundingClientRect();
                     if (!rect.width) return;
-                    var askRect = selectionAskButton.getBoundingClientRect();
-                    var targetLeft = askRect.left + askRect.width / 2 - rect.width / 3;
-                    targetLeft = Math.min(Math.max(targetLeft, 8), window.innerWidth - rect.width - 8);
-                    var shift = targetLeft - rect.left;
-                    if (shift) {
-                        selectionQuickForm.style.transform = 'translateX(' + shift + 'px)';
-                    }
                     if (rect.top < 8) {
                         selectionQuickForm.dataset.placement = 'below';
                     }
