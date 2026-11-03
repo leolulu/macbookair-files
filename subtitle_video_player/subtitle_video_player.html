@@ -1111,7 +1111,7 @@
             width: 420px;
             height: 520px;
             min-width: 300px;
-            min-height: 260px;
+            min-height: min-content;
             max-width: 96vw;
             max-height: 92vh;
             display: flex;
@@ -1812,7 +1812,10 @@
         }
 
         .ai-chat-messages {
-            flex: 1 1 auto;
+            flex: 1 1 0;
+            min-height: 0;
+            /* 长回复不参与浮窗最小高度计算，操作区按自身内容取高。 */
+            contain: size;
             overflow-y: auto;
             padding: 10px;
             display: flex;
@@ -9238,6 +9241,7 @@
                 }
 
                 // ---------- 窗口管理 ----------
+                // 记录用户选择的尺寸和位置，内容撑高与临时避让不写回。
                 var windowGeometry = null;
 
                 function isSmallScreen() {
@@ -9252,17 +9256,21 @@
                     if (rect.width < 50 || rect.height < 50) {
                         return;
                     }
+                    var height = parseFloat(chatWindow.style.height) || 520;
                     windowGeometry = {
                         left: Math.round(rect.left),
-                        top: Math.round(rect.top),
+                        top: Math.round(chatWindow.style.top && chatWindow.style.top !== 'auto' ? rect.top : rect.bottom - height),
                         width: Math.round(rect.width),
-                        height: Math.round(rect.height)
+                        height: Math.round(height)
                     };
                 }
 
                 function applyGeometry() {
-                    if (!windowGeometry || isSmallScreen()) {
+                    if (isSmallScreen()) {
                         return;
+                    }
+                    if (!windowGeometry) {
+                        captureGeometry();
                     }
                     var vw = window.innerWidth;
                     var vh = window.innerHeight;
@@ -9276,6 +9284,10 @@
                     chatWindow.style.top = top + 'px';
                     chatWindow.style.right = 'auto';
                     chatWindow.style.bottom = 'auto';
+                    var actualHeight = chatWindow.getBoundingClientRect().height;
+                    if (actualHeight > height + 1 && actualHeight <= vh - 16) {
+                        chatWindow.style.top = Math.min(top, vh - actualHeight - 8) + 'px';
+                    }
                 }
 
                 function persistWindowState() {
@@ -9313,7 +9325,6 @@
                     updateWordVideo('pause');
                     if (lookupSpeech) lookupSpeech.stop();
                     if (sentenceAnalysis) sentenceAnalysis.blur();
-                    captureGeometry();
                     resetEudicAuthorizationInput();
                     chatWindow.hidden = true;
                     updateToggleButtonState();
@@ -9408,11 +9419,13 @@
                                 height = clamp(rect.height + deltaY, minHeight, maxHeight);
                             } else if (direction.indexOf('n') !== -1) {
                                 height = clamp(rect.height - deltaY, minHeight, maxHeight);
-                                top = rect.bottom - height;
                             }
 
                             chatWindow.style.width = width + 'px';
                             chatWindow.style.height = height + 'px';
+                            if (direction.indexOf('n') !== -1) {
+                                top = rect.bottom - chatWindow.getBoundingClientRect().height;
+                            }
                             chatWindow.style.left = left + 'px';
                             chatWindow.style.top = top + 'px';
                         }
@@ -9432,6 +9445,7 @@
                             document.body.classList.remove('ai-chat-resizing');
                             document.body.style.cursor = previousBodyCursor;
                             captureGeometry();
+                            applyGeometry();
                             persistWindowState();
                         }
 
@@ -9469,6 +9483,7 @@
                             chatHeader.releasePointerCapture(pointerId);
                         } catch (err) { }
                         captureGeometry();
+                        applyGeometry();
                         persistWindowState();
                     }
 
@@ -9480,12 +9495,12 @@
                 if (typeof ResizeObserver === 'function') {
                     var resizePersistTimer = null;
                     new ResizeObserver(function () {
-                        if (chatWindow.hidden) {
+                        if (chatWindow.hidden || chatWindow.classList.contains('ai-chat-resizing') || chatHeader.matches(':active')) {
                             return;
                         }
+                        applyGeometry();
                         clearTimeout(resizePersistTimer);
                         resizePersistTimer = setTimeout(function () {
-                            captureGeometry();
                             persistWindowState();
                         }, 300);
                     }).observe(chatWindow);

@@ -112,6 +112,201 @@ async function load(page, name = 'queue.srt') {
     await page.waitForFunction(() => document.querySelector('#subtitles').textContent.includes('submitted'));
 }
 async function fresh(page) { await show(page); await page.locator('#aiChatNewConversation').click(); await idle(page); await waitPending(page, 0); }
+async function moveChatWindow(page, left, top) {
+    const box = await page.locator('#aiChatWindow').boundingBox();
+    const handle = await page.locator('.ai-chat-header-drag-space').boundingBox();
+    const x = handle.x + handle.width / 2, y = handle.y + handle.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x + left - box.x, y + top - box.y, { steps: 4 }); await page.mouse.up();
+}
+async function resizeChatWindow(page, width, height) {
+    const box = await page.locator('#aiChatWindow').boundingBox();
+    const handle = await page.locator('[data-resize-direction="se"]').boundingBox();
+    const x = handle.x + handle.width / 2, y = handle.y + handle.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x + width - box.width, y + height - box.height, { steps: 4 }); await page.mouse.up();
+}
+async function settleChatLayout(page) {
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+async function verifyFixedComposerLayout(page, file) {
+    for (const pending of [1, 3]) {
+        await fresh(page);
+        await page.evaluate(() => {
+            const message = document.createElement('div');
+            message.className = 'ai-chat-msg ai-chat-msg-ai ai-chat-md';
+            for (let index = 0; index < 60; index++) {
+                const paragraph = document.createElement('p');
+                paragraph.textContent = '长回复布局样本 ' + (index + 1) + '：这段内容用于确认消息区滚动不会挤压其他必要功能区域。';
+                message.appendChild(paragraph);
+            }
+            document.querySelector('#aiChatMessages').appendChild(message);
+        });
+        await submit(page, '布局验证当前项 ' + pending);
+        for (let index = 0; index < pending; index++) await submit(page, '布局验证待发送 ' + pending + '-' + index);
+        await waitPending(page, pending);
+        await hide(page); await show(page);
+        const layout = await page.locator('#aiChatQueue').evaluate((node, expectedPending) => {
+            const header = node.querySelector('.ai-chat-queue-header');
+            const list = document.querySelector('#aiChatQueueList');
+            const messages = document.querySelector('#aiChatMessages');
+            const input = document.querySelector('.ai-chat-input-row');
+            const queueBox = node.getBoundingClientRect(), headerBox = header.getBoundingClientRect();
+            return {
+                expectedPending,
+                queueHeight: queueBox.height,
+                queueBottom: queueBox.bottom,
+                headerHeight: headerBox.height,
+                headerBottom: headerBox.bottom,
+                inputTop: input.getBoundingClientRect().top,
+                inputBottom: input.getBoundingClientRect().bottom,
+                windowBottom: document.querySelector('#aiChatWindow').getBoundingClientRect().bottom,
+                listClientHeight: list.clientHeight,
+                listScrollHeight: list.scrollHeight,
+                messagesHeight: messages.clientHeight,
+                messagesScrollHeight: messages.scrollHeight,
+                messagesScrollTop: messages.scrollTop,
+                settingsHidden: document.querySelector('#aiChatSettings').hidden,
+                quoteHidden: document.querySelector('#aiChatQuoteChip').hidden
+            };
+        }, pending);
+        await page.locator('#aiChatWindow').screenshot({ path: path.join(output, file + '-long-message-queue-' + pending + '.png') });
+        assert.ok(layout.queueHeight + 1 >= layout.headerHeight
+            && layout.headerBottom <= layout.queueBottom + 1
+            && layout.headerBottom <= layout.inputTop + 1
+            && layout.inputBottom <= layout.windowBottom + 1, JSON.stringify(layout));
+        assert.ok(layout.listClientHeight + 1 >= layout.listScrollHeight, JSON.stringify(layout));
+        assert.ok(layout.messagesHeight > 0 && layout.messagesScrollHeight > layout.messagesHeight && layout.messagesScrollTop > 0, JSON.stringify(layout));
+        assert.equal(layout.settingsHidden && layout.quoteHidden, true, JSON.stringify(layout));
+        await page.locator('#aiChatQueueToggle').click();
+        assert.equal(await page.locator('#aiChatQueueList').isVisible(), false);
+        const collapsed = await page.locator('#aiChatQueue').evaluate(node => ({
+            queueBottom: node.getBoundingClientRect().bottom,
+            headerBottom: node.querySelector('.ai-chat-queue-header').getBoundingClientRect().bottom
+        }));
+        assert.ok(collapsed.headerBottom <= collapsed.queueBottom + 1, JSON.stringify(collapsed));
+        await page.locator('#aiChatQueueToggle').click();
+        assert.equal(await page.locator('#aiChatQueueList').isVisible(), true);
+        await page.locator('#aiChatQueueClear').click(); await waitPending(page, 0); await finish(page);
+    }
+}
+async function verifyComposerMinimumHeight(page, file) {
+    const original = await page.locator('#aiChatWindow').boundingBox();
+    await moveChatWindow(page, 16, 16);
+    await resizeChatWindow(page, 420, 900);
+    await submit(page, '最小高度当前项');
+    for (let index = 0; index < 9; index++) await submit(page, '最小高度待发送 ' + index);
+    await waitPending(page, 9);
+    await selection(page, '#aiSelectionAsk');
+    await page.locator('#aiChatInput').fill(Array(8).fill('保留多行输入草稿').join('\n'));
+    await page.locator('#aiChatSettingsToggle').click();
+    const readLayout = () => page.locator('#aiChatWindow').evaluate(node => {
+        const box = element => {
+            const rect = element.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom, height: rect.height };
+        };
+        return {
+            window: box(node), messages: box(document.querySelector('#aiChatMessages')),
+            fixed: ['#aiChatHeader', '#aiChatSettings', '#aiChatQueue', '#aiChatQuoteChip', '.ai-chat-input-row']
+                .map(selector => ({ selector, ...box(node.querySelector(selector)) }))
+        };
+    });
+    const expanded = await readLayout();
+    await resizeChatWindow(page, 420, 260);
+    const minimum = await readLayout();
+    assert.ok(minimum.window.height > 260 && minimum.window.height < expanded.window.height, JSON.stringify(minimum));
+    assert.ok(minimum.messages.height < expanded.messages.height, JSON.stringify({ expanded, minimum }));
+    minimum.fixed.forEach((region, index) => {
+        assert.ok(Math.abs(region.height - expanded.fixed[index].height) < 1
+            && region.top >= minimum.window.top - 1 && region.bottom <= minimum.window.bottom + 1,
+        JSON.stringify({ region, expanded: expanded.fixed[index], minimum }));
+    });
+    await page.locator('#aiChatWindow').screenshot({ path: path.join(output, file + '-minimum-height.png') });
+    for (const direction of ['n', 'ne', 's']) {
+        const before = await page.locator('#aiChatWindow').boundingBox();
+        const handle = await page.locator('[data-resize-direction="' + direction + '"]').boundingBox();
+        const x = handle.x + handle.width / 2, y = handle.y + handle.height / 2;
+        await page.mouse.move(x, y); await page.mouse.down();
+        await page.mouse.move(x + (direction === 'ne' ? 40 : 0), y + (direction === 's' ? -200 : 200), { steps: 4 });
+        await page.mouse.up();
+        const resized = await readLayout();
+        const anchoredEdge = direction === 's' ? 'top' : 'bottom';
+        const expectedEdge = direction === 's' ? before.y : before.y + before.height;
+        assert.ok(Math.abs(resized.window[anchoredEdge] - expectedEdge) < 1, JSON.stringify({ direction, before, resized }));
+        resized.fixed.forEach(region => assert.ok(region.top >= resized.window.top - 1
+            && region.bottom <= resized.window.bottom + 1, JSON.stringify({ direction, region, resized })));
+    }
+    await page.locator('#aiChatSettingsToggle').click();
+    await page.locator('#aiChatQuoteRemove').click();
+    await page.locator('#aiChatInput').fill('');
+    await page.locator('#aiChatQueueClear').click(); await waitPending(page, 0); await finish(page);
+    await resizeChatWindow(page, original.width, original.height);
+    await moveChatWindow(page, original.x, original.y);
+    await hide(page); await show(page);
+}
+async function verifyGeometryMemory(page, file) {
+    const originalViewport = page.viewportSize();
+    const original = await page.locator('#aiChatWindow').boundingBox();
+    await fresh(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await moveChatWindow(page, 16, 264);
+    await submit(page, '尺寸记忆当前项'); await submit(page, '尺寸记忆待发送'); await waitPending(page, 1);
+    const readLayout = () => page.locator('#aiChatWindow').evaluate(node => {
+        const box = element => {
+            const rect = element.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom, height: rect.height, width: rect.width };
+        };
+        return {
+            window: box(node), viewportHeight: innerHeight,
+            regions: ['#aiChatHeader', '#aiChatSettings', '#aiChatQueue', '.ai-chat-input-row', '#aiChatSend', '#aiChatStop']
+                .map(selector => ({ selector, ...box(node.querySelector(selector)) })).filter(region => region.height > 0),
+            stored: JSON.parse(localStorage.getItem('AI_CHAT_WINDOW_STATE_V1')).geometry
+        };
+    });
+    const initial = await readLayout();
+    await page.locator('#aiChatSettingsToggle').click(); await settleChatLayout(page);
+    await page.waitForTimeout(400);
+    const expanded = await readLayout();
+    assert.ok(expanded.window.height > initial.window.height && expanded.window.bottom <= expanded.viewportHeight,
+        JSON.stringify({ initial, expanded }));
+    expanded.regions.forEach(region => assert.ok(region.top >= 0 && region.bottom <= expanded.viewportHeight,
+        JSON.stringify({ region, expanded })));
+    assert.equal(expanded.stored.height, initial.stored.height, JSON.stringify(expanded));
+    await page.locator('#aiChatWindow').screenshot({ path: path.join(output, file + '-geometry-expanded.png') });
+    await hide(page); await show(page); await page.locator('#aiChatSettingsToggle').click(); await settleChatLayout(page);
+    const restored = await readLayout();
+    assert.ok(Math.abs(restored.window.height - initial.window.height) < 1
+        && Math.abs(restored.window.top - initial.window.top) < 1, JSON.stringify({ initial, restored }));
+    await moveChatWindow(page, 16, 16);
+    const moved = await readLayout();
+    await page.locator('#aiChatSettingsToggle').click(); await settleChatLayout(page);
+    const nearTop = await readLayout();
+    assert.ok(Math.abs(nearTop.window.top - moved.window.top) < 1 && nearTop.window.bottom <= nearTop.viewportHeight,
+        JSON.stringify({ moved, nearTop }));
+    const drag = await page.locator('.ai-chat-header-drag-space').boundingBox();
+    const x = drag.x + drag.width / 2, y = drag.y + drag.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x, y + 40, { steps: 4 });
+    await finish(page, true); await settleChatLayout(page);
+    const duringDrag = await readLayout();
+    assert.ok(Math.abs(duringDrag.window.top - nearTop.window.top - 40) < 1, JSON.stringify({ nearTop, duringDrag }));
+    await page.mouse.up();
+    await submit(page, '拖动后的待发送'); await waitPending(page, 1);
+    await hide(page); await show(page); await page.locator('#aiChatSettingsToggle').click(); await settleChatLayout(page);
+    await resizeChatWindow(page, 420, 600);
+    const resized = await readLayout();
+    assert.ok(Math.abs(resized.window.height - 600) < 1 && resized.stored.height === 600, JSON.stringify(resized));
+    await hide(page); await show(page);
+    assert.ok(Math.abs((await readLayout()).window.height - resized.window.height) < 1);
+    await page.locator('#aiChatQueueClear').click(); await waitPending(page, 0); await finish(page);
+    await page.reload(); await load(page); await show(page);
+    const reloaded = await readLayout();
+    assert.ok(Math.abs(reloaded.window.height - resized.window.height) < 1
+        && Math.abs(reloaded.window.top - resized.window.top) < 1, JSON.stringify({ resized, reloaded }));
+    await page.setViewportSize(originalViewport);
+    await resizeChatWindow(page, original.width, original.height);
+    await moveChatWindow(page, original.x, original.y);
+    await hide(page); await show(page);
+}
 async function action(page, index, action) { await rows(page).nth(index).locator('[data-queue-action="' + action + '"]').click(); }
 async function background(page, autoOpen) {
     await show(page);
@@ -175,6 +370,13 @@ async function main() {
             checks.push('auto-open stays inline, defaults off, and changes enabled state without shifting following settings');
             await page.locator('#aiChatProvider').selectOption('mock'); await page.locator('#aiChatModel').selectOption('mock-model');
             await page.locator('#aiChatSettingsToggle').click();
+            await verifyFixedComposerLayout(page, file);
+            checks.push('long messages leave fixed composer regions intact with one and three pending items; settings stay closed across chat reopen');
+            await verifyComposerMinimumHeight(page, file);
+            checks.push('window minimum height preserves settings, queue, quote and multiline input; north, corner and south resize keep the opposite edge anchored');
+            await verifyGeometryMemory(page, file);
+            checks.push('content growth stays in the viewport without overwriting geometry; queue advance preserves dragging; manual placement and resize survive reopen and reload');
+            await fresh(page);
             const quickStart = await requests(page);
             await selection(page, '#aiSelectionAsk');
             assert.equal(await requests(page), quickStart);

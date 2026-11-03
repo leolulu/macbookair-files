@@ -1,6 +1,6 @@
 .ai-chat-queue {
     box-sizing: border-box;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     max-height: min(220px, 32vh);
     display: flex;
@@ -11,7 +11,7 @@
     font-size: 12px;
 }
 .ai-chat-queue[hidden], #aiChatQueueList[hidden], #aiChatStop[hidden], .ai-chat-queue-badge[hidden] { display: none; }
-.ai-chat-queue-header { display: flex; align-items: center; gap: 6px; padding: 5px 10px; }
+.ai-chat-queue-header { display: flex; align-items: center; gap: 6px; padding: 5px 10px; flex: 0 0 auto; }
 .ai-chat-queue button {
     border: 1px solid #d6deeb;
     border-radius: 5px;
