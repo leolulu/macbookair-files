@@ -3075,7 +3075,7 @@
             <footer class="eudic-context-footer">
                 <div id="eudicContextError" class="eudic-context-error" role="alert" hidden></div>
                 <div class="eudic-context-footer-row">
-                    <span class="eudic-context-shortcut">Esc 取消</span>
+                    <span class="eudic-context-shortcut">Esc 先失焦，再按取消</span>
                     <div class="eudic-context-actions">
                         <button id="eudicContextCancel" type="button">取消</button>
                         <button id="eudicContextSubmit" class="is-primary" type="button">添加到欧路词典</button>
@@ -7347,7 +7347,8 @@
                 });
 
                 document.addEventListener('keydown', function (event) {
-                    if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && !popover.hidden) {
+                    if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing
+                        && !event.repeat && !popover.hidden && document.getElementById('eudicContextOverlay').hidden) {
                         event.preventDefault();
                         setPopoverOpen(false);
                         control.focus();
@@ -10134,14 +10135,22 @@
 
                 document.addEventListener('keydown', function (event) {
                     // 局部编辑和浮层先处理；收起窗口只接收尚未被消费的普通 Esc。
-                    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.repeat
-                        || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || document.fullscreenElement) return;
+                    if (event.key !== 'Escape' || event.defaultPrevented) return;
                     if (!eudicContextOverlay.hidden) {
-                        event.preventDefault();
                         event.stopImmediatePropagation();
-                        closeEudicContextDialog();
+                        if (event.isComposing || event.keyCode === 229 || event.ctrlKey || event.altKey
+                            || event.metaKey || event.shiftKey || document.fullscreenElement) return;
+                        event.preventDefault();
+                        if (event.repeat || eudicSubmissionPending) return;
+                        if (eudicContextOverlay.contains(document.activeElement)) {
+                            document.activeElement.blur();
+                        } else {
+                            closeEudicContextDialog();
+                        }
                         return;
                     }
+                    if (event.isComposing || event.repeat || event.ctrlKey || event.altKey
+                        || event.metaKey || event.shiftKey || document.fullscreenElement) return;
                     if (chatWindow.hidden || event.target.tagName === 'SELECT'
                         || document.getElementById('modalOverlay').getClientRects().length) return;
                     event.preventDefault();

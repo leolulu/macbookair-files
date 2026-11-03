@@ -348,6 +348,132 @@ async function restoreVideoPause(page) {
     });
 }
 
+async function verifyEudicEscape(page, checks, file) {
+    await load(page, 'eudic-escape.srt'); await show(page);
+    const viewport = page.viewportSize();
+    await page.evaluate(() => {
+        const state = queueTest.eudicEscape = { original: SvpEudic.submitWord, calls: 0, leaks: 0 };
+        const listener = event => { if (event.key === 'Escape' && !event.defaultPrevented) state.leaks++; };
+        document.addEventListener('keydown', listener);
+        state.removeListener = () => document.removeEventListener('keydown', listener);
+        SvpEudic.submitWord = options => {
+            state.calls++;
+            if (state.pending) return new Promise((resolve, reject) => { state.reject = reject; });
+            return Promise.resolve({ status: 'created', word: options.word });
+        };
+    });
+    const overlay = page.locator('#eudicContextOverlay'), entry = page.locator('#eudicContextEntryWord');
+    const open = async () => {
+        await selectSubtitle(page, 'implemented');
+        await page.locator('#aiSelectionAddEudic').evaluate(node => node.click());
+        await page.waitForFunction(() => document.activeElement.id === 'eudicContextEntryWord');
+    };
+    const escape = () => page.keyboard.press('Escape');
+    const draft = () => page.locator('#eudicContextOverlay input, #eudicContextOverlay textarea')
+        .evaluateAll(nodes => nodes.map(node => node.type === 'checkbox' ? node.checked : node.value));
+    const aiVisible = async () => assert.equal(await page.locator('#aiChatWindow').isVisible(), true);
+    try {
+        await page.locator('#videoPlaybackRateControl').evaluate(node => node.click());
+        await open(); await entry.fill('implement');
+        for (const id of ['eudicContextPrevious', 'eudicContextCurrent', 'eudicContextNext']) {
+            const input = page.locator('#' + id);
+            await input.fill((await input.inputValue()) + ' [edited]');
+        }
+        const edited = await draft(); await entry.focus();
+        for (const extra of [{ isComposing: true }, { keyCode: 229 }, { repeat: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }, { shiftKey: true }]) {
+            await entry.evaluate((node, extra) => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...extra })), extra);
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'eudicContextEntryWord');
+        }
+        await entry.evaluate(node => {
+            node.addEventListener('keydown', event => event.preventDefault(), { once: true });
+            node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        });
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'eudicContextEntryWord');
+        assert.equal(await page.evaluate(() => queueTest.eudicEscape.leaks), 0);
+        checks.push('Eudic Escape respects IME, modified, repeated and locally consumed keys');
+
+        for (const id of ['eudicContextEntryWord', 'eudicContextPrevious', 'eudicContextCurrent', 'eudicContextNext',
+            'eudicContextPreviousInclude', 'eudicContextNextInclude', 'eudicContextReset', 'eudicContextCancel', 'eudicContextSubmit', 'eudicContextClose']) {
+            await page.locator('#' + id).focus(); await escape();
+            assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+            assert.equal(await overlay.isVisible(), true); assert.deepEqual(await draft(), edited); await aiVisible();
+        }
+        await page.locator('#eudicContextNextInclude').press('Space');
+        const excluded = await draft(); await escape(); assert.deepEqual(await draft(), excluded);
+        assert.equal(await page.locator('#eudicContextNext').isDisabled(), true);
+        checks.push('Eudic Escape from word, all subtitle fields, checkboxes and buttons only blurs while preserving edits and inclusion choices');
+
+        await page.keyboard.press('Enter'); assert.equal(await page.evaluate(() => queueTest.eudicEscape.calls), 0);
+        await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true })));
+        await page.waitForTimeout(5100);
+        assert.equal(await overlay.isVisible(), true); assert.deepEqual(await draft(), excluded);
+        assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+        await page.keyboard.down('Escape'); await page.keyboard.down('Escape'); await page.keyboard.up('Escape');
+        assert.equal(await overlay.isVisible(), false); await aiVisible();
+        assert.equal(await page.locator('#fastForwardLimitPopover').isVisible(), true);
+        await page.locator('#videoPlaybackRateControl').evaluate(node => node.click());
+        checks.push('a separate Eudic Escape cancels only the dialog; focus timers and repeats before and after closing leave lower playback and AI layers intact');
+
+        await open();
+        for (const id of ['eudicContextPrevious', 'eudicContextCurrent', 'eudicContextNext']) {
+            const input = page.locator('#' + id), before = await input.inputValue();
+            await input.press('End'); await input.press('Enter');
+            assert.equal((await input.inputValue()).length, before.length + 1);
+        }
+        await entry.evaluate(node => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true })));
+        assert.equal(await page.evaluate(() => queueTest.eudicEscape.calls), 0);
+        await page.locator('#eudicContextCancel').press('Enter'); assert.equal(await overlay.isVisible(), false);
+        await open(); await entry.press('Enter'); await overlay.waitFor({ state: 'hidden' });
+        assert.equal(await page.evaluate(() => queueTest.eudicEscape.calls), 1);
+        checks.push('Eudic keeps subtitle Enter newlines, composing Enter, native cancel-button Enter and word Enter submission unchanged');
+
+        await open(); await entry.fill('implement');
+        const submitted = await draft();
+        await page.evaluate(() => { queueTest.eudicEscape.pending = true; });
+        await entry.press('Enter'); await escape(); await escape();
+        await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true })));
+        assert.equal(await overlay.isVisible(), true); assert.equal(await page.locator('#eudicContextSubmit').isDisabled(), true);
+        assert.equal(await page.evaluate(() => queueTest.eudicEscape.calls), 2); await aiVisible();
+        await page.evaluate(() => queueTest.eudicEscape.reject(Error('isolated Eudic submission failure')));
+        await page.waitForFunction(() => !document.querySelector('#eudicContextSubmit').disabled);
+        await page.locator('#eudicContextCurrent').focus(); await escape();
+        assert.equal(await overlay.isVisible(), true); assert.deepEqual(await draft(), submitted);
+        assert.equal(await page.locator('#eudicContextError').textContent(), 'isolated Eudic submission failure');
+        await escape(); assert.equal(await overlay.isVisible(), false); await aiVisible();
+        checks.push('pending Eudic submission consumes Escape without dismissal; after failure the edited draft and two-step Escape remain available');
+
+        await open(); await entry.evaluate(node => node.blur()); await escape();
+        assert.equal(await overlay.isVisible(), false); await aiVisible();
+        await open(); await page.evaluate(() => document.querySelector('#container').requestFullscreen());
+        await escape(); assert.equal(await overlay.isVisible(), true); await aiVisible();
+        await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen(); });
+        await entry.focus(); await escape(); await escape(); assert.equal(await overlay.isVisible(), false);
+        checks.push('Eudic closes with one Escape when already unfocused and preserves native fullscreen Escape');
+
+        await page.setViewportSize({ width: 390, height: 844 }); await open();
+        assert.equal(await page.locator('.eudic-context-shortcut').textContent(), 'Esc 先失焦，再按取消');
+        assert.equal(await page.locator('#eudicContextDialog').evaluate(node => {
+            const bounds = node.getBoundingClientRect();
+            const hint = node.querySelector('.eudic-context-shortcut').getBoundingClientRect();
+            const actions = node.querySelector('.eudic-context-actions').getBoundingClientRect();
+            return hint.left >= bounds.left && hint.right <= actions.left
+                && actions.right <= bounds.right && Math.max(hint.bottom, actions.bottom) <= bounds.bottom;
+        }), true);
+        await page.locator('.eudic-context-footer').screenshot({ path: path.join(output, file + '-eudic-esc-footer-mobile.png') });
+        await escape(); await escape(); assert.equal(await overlay.isVisible(), false);
+        await page.setViewportSize(viewport);
+        await page.locator('#aiChatInput').press('Escape');
+        assert.equal(await page.locator('#aiChatWindow').isVisible(), false);
+        checks.push('updated Eudic Escape hint and actions fit 390px; after closing the dialog AI Escape is unchanged');
+    } finally {
+        await page.evaluate(() => {
+            SvpEudic.submitWord = queueTest.eudicEscape.original;
+            queueTest.eudicEscape.removeListener(); delete queueTest.eudicEscape;
+        });
+        await page.setViewportSize(viewport);
+    }
+}
+
 async function verifyDufsKeyboard(page, checks) {
     await page.evaluate(() => {
         const video = document.querySelector('#video');
@@ -468,10 +594,14 @@ async function verifyDufsKeyboard(page, checks) {
         await page.locator('#aiSelectionAddEudic').evaluate(node => node.click());
         await page.waitForFunction(() => document.activeElement.id === 'eudicContextEntryWord');
         await escape();
+        assert.equal(await page.locator('#eudicContextOverlay').isVisible(), true);
+        assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+        assert.equal(await overlay.isVisible(), true); await aiVisible();
+        await escape();
         assert.equal(await page.locator('#eudicContextOverlay').isVisible(), false);
         assert.equal(await overlay.isVisible(), true); await aiVisible();
         await escape(); assert.equal(await overlay.isVisible(), false);
-        checks.push('an upper Eudic confirmation keeps its existing Escape priority over DUFS');
+        checks.push('both steps of upper Eudic Escape leave DUFS and AI intact; the following Escape closes only unfocused DUFS');
 
         await open(); await page.evaluate(() => document.querySelector('#container').requestFullscreen());
         await escape(); assert.equal(await overlay.isVisible(), true); await aiVisible();
@@ -1150,6 +1280,10 @@ async function main() {
             assert.equal(await page.locator('#dufsUrlHistoryList').isVisible(), false);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             await selection(page, '#aiSelectionAddEudic'); await page.locator('#eudicContextOverlay').waitFor({ state: 'visible' });
+            await page.waitForFunction(() => document.activeElement.id === 'eudicContextEntryWord');
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#eudicContextOverlay').isVisible(), true);
+            assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
             await page.keyboard.press('Escape');
             assert.equal(await page.locator('#eudicContextOverlay').isVisible(), false);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
@@ -1160,6 +1294,9 @@ async function main() {
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             await page.evaluate(() => queueTest.rejectEudic(new Error('isolated submission cancelled by test')));
             await page.waitForFunction(() => !document.querySelector('#eudicContextSubmit').disabled);
+            await page.locator('#eudicContextCurrent').focus();
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('#eudicContextOverlay').isVisible(), true);
             await page.keyboard.press('Escape');
             assert.equal(await page.locator('#eudicContextOverlay').isVisible(), false);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
@@ -1181,6 +1318,7 @@ async function main() {
             assert.equal(await page.locator('#resumeProgressPrompt').isVisible(), false);
             await page.evaluate(() => window.svpPlaybackProgress.destroy());
             checks.push('one Esc hides only AI; held-key repeats preserve the resume prompt; a separate Esc keeps its original dismissal');
+            await verifyEudicEscape(page, checks, file);
             await verifyDufsKeyboard(page, checks);
             assert.equal(await requests(page), 0); assert.deepEqual(errors, []);
             checks.push('never more than one logical request, no page errors, no live AI calls');
