@@ -2634,24 +2634,46 @@
         }
 
         .ai-selection-bubble {
-            --selection-gap: 3px;
             --selection-padding: 5px;
             --selection-border: 1px;
+            --selection-menu-bg: #252e3d;
+            --selection-quick-height: 40px;
+            --selection-quick-direction: 180deg;
 
             position: fixed;
             z-index: 950;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            width: 256px;
+            overflow: hidden;
+            border: var(--selection-border) solid #303e51;
+            border-radius: 11px 11px 10px 10px;
+            /* 连续绘制两层底色，避免非整数缩放时在接合处出现亮线。 */
+            background: linear-gradient(var(--selection-quick-direction), rgba(65, 75, 89, 0.5) 0px, var(--selection-menu-bg) var(--selection-quick-height), var(--selection-menu-bg) 100%);
+            box-shadow: 0 5px 8px #121d2a38;
+            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(18px);
+        }
+
+        .ai-selection-bubble:has(.ai-selection-quick-form[data-placement="below"]) {
+            --selection-quick-direction: 0deg;
+            flex-direction: column-reverse;
+            border-radius: 4px 4px 5px 5px;
+        }
+
+        .ai-selection-menu {
+            position: relative;
+            z-index: 1;
             display: grid;
             grid-template-columns: 1fr 1fr 1fr 1.25fr;
             align-items: center;
             gap: 3px;
             box-sizing: border-box;
-            width: 256px;
+            width: 100%;
             min-height: 38px;
-            background: #252e3d;
             padding: var(--selection-padding);
-            border: var(--selection-border) solid #303e51;
-            border-radius: 4px 4px 10px 10px;
-            filter: drop-shadow(0 5px 8px #121d2a38);
+            background: var(--selection-menu-bg);
         }
 
         .ai-selection-bubble[hidden] {
@@ -2663,67 +2685,34 @@
         }
 
         .ai-selection-quick-form {
-            position: absolute;
-            left: calc(0px - var(--selection-border));
-            bottom: calc(100% + var(--selection-gap));
-            display: none;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex: 0 0 var(--selection-quick-height);
             align-items: center;
             gap: 6px;
             box-sizing: border-box;
-            width: calc(100% + var(--selection-border) + var(--selection-border));
-            height: 40px;
+            width: 100%;
+            height: var(--selection-quick-height);
             padding: 5px 6px 5px 10px;
-            border: 1px solid #5f6e80;
-            border-radius: 11px 11px 5px 5px;
-            background: linear-gradient(180deg, #414b59 0%, #222a36 100%);
-            box-shadow:
-                inset 0 1px 0 #ffffff2c,
-                inset 0 -1px 0 #00000024;
         }
 
-        .ai-selection-quick-form[data-placement="below"] {
-            top: calc(100% + var(--selection-gap));
-            bottom: auto;
-        }
-
-        .ai-selection-quick-form::before,
-        .ai-selection-quick-form::after {
-            content: '';
+        .ai-selection-quick-active-surface {
             position: absolute;
-            right: 0;
-            left: 0;
-            height: calc(var(--selection-gap) + var(--selection-padding));
-        }
-
-        .ai-selection-quick-form::before {
-            bottom: 100%;
-        }
-
-        .ai-selection-quick-form::after {
-            top: 100%;
-        }
-
-        .ai-selection-quick-gap-blur {
-            position: absolute;
-            top: 100%;
-            right: 0;
-            left: 0;
-            height: var(--selection-gap);
+            inset: 0;
+            z-index: 0;
             pointer-events: none;
-            background: rgba(37, 46, 61, 0.8);
-            -webkit-backdrop-filter: blur(18px);
-            backdrop-filter: blur(18px);
-        }
-
-        .ai-selection-quick-form[data-placement="below"] .ai-selection-quick-gap-blur {
-            top: auto;
-            bottom: 100%;
-            right: 12px;
-            left: 12px;
+            background: linear-gradient(var(--selection-quick-direction), #414b59 0%, var(--selection-menu-bg) 100%);
+            opacity: 0;
+            transition: opacity 160ms ease-out;
         }
 
         .ai-selection-quick-form input {
+            position: relative;
+            z-index: 1;
             flex: 1 1 auto;
+            opacity: 0.5;
+            transition: opacity 160ms ease-out;
             min-width: 0;
             box-sizing: border-box;
             padding: 1px 2px;
@@ -2744,7 +2733,11 @@
         }
 
         .ai-selection-bubble .ai-selection-quick-form button {
+            position: relative;
+            z-index: 1;
             flex: 0 0 auto;
+            opacity: 0.5;
+            transition: opacity 160ms ease-out;
             padding: 5px 9px;
             border: 1px solid #ffffff13;
             border-radius: 5px;
@@ -2759,11 +2752,9 @@
             filter: brightness(1.2);
         }
 
-        @media (hover: hover) and (pointer: fine) {
-            .ai-selection-ask-quick:hover .ai-selection-quick-form,
-            .ai-selection-ask-quick:focus-within .ai-selection-quick-form {
-                display: flex;
-            }
+        .ai-selection-bubble:has(.ai-selection-ask-quick:hover, .ai-selection-ask-quick:focus-within, .ai-selection-quick-form:hover, .ai-selection-quick-form:focus-within) .ai-selection-quick-active-surface,
+        .ai-selection-bubble:has(.ai-selection-ask-quick:hover, .ai-selection-ask-quick:focus-within, .ai-selection-quick-form:hover, .ai-selection-quick-form:focus-within) .ai-selection-quick-form :is(input, button) {
+            opacity: 1;
         }
 
         .ai-selection-bubble button {
@@ -3210,17 +3201,19 @@
     </div>
 
     <div id="aiSelectionBubble" class="ai-selection-bubble" hidden>
-        <div id="aiSelectionAskQuick" class="ai-selection-ask-quick">
-            <div id="aiSelectionQuickForm" class="ai-selection-quick-form" role="group" aria-label="快捷提问">
-                <span class="ai-selection-quick-gap-blur" aria-hidden="true"></span>
-                <input id="aiSelectionQuickInput" type="text" placeholder="就选中字幕提问…" autocomplete="off" aria-label="就选中字幕向 AI 提问">
-                <button id="aiSelectionQuickSend" type="button">发送</button>
-            </div>
-            <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI</button>
+        <div id="aiSelectionQuickForm" class="ai-selection-quick-form" role="group" aria-label="快捷提问">
+            <span class="ai-selection-quick-active-surface" aria-hidden="true"></span>
+            <input id="aiSelectionQuickInput" type="text" placeholder="就选中字幕提问…" autocomplete="off" aria-label="就选中字幕向 AI 提问">
+            <button id="aiSelectionQuickSend" type="button">发送</button>
         </div>
-        <button id="aiSelectionLookup" type="button" title="在整个字幕语境中讲解选中词/词组的含义与用法">查词</button>
-        <button id="aiSelectionAnalyze" type="button" title="解析所在句子的结构、词组和修饰关系">析句</button>
-        <button id="aiSelectionAddEudic" type="button" title="将选中单词或词组和前后字幕添加到欧路词典">加生词</button>
+        <div class="ai-selection-menu">
+            <div id="aiSelectionAskQuick" class="ai-selection-ask-quick">
+                <button id="aiSelectionAsk" type="button" title="引用选中字幕向 AI 提问">问AI</button>
+            </div>
+            <button id="aiSelectionLookup" type="button" title="在整个字幕语境中讲解选中词/词组的含义与用法">查词</button>
+            <button id="aiSelectionAnalyze" type="button" title="解析所在句子的结构、词组和修饰关系">析句</button>
+            <button id="aiSelectionAddEudic" type="button" title="将选中单词或词组和前后字幕添加到欧路词典">加生词</button>
+        </div>
     </div>
 
 
@@ -9900,19 +9893,14 @@
                 }
 
                 function isSelectionQuickActive() {
-                    return selectionAskQuick.matches(':hover') || selectionAskQuick.contains(document.activeElement);
+                    return selectionAskQuick.matches(':hover') || selectionQuickForm.matches(':hover')
+                        || selectionAskQuick.contains(document.activeElement) || selectionQuickForm.contains(document.activeElement);
                 }
 
                 function positionSelectionQuickForm() {
-                    if (!isSelectionQuickActive()) return;
-                    selectionQuickForm.style.left = '';
-                    selectionQuickForm.style.transform = '';
-                    selectionQuickForm.dataset.placement = 'above';
-                    var rect = selectionQuickForm.getBoundingClientRect();
-                    if (!rect.width) return;
-                    if (rect.top < 8) {
-                        selectionQuickForm.dataset.placement = 'below';
-                    }
+                    var bubbleRect = selectionBubble.getBoundingClientRect();
+                    if (!bubbleRect.width) return;
+                    selectionQuickForm.dataset.placement = bubbleRect.top - selectionQuickForm.offsetHeight < 8 ? 'below' : 'above';
                 }
 
                 function prepareSelectionQuickAsk() {
@@ -9923,12 +9911,11 @@
 
                 function releaseSelectionQuickAsk() {
                     if (isSelectionQuickActive()) return;
-                    selectionQuickInfo = null;
                     refreshSelectionBubble();
                 }
 
                 function refreshSelectionBubble() {
-                    var info = isSelectionQuickActive() && selectionQuickInfo ? selectionQuickInfo : readSubtitleSelection();
+                    var info = selectionQuickInfo || readSubtitleSelection();
                     if (!info) {
                         hideSelectionBubble();
                         return;
@@ -10019,6 +10006,7 @@
                 var selectionRefreshTimer = null;
                 document.addEventListener('selectionchange', function () {
                     clearTimeout(selectionRefreshTimer);
+                    if (isSelectionQuickActive()) return;
                     selectionRefreshTimer = setTimeout(function () {
                         if (isSelectionQuickActive()) return;
                         selectionQuickInfo = null;
@@ -10028,11 +10016,13 @@
 
                 subtitlesContainer.addEventListener('scroll', hideSelectionBubble);
 
-                selectionAskQuick.addEventListener('pointerenter', prepareSelectionQuickAsk);
-                selectionAskQuick.addEventListener('focusin', prepareSelectionQuickAsk);
-                selectionAskQuick.addEventListener('pointerleave', releaseSelectionQuickAsk);
-                selectionAskQuick.addEventListener('focusout', function () {
-                    setTimeout(releaseSelectionQuickAsk, 0);
+                [selectionAskQuick, selectionQuickForm].forEach(function (zone) {
+                    zone.addEventListener('pointerenter', prepareSelectionQuickAsk);
+                    zone.addEventListener('focusin', prepareSelectionQuickAsk);
+                    zone.addEventListener('pointerleave', releaseSelectionQuickAsk);
+                    zone.addEventListener('focusout', function () {
+                        setTimeout(releaseSelectionQuickAsk, 0);
+                    });
                 });
 
                 // 点击气泡按钮时防止选区先被清除；快捷输入需要正常获得焦点。

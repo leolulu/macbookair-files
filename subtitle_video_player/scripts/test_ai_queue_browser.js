@@ -94,8 +94,17 @@ async function selection(page, button, text = 'submitted') {
 }
 async function quickSelection(page, text = 'submitted') {
     await selectSubtitle(page, text);
-    await page.locator('#aiSelectionAsk').hover();
     await page.locator('#aiSelectionQuickInput').waitFor({ state: 'visible' });
+}
+async function waitQuickOpacity(page, expected) {
+    await page.waitForFunction(expected => {
+        const activeSurface = document.querySelector('.ai-selection-quick-active-surface');
+        const input = document.querySelector('#aiSelectionQuickInput');
+        const button = document.querySelector('#aiSelectionQuickSend');
+        const surfaceExpected = expected === 1 ? 1 : 0;
+        return Math.abs(Number(getComputedStyle(activeSurface).opacity) - surfaceExpected) < 0.01
+            && [input, button].every(node => Math.abs(Number(getComputedStyle(node).opacity) - expected) < 0.01);
+    }, expected);
 }
 async function load(page, name = 'queue.srt') {
     const srt = '1\n00:00:01,000 --> 00:00:04,000\nThe committee rejected the proposal submitted yesterday,\n\n2\n00:00:04,100 --> 00:00:10,000\nfearing that the plan, if implemented hastily, would undermine public trust.\n\n3\n00:00:12,000 --> 00:00:15,000\nPlease reconsider.\n';
@@ -173,27 +182,101 @@ async function main() {
             assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
             await page.locator('#aiChatInput').fill('保留大浮窗草稿');
             await hide(page); await quickSelection(page);
+            await waitQuickOpacity(page, 0.5);
+            assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
+            const quickSurfaceStyle = await page.locator('#aiSelectionQuickForm').evaluate(node => {
+                const style = getComputedStyle(node.closest('.ai-selection-bubble'));
+                const surfaceStyle = getComputedStyle(node.closest('.ai-selection-bubble').querySelector('.ai-selection-quick-active-surface'));
+                return {
+                    property: surfaceStyle.transitionProperty,
+                    duration: surfaceStyle.transitionDuration,
+                    timing: surfaceStyle.transitionTimingFunction,
+                    backdropFilter: style.backdropFilter,
+                    borderColor: style.borderColor
+                };
+            });
+            assert.deepEqual(quickSurfaceStyle, {
+                property: 'opacity', duration: '0.16s', timing: 'ease-out', backdropFilter: 'blur(18px)', borderColor: 'rgb(48, 62, 81)'
+            });
+            assert.equal(await page.locator('.ai-selection-menu').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(37, 46, 61)');
+            assert.equal(await page.locator('.ai-selection-menu').evaluate(node => getComputedStyle(node).opacity), '1');
             const quickGeometry = await page.evaluate(() => {
                 const form = document.querySelector('#aiSelectionQuickForm').getBoundingClientRect();
-                const bubble = document.querySelector('#aiSelectionBubble').getBoundingClientRect();
+                const menu = document.querySelector('.ai-selection-menu').getBoundingClientRect();
                 const button = document.querySelector('#aiSelectionAsk').getBoundingClientRect();
                 return {
                     formWidth: form.width, formLeft: form.left, formBottom: form.bottom,
-                    bubbleWidth: bubble.width, bubbleLeft: bubble.left, buttonTop: button.top
+                    menuWidth: menu.width, menuLeft: menu.left, menuTop: menu.top,
+                    buttonTop: button.top,
+                    gapCount: document.querySelectorAll('.ai-selection-quick-gap-blur').length
                 };
             });
-            assert.ok(Math.abs(quickGeometry.formWidth - quickGeometry.bubbleWidth) < 1);
-            assert.ok(Math.abs(quickGeometry.formLeft - quickGeometry.bubbleLeft) < 1);
+            assert.ok(Math.abs(quickGeometry.formWidth - quickGeometry.menuWidth) < 1);
+            assert.ok(Math.abs(quickGeometry.formLeft - quickGeometry.menuLeft) < 1);
             assert.ok(quickGeometry.formBottom <= quickGeometry.buttonTop - 2);
+            assert.ok(Math.abs(quickGeometry.formBottom - quickGeometry.menuTop) < 1);
+            assert.equal(quickGeometry.gapCount, 0);
             await page.screenshot({ path: path.join(output, file + '-quick-ask.png') });
+            await page.mouse.move(0, 500);
+            await page.evaluate(() => {
+                document.querySelector('#layoutOrientationPortrait').click();
+                document.querySelector('#video-player').style.display = 'none';
+                const position = document.querySelector('#aiSelectionBubblePosition');
+                position.value = 'subtitle-top';
+                position.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            await page.waitForFunction(() => document.querySelector('#aiSelectionQuickForm').dataset.placement === 'below');
+            const quickInitialEdge = await page.evaluate(() => {
+                const form = document.querySelector('#aiSelectionQuickForm').getBoundingClientRect();
+                const button = document.querySelector('#aiSelectionAsk').getBoundingClientRect();
+                const bubble = document.querySelector('#aiSelectionBubble').getBoundingClientRect();
+                const menu = document.querySelector('.ai-selection-menu').getBoundingClientRect();
+                const quickGradient = getComputedStyle(document.querySelector('#aiSelectionBubble')).backgroundImage;
+                return {
+                    formTop: form.top, buttonBottom: button.bottom, bubbleTop: bubble.top,
+                    menuBottom: menu.bottom, quickGradient
+                };
+            });
+            assert.ok(quickInitialEdge.formTop >= quickInitialEdge.buttonBottom - 1);
+            assert.ok(quickInitialEdge.bubbleTop >= 8);
+            assert.ok(Math.abs(quickInitialEdge.menuBottom - quickInitialEdge.formTop) < 1);
+            assert.equal(quickInitialEdge.quickGradient, 'linear-gradient(0deg, rgba(65, 75, 89, 0.5) 0px, rgb(37, 46, 61) 40px, rgb(37, 46, 61) 100%)');
+            await waitQuickOpacity(page, 0.5);
+            await page.evaluate(() => {
+                document.querySelector('#video-player').style.display = '';
+                const position = document.querySelector('#aiSelectionBubblePosition');
+                position.value = 'auto';
+                position.dispatchEvent(new Event('change', { bubbles: true }));
+                document.querySelector('#layoutOrientationLandscape').click();
+            });
+            await page.waitForFunction(() => document.querySelector('#aiSelectionQuickForm').dataset.placement === 'above');
+            await page.locator('#aiSelectionLookup').hover();
+            await waitQuickOpacity(page, 0.5);
             await page.locator('#aiSelectionAsk').hover();
+            await waitQuickOpacity(page, 1);
+            assert.equal(await page.locator('#aiSelectionBubble').evaluate(node => getComputedStyle(node).borderColor), 'rgb(48, 62, 81)');
+            assert.equal(await page.locator('.ai-selection-menu').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(37, 46, 61)');
+            assert.equal(await page.locator('.ai-selection-menu').evaluate(node => getComputedStyle(node).opacity), '1');
+            await page.screenshot({ path: path.join(output, file + '-quick-ask-hover.png') });
             const askBox = await page.locator('#aiSelectionAsk').boundingBox();
             await page.mouse.move(askBox.x + askBox.width / 2, askBox.y - 4, { steps: 8 });
             assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
             const quickInputBox = await page.locator('#aiSelectionQuickInput').boundingBox();
             await page.mouse.move(quickInputBox.x + quickInputBox.width / 2, quickInputBox.y + quickInputBox.height / 2, { steps: 8 });
             assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
-            checks.push('quick ask aligns with the menu edges and keeps the hover corridor through a visible panel gap');
+            await waitQuickOpacity(page, 1);
+            await page.locator('#aiSelectionQuickInput').focus();
+            await page.mouse.move(0, 500);
+            await waitQuickOpacity(page, 1);
+            await page.locator('#aiSelectionLookup').focus();
+            await waitQuickOpacity(page, 0.5);
+            assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
+            await page.locator('#aiSelectionQuickInput').hover();
+            await waitQuickOpacity(page, 1);
+            await page.mouse.move(0, 500);
+            await waitQuickOpacity(page, 0.5);
+            checks.push('quick ask and menu share one bordered shell with no gap element or internal shadow, in both visual orders');
+            checks.push('quick ask uses a 160ms opacity transition from the form or ask button, holds opacity while focused, and dims after blur without hover');
             await page.locator('#aiSelectionQuickInput').press('Enter');
             assert.equal(await requests(page), quickStart);
             await page.locator('#aiSelectionQuickInput').fill('输入法草稿');
@@ -211,10 +294,15 @@ async function main() {
             const quickEdge = await page.evaluate(() => {
                 const form = document.querySelector('#aiSelectionQuickForm').getBoundingClientRect();
                 const button = document.querySelector('#aiSelectionAsk').getBoundingClientRect();
-                return { left: form.left, right: form.right, top: form.top, buttonBottom: button.bottom, width: window.innerWidth };
+                const menu = document.querySelector('.ai-selection-menu').getBoundingClientRect();
+                return {
+                    left: form.left, right: form.right, top: form.top, buttonBottom: button.bottom,
+                    menuBottom: menu.bottom, width: window.innerWidth
+                };
             });
             assert.ok(quickEdge.left >= 8 && quickEdge.right <= quickEdge.width - 8);
             assert.ok(quickEdge.top >= quickEdge.buttonBottom - 1);
+            assert.ok(Math.abs(quickEdge.menuBottom - quickEdge.top) < 1);
             await page.locator('#aiSelectionQuickInput').fill('快捷引用提问');
             await page.mouse.move(0, 500);
             assert.equal(await page.locator('#aiSelectionQuickInput').isVisible(), true);
@@ -225,7 +313,7 @@ async function main() {
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#aiSelectionBubble').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
-            assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
+            assert.equal(await page.locator('#aiChatQuoteChip').evaluate(node => node.hidden), false);
             await hide(page); await quickSelection(page);
             await page.locator('#aiSelectionQuickInput').fill('快捷排队提问');
             await page.locator('#aiSelectionQuickSend').click(); await waitPending(page, 1);
@@ -237,10 +325,11 @@ async function main() {
             assert.equal(await page.locator('#aiSelectionQuickSend').textContent(), '排队');
             await finish(page, true); await finish(page);
             assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
-            assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
+            assert.equal(await page.locator('#aiChatQuoteChip').evaluate(node => node.hidden), false);
             checks.push('quick ask preserves selection through focus, submits the same quote payload, and protects the main draft and quote');
             checks.push('quick ask respects enabled background mode, flips at viewport edges, handles empty and composing Enter, and joins FIFO');
 
+            await show(page);
             await page.locator('#aiChatSettingsToggle').click(); await page.locator('#aiChatBackgroundRequest').uncheck();
             await page.locator('#aiChatSettingsToggle').click(); await hide(page);
             const quickBackgroundOff = await requests(page);
