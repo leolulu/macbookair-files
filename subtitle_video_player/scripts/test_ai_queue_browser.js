@@ -273,7 +273,7 @@ async function verifyGeometryMemory(page, file) {
         JSON.stringify({ region, expanded })));
     assert.equal(expanded.stored.height, initial.stored.height, JSON.stringify(expanded));
     await page.locator('#aiChatWindow').screenshot({ path: path.join(output, file + '-geometry-expanded.png') });
-    await hide(page); await show(page); await page.locator('#aiChatSettingsToggle').click(); await settleChatLayout(page);
+    await hide(page); await show(page); await settleChatLayout(page);
     const restored = await readLayout();
     assert.ok(Math.abs(restored.window.height - initial.window.height) < 1
         && Math.abs(restored.window.top - initial.window.top) < 1, JSON.stringify({ initial, restored }));
@@ -291,7 +291,7 @@ async function verifyGeometryMemory(page, file) {
     assert.ok(Math.abs(duringDrag.window.top - nearTop.window.top - 40) < 1, JSON.stringify({ nearTop, duringDrag }));
     await page.mouse.up();
     await submit(page, '拖动后的待发送'); await waitPending(page, 1);
-    await hide(page); await show(page); await page.locator('#aiChatSettingsToggle').click(); await settleChatLayout(page);
+    await hide(page); await show(page); await settleChatLayout(page);
     await resizeChatWindow(page, 420, 600);
     const resized = await readLayout();
     assert.ok(Math.abs(resized.window.height - 600) < 1 && resized.stored.height === 600, JSON.stringify(resized));
@@ -370,6 +370,20 @@ async function main() {
             checks.push('auto-open stays inline, defaults off, and changes enabled state without shifting following settings');
             await page.locator('#aiChatProvider').selectOption('mock'); await page.locator('#aiChatModel').selectOption('mock-model');
             await page.locator('#aiChatSettingsToggle').click();
+            for (const close of [
+                () => page.locator('#aiChatClose').click(),
+                () => page.locator('#toggleAiChat').click(),
+                () => page.locator('#aiChatInput').press('Escape')
+            ]) {
+                await page.locator('#aiChatSettingsToggle').click();
+                assert.equal(await page.locator('#aiChatSettings').isVisible(), true);
+                await close();
+                assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
+                await show(page);
+                assert.equal(await page.locator('#aiChatSettings').isVisible(), false);
+                assert.equal(await page.locator('#aiChatSettingsToggle').getAttribute('aria-expanded'), 'false');
+            }
+            checks.push('close button, AI toggle and Esc reset settings expansion; each reopen starts collapsed and manual expansion still works');
             await verifyFixedComposerLayout(page, file);
             checks.push('long messages leave fixed composer regions intact with one and three pending items; settings stay closed across chat reopen');
             await verifyComposerMinimumHeight(page, file);
