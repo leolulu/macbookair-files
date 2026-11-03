@@ -5764,6 +5764,7 @@
                 dufsTreeActiveBaseUrl = baseUrl;
                 setFocusRegressionBlocker(FOCUS_BLOCKER_DUFS_FILE_LIST, true);
                 document.getElementById('modalOverlay').style.display = 'block';
+                getDufsTreeFilterInput().focus({ preventScroll: true });
             }
 
             function hideDufsFileListModal() {
@@ -6914,7 +6915,7 @@
             });
 
             document.getElementById('loadSelectedFiles').addEventListener('click', async function () {
-                srtLoaded = false
+                if (this.disabled) return;
                 var selectedFiles = dufsTreeState && dufsTreeState.root
                     ? collectDufsCheckedFiles(dufsTreeState.root, [])
                     : Array.from(document.querySelectorAll('input[name="file"]:checked')).map(function (input) {
@@ -6923,6 +6924,17 @@
                             displayName: input.dataset.displayName || input.value
                         };
                     });
+                if (!selectedFiles.length) return;
+                this.disabled = true;
+                try {
+                    await loadSelectedDufsFiles(selectedFiles);
+                } finally {
+                    this.disabled = false;
+                }
+            });
+
+            async function loadSelectedDufsFiles(selectedFiles) {
+                srtLoaded = false
                 timelineBatchHasJson = hasJsonFile(selectedFiles.map(function (file) {
                     return file && file.value ? file.value : file;
                 }));
@@ -6986,7 +6998,7 @@
                     }
                 };
                 hideDufsFileListModal();
-            });
+            }
 
             function formatDufsBaseUrl(url) {
                 var baseUrl = url.split('?')[0];
@@ -7002,6 +7014,32 @@
 
             initDufsUrlHistory();
             initDufsTreeFilter();
+
+            document.addEventListener('keydown', function (event) {
+                if ((event.key !== 'Enter' && event.key !== 'Escape') || event.defaultPrevented
+                    || event.isComposing || event.keyCode === 229 || event.ctrlKey || event.altKey
+                    || event.metaKey || event.shiftKey || document.fullscreenElement
+                    || !isDufsFileListModalVisible() || !document.getElementById('eudicContextOverlay').hidden) return;
+                var modal = document.getElementById('modalOverlay');
+                if (event.key === 'Escape') {
+                    // 先退出控件，再关闭弹窗；同次按键和长按重复均不交给下层浮窗。
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    if (event.repeat) return;
+                    if (modal.contains(document.activeElement)) {
+                        document.activeElement.blur();
+                    } else {
+                        hideDufsFileListModal();
+                    }
+                    return;
+                }
+                // 搜索框保持即时筛选，按钮保留自身的 Enter 行为。
+                if (event.target !== document.body
+                    && !(modal.contains(event.target) && event.target.matches('.dufs-node-checkbox'))) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (!event.repeat) document.getElementById('loadSelectedFiles').click();
+            });
 
             $("#resizable-shade").resizable({
                 handles: "all",

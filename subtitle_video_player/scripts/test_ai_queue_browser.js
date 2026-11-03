@@ -348,6 +348,187 @@ async function restoreVideoPause(page) {
     });
 }
 
+async function verifyDufsKeyboard(page, checks) {
+    await page.evaluate(() => {
+        const video = document.querySelector('#video');
+        Object.defineProperty(video, 'readyState', { value: 1, configurable: true });
+        Object.defineProperty(video, 'duration', { value: 52.208, configurable: true });
+    });
+    await load(page, 'dufs-keyboard.srt'); await show(page);
+    await page.evaluate(() => {
+        const original = window.fetch;
+        const state = queueTest.dufs = { directories: [], files: [], originalFetch: original };
+        const paths = url => url.pathname.endsWith('/season/')
+            ? [{ name: 'captions.srt', path_type: 'File' }]
+            : [{ name: 'season', path_type: 'Dir' }, { name: 'notes.srt', path_type: 'File' }];
+        window.fetch = async (url, options) => {
+            if (!String(url).startsWith('https://dufs.invalid/')) return original(url, options);
+            const parsed = new URL(url);
+            if (parsed.search === '?json') {
+                state.directories.push(String(url));
+                if (state.delayDirectory) await new Promise(resolve => {
+                    state.finishDirectory = () => { state.delayDirectory = false; resolve(); };
+                });
+                return Response.json({ paths: paths(parsed) });
+            }
+            state.files.push(String(url));
+            if (state.delayFile) await new Promise(resolve => {
+                state.finishFile = () => { state.delayFile = false; resolve(); };
+            });
+            if (state.failFile) throw Error('isolated DUFS download failure');
+            return new Response('1\n00:00:01,000 --> 00:00:04,000\nThe committee rejected the proposal submitted yesterday.\n');
+        };
+        queueTest.dufsTimeline = document.querySelector('#speaker-container');
+    });
+    const overlay = page.locator('#modalOverlay'), filter = page.locator('#dufsTreeFilter');
+    const file = page.locator('input[name="file"][value="season/captions.srt"]');
+    const loadButton = page.locator('#loadSelectedFiles');
+    const open = async (keyboard = false) => {
+        await page.locator('#dufsUrl').fill('https://dufs.invalid/keyboard/');
+        if (keyboard) await page.locator('#dufsUrl').press('Enter');
+        else await page.locator('#fetchDufsFiles').click();
+        await page.locator('input[name="file"]').first().waitFor();
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'dufsTreeFilter');
+    };
+    const aiVisible = async () => assert.equal(await page.locator('#aiChatWindow').isVisible(), true);
+    const files = () => page.evaluate(() => queueTest.dufs.files);
+    const escape = () => page.keyboard.press('Escape');
+    try {
+        await open();
+        checks.push('DUFS mouse opening focuses the live filter');
+        assert.equal(await page.evaluate(() => !!queueTest.dufsTimeline), true);
+        await loadButton.click();
+        await file.press('Enter');
+        assert.deepEqual(await files(), []); assert.equal(await overlay.isVisible(), true);
+        assert.equal(await page.evaluate(() => document.querySelector('#speaker-container') === queueTest.dufsTimeline), true);
+        checks.push('empty DUFS mouse and keyboard submissions leave the modal and timeline intact');
+
+        await file.check(); await filter.fill('captions');
+        const directoryCount = await page.evaluate(() => queueTest.dufs.directories.length);
+        await filter.press('Enter');
+        assert.deepEqual(await files(), []); assert.equal(await file.isChecked(), true);
+        assert.equal(await page.locator('input[name="file"]').count(), 1);
+        assert.equal(await page.evaluate(() => queueTest.dufs.directories.length), directoryCount);
+        checks.push('DUFS filter stays live; Enter neither loads checked files nor refetches the directory');
+
+        for (const extra of [{ isComposing: true }, { keyCode: 229 }, { ctrlKey: true }, { altKey: true }, { metaKey: true }, { shiftKey: true }]) {
+            await filter.evaluate((node, extra) => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...extra })), extra);
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'dufsTreeFilter');
+        }
+        await filter.evaluate(node => {
+            node.addEventListener('keydown', event => event.preventDefault(), { once: true });
+            node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        });
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'dufsTreeFilter');
+        checks.push('DUFS respects composing, modified and locally consumed Escape');
+
+        await filter.press('Escape');
+        assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+        assert.equal(await overlay.isVisible(), true); assert.equal(await filter.inputValue(), 'captions');
+        assert.equal(await file.isChecked(), true); await aiVisible();
+        await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true })));
+        await page.waitForTimeout(5100);
+        assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+        assert.equal(await overlay.isVisible(), true);
+        await escape(); assert.equal(await overlay.isVisible(), false); await aiVisible();
+        checks.push('DUFS Escape first blurs without losing filter or selection; repeats and focus timers do not close it; a separate Escape closes only DUFS');
+
+        await open(true);
+        for (const selector of ['#closeFileList', '#loadSelectedFiles', '#checkDufsTree', '#clearDufsTreeFilter', '.dufs-toggle', 'input[name="file"]']) {
+            await page.locator(selector).first().focus(); await escape();
+            assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+            assert.equal(await overlay.isVisible(), true); await aiVisible();
+        }
+        await escape(); assert.equal(await overlay.isVisible(), false); await aiVisible();
+        checks.push('DUFS URL Enter focuses the filter; Escape from action buttons, tree toggles and checkboxes only blurs first');
+
+        await open();
+        await page.locator('#clearDufsTreeFilter').press('Enter'); assert.equal(await filter.inputValue(), '');
+        await page.locator('#collapseDufsTree').press('Enter'); assert.ok(await page.locator('.dufs-collapsed').count());
+        await page.locator('#expandDufsTree').press('Enter'); assert.equal(await page.locator('.dufs-collapsed').count(), 0);
+        await file.press('Space'); assert.equal(await file.isChecked(), true);
+        await file.press('Space'); assert.equal(await file.isChecked(), false);
+        await page.locator('#closeFileList').press('Enter');
+        assert.equal(await overlay.isVisible(), false); assert.deepEqual(await files(), []); await aiVisible();
+        checks.push('DUFS toolbar, clear and close buttons retain native Enter; checkbox Space keeps toggling without submission');
+
+        await page.locator('#videoPlaybackRateControl').evaluate(node => node.click());
+        await open(true);
+        assert.equal(await page.locator('#fastForwardLimitPopover').isVisible(), true);
+        await escape();
+        assert.equal(await overlay.isVisible(), true);
+        await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', repeat: true, bubbles: true, cancelable: true })));
+        assert.equal(await page.locator('#fastForwardLimitPopover').isVisible(), true);
+        await escape(); assert.equal(await overlay.isVisible(), false);
+        assert.equal(await page.locator('#fastForwardLimitPopover').isVisible(), true); await aiVisible();
+        await page.locator('#videoPlaybackRateControl').evaluate(node => node.click());
+        checks.push('both DUFS Escape steps and held-key repeats are consumed before underlying playback and AI popovers');
+
+        await open(); await selectSubtitle(page);
+        await page.locator('#aiSelectionAddEudic').evaluate(node => node.click());
+        await page.waitForFunction(() => document.activeElement.id === 'eudicContextEntryWord');
+        await escape();
+        assert.equal(await page.locator('#eudicContextOverlay').isVisible(), false);
+        assert.equal(await overlay.isVisible(), true); await aiVisible();
+        await escape(); assert.equal(await overlay.isVisible(), false);
+        checks.push('an upper Eudic confirmation keeps its existing Escape priority over DUFS');
+
+        await open(); await page.evaluate(() => document.querySelector('#container').requestFullscreen());
+        await escape(); assert.equal(await overlay.isVisible(), true); await aiVisible();
+        await page.evaluate(async () => { if (document.fullscreenElement) await document.exitFullscreen(); });
+        await filter.focus(); await escape(); await escape();
+        assert.equal(await overlay.isVisible(), false);
+        checks.push('native fullscreen Escape leaves DUFS and the underlying AI window intact');
+
+        await open(); await page.evaluate(() => { queueTest.dufs.delayFile = true; });
+        await page.locator('.dufs-file-name').filter({ hasText: 'captions.srt' }).click();
+        assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => queueTest.dufs.files.length === 1);
+        assert.equal(await loadButton.isDisabled(), true); assert.equal(await overlay.isVisible(), true);
+        await page.keyboard.press('Enter');
+        await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true })));
+        await loadButton.evaluate(node => node.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        assert.equal((await files()).length, 1);
+        await page.evaluate(() => queueTest.dufs.finishFile());
+        await overlay.waitFor({ state: 'hidden' });
+        await page.waitForFunction(() => !document.querySelector('#loadSelectedFiles').disabled);
+        assert.equal(await page.locator('#subtitles').textContent().then(text => text.includes('submitted')), true);
+        checks.push('Enter after clicking a DUFS filename imports once; duplicate mouse and keyboard submissions are blocked until completion and normal auto-close remains');
+
+        await open(); await file.check(); await filter.fill('notes');
+        assert.equal(await file.count(), 0);
+        await loadButton.press('Enter'); await overlay.waitFor({ state: 'hidden' });
+        assert.equal((await files()).length, 2); assert.ok((await files())[1].endsWith('/season/captions.srt'));
+        assert.equal(await loadButton.isDisabled(), false);
+        checks.push('load-button Enter keeps existing selection semantics, including checked files hidden by filtering');
+
+        await open(); await page.locator('#clearDufsTreeFilter').click();
+        await file.check(); await page.evaluate(() => { queueTest.dufs.failFile = true; });
+        await file.press('Enter'); await overlay.waitFor({ state: 'hidden' });
+        assert.equal((await files()).length, 3); assert.equal(await loadButton.isDisabled(), false);
+        await page.evaluate(() => { queueTest.dufs.failFile = false; });
+        checks.push('DUFS checkbox Enter submits and download failure releases the same submission guard');
+
+        await page.evaluate(() => { queueTest.dufs.delayDirectory = true; });
+        await page.locator('#dufsUrl').fill('https://dufs.invalid/slow/');
+        await page.locator('#fetchDufsFiles').click();
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'dufsTreeFilter');
+        await loadButton.click(); assert.equal(await overlay.isVisible(), true);
+        await escape(); await escape(); assert.equal(await overlay.isVisible(), false); await aiVisible();
+        await page.evaluate(() => queueTest.dufs.finishDirectory());
+        await page.waitForFunction(() => queueTest.dufs.directories.some(url => url.includes('/slow/season/')));
+        await settleChatLayout(page); assert.equal(await overlay.isVisible(), false);
+        checks.push('DUFS focuses before directory download; empty loading submission is harmless and two-step Escape keeps late results from reopening it');
+
+        await page.locator('#aiChatInput').press('Escape');
+        assert.equal(await page.locator('#aiChatWindow').isVisible(), false);
+        checks.push('after DUFS closes, AI Escape retains its original behavior');
+    } finally {
+        await page.evaluate(() => { window.fetch = queueTest.dufs.originalFetch; delete queueTest.dufs; delete queueTest.dufsTimeline; });
+    }
+}
+
 async function main() {
     const browser = await chromium.launch({ channel: 'chrome', headless: true, downloadsPath: path.join(temp, 'downloads') });
     try {
@@ -956,7 +1137,7 @@ async function main() {
             await page.keyboard.press('Escape');
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
             await page.locator('#modalOverlay').evaluate(node => { node.style.display = 'none'; });
-            checks.push('fullscreen Esc and an existing file-selection modal keep their existing behavior');
+            checks.push('fullscreen Esc and a DUFS modal never dismiss the underlying AI window');
 
             assert.equal(await page.evaluate(() => queueTest.maxLive), 1);
             await page.evaluate(() => {
@@ -1000,6 +1181,7 @@ async function main() {
             assert.equal(await page.locator('#resumeProgressPrompt').isVisible(), false);
             await page.evaluate(() => window.svpPlaybackProgress.destroy());
             checks.push('one Esc hides only AI; held-key repeats preserve the resume prompt; a separate Esc keeps its original dismissal');
+            await verifyDufsKeyboard(page, checks);
             assert.equal(await requests(page), 0); assert.deepEqual(errors, []);
             checks.push('never more than one logical request, no page errors, no live AI calls');
             report.push({ file, result: 'passed', checks, layout });
