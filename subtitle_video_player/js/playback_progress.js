@@ -9,6 +9,11 @@
     'use strict';
 
 
+    function makeFileSourceId(name, size) {
+        if (typeof name !== 'string' || !name || !Number.isSafeInteger(size) || size < 0) return null;
+        return JSON.stringify([name, size]);
+    }
+
     function makeUrlSourceId(url, baseUrl) {
         return new URL(url, baseUrl).pathname;
     }
@@ -50,7 +55,7 @@
         function keyUrl(sourceId) {
             var id = String(sourceId);
             if (keyUrls.has(id)) return keyUrls.get(id);
-            var result = baseUrl + sha256(encoder.encode(id)) + '.json';
+            var result = baseUrl + sha256(encoder.encode('v2:' + id)) + '.json';
             keyUrls.set(id, result);
             return result;
         }
@@ -359,6 +364,7 @@
     return {
         createFirebaseClient: createFirebaseClient,
         createController: createController,
+        makeFileSourceId: makeFileSourceId,
         makeUrlSourceId: makeUrlSourceId,
         formatTime: formatTime,
         restorableRecord: restorableRecord

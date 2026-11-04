@@ -4,7 +4,19 @@ const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { createFirebaseClient, createController, makeUrlSourceId, formatTime, restorableRecord } = require('../js/playback_progress');
+const { createFirebaseClient, createController, makeFileSourceId, makeUrlSourceId, formatTime, restorableRecord } = require('../js/playback_progress');
+
+test('file identities preserve the filename and exact byte count', () => {
+    const name = '电影 100% (1).mp4';
+    const size = 2968990890;
+    const id = makeFileSourceId(name, size);
+    assert.deepEqual(JSON.parse(id), [name, size]);
+    assert.notEqual(makeFileSourceId(name, size + 1), id);
+    assert.notEqual(makeFileSourceId(name.replace('.mp4', '.MP4'), size), id);
+    for (const invalidSize of [undefined, null, '', String(size), -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        assert.equal(makeFileSourceId(name, invalidSize), null);
+    }
+});
 
 test('online identities use only the URL path across protocols, hosts, ports and query parameters', () => {
     const expected = '/media/%E7%94%B5%E5%BD%B1.mp4';
@@ -456,16 +468,18 @@ function jsonResponse(payload) {
     return { ok: true, status: 200, text: async () => JSON.stringify(payload) };
 }
 
-test('Firebase preserves SHA-256 record URLs and starts saves before yielding', async () => {
+test('Firebase only reads and writes versioned SHA-256 keys and starts saves before yielding', async () => {
     const requests = [];
+    const id = makeUrlSourceId('https://example.invalid/电影.mp4');
+    const oldKey = createHash('sha256').update(id).digest('hex');
     const f = firebaseFixture(async (url, init) => {
         requests.push({ url, init });
-        return jsonResponse(null);
+        return jsonResponse(url.endsWith('/' + oldKey + '.json') ? { position: 40 } : null);
     });
-    await f.client.load('movie-a');
-    const save = f.client.save('movie-a', { position: 15 }, { keepalive: true });
+    assert.equal(await f.client.load(id), null);
+    const save = f.client.save(id, { position: 15 }, { keepalive: true });
     assert.equal(requests.length, 2);
-    const expectedKey = createHash('sha256').update('movie-a').digest('hex');
+    const expectedKey = createHash('sha256').update('v2:' + id).digest('hex');
     assert.equal(requests[0].url, 'https://example.invalid/progress/' + expectedKey + '.json');
     assert.equal(requests[1].url, requests[0].url);
     assert.equal(requests[1].init.method, 'PUT');
@@ -474,7 +488,7 @@ test('Firebase preserves SHA-256 record URLs and starts saves before yielding', 
     assert.equal(f.timers.size, 0);
 });
 
-test('browser hashing preserves existing keys without using Web Crypto', async () => {
+test('browser hashing produces versioned keys without using Web Crypto', async () => {
     const rootDir = path.resolve(__dirname, '..');
     const vendor = fs.readFileSync(path.join(rootDir, 'assets/vendor/js-sha256/sha256-1.0.0.min.js'), 'utf8');
     const progress = fs.readFileSync(path.join(rootDir, 'js/playback_progress.js'), 'utf8');
@@ -490,7 +504,7 @@ test('browser hashing preserves existing keys without using Web Crypto', async (
         const client = sandbox.SvpPlaybackProgress.createFirebaseClient({ url: 'https://example.invalid' });
         for (const identity of identities) {
             await client.load(identity);
-            const expectedKey = createHash('sha256').update(identity).digest('hex');
+            const expectedKey = createHash('sha256').update('v2:' + identity).digest('hex');
             assert.equal(requests.at(-1).url, 'https://example.invalid/progress/' + expectedKey + '.json');
         }
     }

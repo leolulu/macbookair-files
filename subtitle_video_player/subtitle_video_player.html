@@ -4217,7 +4217,7 @@
                         notifyAiContentChanged();
                         if (window.svpPlaybackProgress) {
                             window.svpPlaybackProgress.setSource({
-                                id: window.SupOcrCache.makeMovieId(orderedFiles[i], orderedFiles[i].name),
+                                id: window.SvpPlaybackProgress.makeFileSourceId(orderedFiles[i].name, orderedFiles[i].size),
                                 name: orderedFiles[i].name
                             });
                         }
@@ -6123,7 +6123,8 @@
                     if (node.checked) {
                         files.push({
                             value: node.path,
-                            displayName: node.path
+                            displayName: node.path,
+                            size: node.size
                         });
                     }
                     return files;
@@ -6456,6 +6457,7 @@
                             type: 'file',
                             name: getDufsDisplayName(itemName),
                             path: childPath,
+                            size: entry.size,
                             checked: false,
                             parent: node
                         });
@@ -6516,6 +6518,7 @@
                 existing.error = incoming.error || null;
                 existing.parent = parent || null;
                 if (existing.type === 'file') {
+                    existing.size = incoming.size;
                     existing.children = [];
                     return existing;
                 }
@@ -6954,8 +6957,9 @@
                     if (fileUrl.toLowerCase().endsWith('.mp4') || fileUrl.toLowerCase().endsWith('.webm')) {
                         notifyAiContentChanged();
                         if (window.svpPlaybackProgress) {
+                            var fileId = window.SvpPlaybackProgress.makeFileSourceId(getDufsDisplayName(fileName), file.size);
                             window.svpPlaybackProgress.setSource({
-                                id: window.SvpPlaybackProgress.makeUrlSourceId(fileUrl, document.baseURI),
+                                id: fileId || window.SvpPlaybackProgress.makeUrlSourceId(fileUrl, document.baseURI),
                                 name: fileName
                             });
                         }
