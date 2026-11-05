@@ -2636,6 +2636,17 @@
             box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.2);
         }
 
+        body:has(#aiSelectionBubble:focus-within) #subtitles ::highlight(svp-quick-quote) {
+            color: #292314;
+            background-color: #ffe08a;
+        }
+
+        /* 词级字幕的透明副本保持不可见。 */
+        body:has(#aiSelectionBubble:focus-within) #subtitles .transparent-sentence::highlight(svp-quick-quote) {
+            color: transparent;
+            background-color: transparent;
+        }
+
         .ai-selection-bubble {
             --selection-padding: 5px;
             --selection-border: 1px;
@@ -4174,6 +4185,7 @@
             }
 
             function clearAllSub() {
+                document.dispatchEvent(new Event('svp-subtitles-clearing'));
                 var bigDiv = $('#subtitles')[0]
                 while (bigDiv.firstChild) {
                     bigDiv.removeChild(bigDiv.firstChild);
@@ -8650,6 +8662,7 @@
                     conversationFingerprint = null;
                     setConversationStarted(false);
                     clearQuoteChip();
+                    resetSubtitleSelection();
                     if (hadConversation) appendMetaLine('视频或字幕已更换，已开启新对话');
                     if (hadWork) showFloatingToast('视频或字幕已更换，旧请求及队列已清理', 'info', 2400);
                 });
@@ -9560,6 +9573,7 @@
                 // ---------- 划选字幕气泡 ----------
                 var currentSelectionInfo = null;
                 var selectionQuickInfo = null;
+                var subtitleSelectionPointerId = null;
                 var eudicSubmissionPending = false;
                 var eudicContextDraft = null;
 
@@ -9942,13 +9956,15 @@
                     }
                     return {
                         text: text,
+                        rawText: rawSelectionText,
                         timeLabel: timeLabel,
                         sentence: sentence,
                         startIdx: startIdx,
                         endIdx: endIdx,
                         selectionStart: selectionStart,
                         selectionEnd: selectionEnd,
-                        rect: range.getBoundingClientRect()
+                        rect: range.getBoundingClientRect(),
+                        range: range.cloneRange()
                     };
                 }
 
@@ -9974,13 +9990,24 @@
                     refreshSelectionBubble();
                 }
 
+                function setQuickQuoteHighlight(range) {
+                    if (!window.CSS || !CSS.highlights || typeof Highlight !== 'function') return;
+                    if (range) {
+                        CSS.highlights.set('svp-quick-quote', new Highlight(range));
+                    } else {
+                        CSS.highlights.delete('svp-quick-quote');
+                    }
+                }
+
                 function refreshSelectionBubble() {
+                    if (subtitleSelectionPointerId !== null) return;
                     var info = selectionQuickInfo || readSubtitleSelection();
                     if (!info) {
                         hideSelectionBubble();
                         return;
                     }
                     currentSelectionInfo = info;
+                    setQuickQuoteHighlight(info.range);
                     selectionBubble.hidden = false;
                     var bubbleRect = selectionBubble.getBoundingClientRect();
                     var positionMode = getEffectiveSelectionBubblePosition();
@@ -10028,9 +10055,23 @@
                 function hideSelectionBubble() {
                     currentSelectionInfo = null;
                     selectionQuickInfo = null;
+                    setQuickQuoteHighlight(null);
                     selectionQuickInput.value = '';
                     selectionBubble.hidden = true;
                 }
+
+                function resetSubtitleSelection() {
+                    clearTimeout(selectionRefreshTimer);
+                    subtitleSelectionPointerId = null;
+                    hideSelectionBubble();
+                    var selection = window.getSelection();
+                    if (selection && (subtitlesContainer.contains(selection.anchorNode)
+                        || subtitlesContainer.contains(selection.focusNode))) {
+                        selection.removeAllRanges();
+                    }
+                }
+
+                document.addEventListener('svp-subtitles-clearing', resetSubtitleSelection);
 
                 var selectionResizeFrame = null;
                 function scheduleSelectionBubbleRefresh() {
@@ -10066,12 +10107,45 @@
                 var selectionRefreshTimer = null;
                 document.addEventListener('selectionchange', function () {
                     clearTimeout(selectionRefreshTimer);
-                    if (isSelectionQuickActive()) return;
+                    if (subtitleSelectionPointerId !== null || isSelectionQuickActive()) return;
                     selectionRefreshTimer = setTimeout(function () {
                         if (isSelectionQuickActive()) return;
                         selectionQuickInfo = null;
                         refreshSelectionBubble();
                     }, 180);
+                });
+
+                document.addEventListener('pointerdown', function (event) {
+                    if (!event.isPrimary || event.button !== 0) return;
+                    subtitleSelectionPointerId = null;
+                    if (!selectionQuickInput.value && selectionBubble.contains(document.activeElement)
+                        && !selectionBubble.contains(event.target)) {
+                        hideSelectionBubble();
+                    }
+                    if (event.pointerType !== 'touch' && subtitlesContainer.contains(event.target) && findSubtitleElement(event.target)) {
+                        clearTimeout(selectionRefreshTimer);
+                        subtitleSelectionPointerId = event.pointerId;
+                        // 拖选期间先让出字幕区域，保留草稿。
+                        selectionBubble.hidden = true;
+                    }
+                });
+                document.addEventListener('pointercancel', function (event) {
+                    if (event.pointerId !== subtitleSelectionPointerId) return;
+                    subtitleSelectionPointerId = null;
+                    refreshSelectionBubble();
+                });
+                document.addEventListener('pointerup', function (event) {
+                    if (event.pointerId !== subtitleSelectionPointerId) return;
+                    subtitleSelectionPointerId = null;
+                    // 先让本次点击用原生选区判断是否跳转字幕，再聚焦输入框。
+                    requestAnimationFrame(function () {
+                        if (subtitleSelectionPointerId !== null) return;
+                        var info = readSubtitleSelection();
+                        clearTimeout(selectionRefreshTimer);
+                        selectionQuickInfo = info || selectionQuickInfo;
+                        refreshSelectionBubble();
+                        if (info) selectionQuickInput.focus({ preventScroll: true });
+                    });
                 });
 
                 subtitlesContainer.addEventListener('scroll', hideSelectionBubble);
@@ -10206,7 +10280,7 @@
                     dispatchChat({
                         payloadText: payload,
                         lookupText: info.text,
-                        lookupInfo: Object.assign({}, info),
+                        lookupInfo: { text: info.text, timeLabel: info.timeLabel, sentence: info.sentence },
                         positionPrefix: positionPrefix,
                         displayText: '【查词】「' + info.text + '」',
                         quote: null,
@@ -10267,6 +10341,13 @@
                         sendFromSelectionQuickInput();
                     }
                     event.stopPropagation();
+                });
+
+                selectionQuickInput.addEventListener('copy', function (event) {
+                    if (!selectionQuickInfo || !event.clipboardData
+                        || selectionQuickInput.selectionStart !== selectionQuickInput.selectionEnd) return;
+                    event.clipboardData.setData('text/plain', selectionQuickInfo.rawText);
+                    event.preventDefault();
                 });
 
                 selectionQuickSend.addEventListener('click', sendFromSelectionQuickInput);
