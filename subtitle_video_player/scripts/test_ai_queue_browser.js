@@ -176,7 +176,8 @@ async function verifyFixedComposerLayout(page, file) {
             && layout.headerBottom <= layout.inputTop + 1
             && layout.inputBottom <= layout.windowBottom + 1, JSON.stringify(layout));
         assert.ok(layout.listClientHeight + 1 >= layout.listScrollHeight, JSON.stringify(layout));
-        assert.ok(layout.messagesHeight > 0 && layout.messagesScrollHeight > layout.messagesHeight && layout.messagesScrollTop > 0, JSON.stringify(layout));
+        assert.ok(layout.messagesHeight > 0 && layout.messagesScrollHeight > layout.messagesHeight, JSON.stringify(layout));
+        assert.equal(layout.messagesScrollTop, 0, JSON.stringify(layout));
         assert.equal(layout.settingsHidden && layout.quoteHidden, true, JSON.stringify(layout));
         await page.locator('#aiChatQueueToggle').click();
         assert.equal(await page.locator('#aiChatQueueList').isVisible(), false);
@@ -902,7 +903,15 @@ async function main() {
             await page.locator('#aiChatSettingsToggle').click();
             checks.push('quick ask also opens the chat with background mode disabled; original ask still only prepares a quote');
 
-            await fresh(page); await background(page, true); await hide(page);
+            await fresh(page); await background(page, true);
+            const quickMessages = page.locator('#aiChatMessages');
+            await quickMessages.evaluate(messages => {
+                const history = document.createElement('div');
+                history.className = 'ai-chat-msg ai-chat-msg-ai';
+                history.textContent = '较早的回复\n'.repeat(60);
+                messages.appendChild(history);
+            });
+            await hide(page);
             const beforeQuickAutoOpen = await requests(page);
             await quickSelection(page); await page.locator('#aiSelectionQuickInput').fill('后台快捷提问自动展开');
             await page.locator('#aiSelectionQuickInput').press('Enter'); await waitRequests(page, beforeQuickAutoOpen + 1);
@@ -912,10 +921,15 @@ async function main() {
             await watchVideoPause(page);
             await finish(page);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), false);
+            assert.equal(await quickMessages.locator('.ai-chat-msg-ai').last().evaluate(reply => {
+                const bounds = reply.parentElement.getBoundingClientRect();
+                const replyBounds = reply.getBoundingClientRect();
+                return replyBounds.top >= bounds.top && replyBounds.bottom <= bounds.bottom + 1;
+            }), true);
             assert.equal(await page.evaluate(() => document.activeElement.id), quickAutoFocus);
             assert.deepEqual(await restoreVideoPause(page), { calls: 1, paused: true });
             await background(page, false);
-            checks.push('quick ask uses background queue notices and success-only auto-open, pauses playback and preserves focus');
+            checks.push('quick ask uses background queue notices; success-only auto-open reveals the latest reply, pauses playback and preserves focus');
 
             await fresh(page); await page.locator('#aiChatInput').fill('');
             await submit(page, '第一条普通问答'); const first = await requests(page); await waitRequests(page, first);

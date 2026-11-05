@@ -8161,7 +8161,6 @@
                 var activeAbortController = null;
                 var hasUnreadReply = false;
                 var hasUnreadError = false;
-                var scrollOnNextOpen = false;
                 var aiStatusToastKey = null;
                 var aiStatusToastTimer = null;
                 var aiStatusToastSerial = 0;
@@ -8239,7 +8238,6 @@
                     }
                     div.appendChild(document.createTextNode(displayText));
                     messagesBox.appendChild(div);
-                    scrollToBottom();
                     return div;
                 }
 
@@ -8247,7 +8245,6 @@
                     var div = document.createElement('div');
                     div.className = 'ai-chat-msg ai-chat-msg-ai ai-chat-streaming';
                     messagesBox.appendChild(div);
-                    scrollToBottom();
                     return div;
                 }
 
@@ -8643,7 +8640,6 @@
                     activeAbortController = null;
                     hasUnreadReply = false;
                     hasUnreadError = false;
-                    scrollOnNextOpen = false;
                     dismissAiStatusToast();
                     if (controller) controller.abort();
                     if (active && active.messageElement) {
@@ -8822,7 +8818,6 @@
                         resetRequestQueue();
                         return;
                     }
-                    if (chatWindow.hidden) scrollOnNextOpen = true;
                     var aiDiv = options.retryAiDiv;
                     if (aiDiv) {
                         aiDiv.classList.remove('ai-chat-msg-error');
@@ -8864,11 +8859,7 @@
                         streamRenderTimer = null;
                         if (!isCurrentRequest(entry)) return;
                         lastStreamRenderAt = Date.now();
-                        var pinned = isPinnedToBottom();
                         renderAiMessageContent(aiDiv, accumulated, false);
-                        if (pinned) {
-                            scrollToBottom();
-                        }
                     }
 
                     function cancelStreamingRender() {
@@ -8910,11 +8901,7 @@
                         if (!isCurrentRequest(entry)) return;
                         aiDiv.classList.remove('ai-chat-streaming');
                         aiDiv.analysisPhase = 'done';
-                        var shouldKeepPinned = isPinnedToBottom();
                         renderAiMessageContent(aiDiv, accumulated);
-                        if (shouldKeepPinned) {
-                            scrollToBottom();
-                        }
                         finishGeneration('success', entry);
                     }).catch(function (err) {
                         cancelStreamingRender();
@@ -8935,7 +8922,6 @@
                             finishGeneration('stopped', entry);
                         } else {
                             aiDiv.classList.add('ai-chat-msg-error');
-                            var shouldKeepErrorPinned = isPinnedToBottom();
                             renderAiMessageContent(aiDiv, accumulated);
                             var errorLine = document.createElement('div');
                             errorLine.className = 'ai-chat-error-line';
@@ -8955,9 +8941,6 @@
                                 requestQueue.retry(Object.assign({}, options, { retryAiDiv: aiDiv }), entry.id);
                             };
                             aiDiv.appendChild(retryButton);
-                            if (shouldKeepErrorPinned) {
-                                scrollToBottom();
-                            }
                             finishGeneration('error', entry);
                         }
                     });
@@ -8978,6 +8961,7 @@
                         }
                         if (status === 'success' && aiSettings.backgroundRequest && aiSettings.backgroundAutoOpen) {
                             openChatWindowPausingVideo(false);
+                            scrollToBottom();
                         } else {
                             var suffix = status === 'success' ? '已完成' : status === 'error' ? '请求失败' : '已停止';
                             if (status !== 'success' && requestQueue.snapshot().pending.length) suffix += '，队列已暂停';
@@ -9361,10 +9345,6 @@
                     hasUnreadReply = false;
                     hasUnreadError = false;
                     applyGeometry();
-                    if (scrollOnNextOpen) {
-                        scrollOnNextOpen = false;
-                        scrollToBottom();
-                    }
                     updateToggleButtonState();
                     persistWindowState();
                     if (focusInput) {
