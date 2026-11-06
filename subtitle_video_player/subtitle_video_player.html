@@ -6962,11 +6962,14 @@
             });
 
             async function loadSelectedDufsFiles(selectedFiles) {
-                srtLoaded = false
-                timelineBatchHasJson = hasJsonFile(selectedFiles.map(function (file) {
+                var selectedFileNames = selectedFiles.map(function (file) {
                     return file && file.value ? file.value : file;
-                }));
-                clearTimeline();
+                });
+                if (hasSubtitleFile(selectedFileNames)) {
+                    srtLoaded = false;
+                    timelineBatchHasJson = hasJsonFile(selectedFileNames);
+                    clearTimeline();
+                }
                 selectedFiles.sort(function (a, b) {
                     var av = isVideoLikeName(a && a.value ? a.value : '');
                     var bv = isVideoLikeName(b && b.value ? b.value : '');
