@@ -4308,6 +4308,7 @@
                         });
 
                         loadSubtitlesImpl()
+                        visualizeSubtitles(tempSubtitles)
                         resolve();
                     };
                     reader.onerror = reject;
@@ -4642,6 +4643,7 @@
                 }
                 refreshLayout();
                 aiSubtitleLoading = false;
+                visualizeSubtitles(tempSubtitles);
             }
 
             function loadSubtitlesFromJSONImpl(triggeredFromSentenceLength = false) {
