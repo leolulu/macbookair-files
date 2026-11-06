@@ -707,3 +707,9 @@ Firebase 播放进度保存与恢复已在 `0b28fb3` 落地，HTTP 兼容性修�
 - **行为**：SUP HTML 图片字幕和 `.sup` 字幕加载后均生成与 SRT 相同的单行字幕时间条，按各条字幕的 `start/end` 绘制区段，支持点击跳转和播放进度线。`.sup` 的时间信息在 OCR 前已经具备，待处理阶段即显示时间条，识别完成后不重复创建。
 - **实现**：SUP HTML 在 `loadSubtitlesImpl()` 后复用 `visualizeSubtitles(tempSubtitles)`；`.sup` 在缓存恢复与 PGS/OCR 共用的 `loadSupSubtitlesImpl()` 末尾调用同一函数。未修改 SRT、JSON 绘制逻辑，也未处理只切换视频时已有时间条不恢复的问题。
 - **验证**：118 项 Node 测试通过。真实 Chromium 文件选择流程确认 SUP HTML、`.sup` 缓存恢复及模拟 PGS/OCR 服务路径均生成单条 40px 时间条和两个正确时间区段；OCR 待处理与完成后均保持一份时间条。SUP HTML 点击时间条中部跳转到 14.968 秒，进度线同步到 49.895%。SRT 单行时间条及 JSON 双说话人分轨回归通过。
+
+### 切换视频保留字幕时间条
+
+- **产品规则**：`speaker-container` 归属于字幕。只选择视频时保留字幕及其时间条；只选择字幕或同时选择视频和字幕时，清理旧时间条并按新字幕重建。时间条在视频切换前后保持原 DOM、区段比例、点击映射和监听器，不随新视频时长重新缩放。
+- **实现**：新增 `hasSubtitleFile()` 识别 SRT、ASS、JSON、SUP HTML 和 `.sup` 批次；仅字幕批次重置 `srtLoaded`、`timelineBatchHasJson` 并调用 `clearTimeline()`。`srtLoaded` 的入口重置集中到 `processFilesImpl()`，避免保留 SRT 界面却误入 JSON 句长／合并处理路径。
+- **验证**：118 项 Node 测试通过，浏览器页面异常为 0。SRT、JSON、SUP HTML、`.sup` 从 30 秒视频切换到 52.208 秒视频后，字幕和时间条均保持原节点，区段位置、宽度、颜色及行高不变；`.sup` 未再次读取缓存。保留的 30 秒时间尺度点击中部后跳转到 14.953 秒，进度线为 49.8439%。只选择新 SRT 能替换旧 SUP 时间条；SRT 切换后调整句长和合并间隔正常；无字幕时只选视频不生成时间条，先选 SRT 再选视频也能完成待绘制时间条。

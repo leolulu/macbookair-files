@@ -4219,9 +4219,21 @@
                 });
             }
 
+            function hasSubtitleFile(files) {
+                return Array.from(files).some(function (file) {
+                    const name = file && file.name ? file.name : file;
+                    const lowerName = String(name || '').toLowerCase();
+                    return lowerName.endsWith('.srt') || lowerName.endsWith('.ass') || lowerName.endsWith('.json')
+                        || lowerName.endsWith('.html') || lowerName.endsWith('.sup');
+                });
+            }
+
             async function processFilesImpl(files) {
-                timelineBatchHasJson = hasJsonFile(files);
-                clearTimeline();
+                if (hasSubtitleFile(files)) {
+                    srtLoaded = false;
+                    timelineBatchHasJson = hasJsonFile(files);
+                    clearTimeline();
+                }
                 var orderedFiles = sortFilesVideoFirst(files);
                 svpSupLog('processFilesImpl ordered', { names: orderedFiles.map(function (f) { return f.name; }) });
                 for (var i = 0; i < orderedFiles.length; i++) {
@@ -4264,7 +4276,6 @@
             }
 
             function processFiles(e) {
-                srtLoaded = false;
                 let files = e.target.files;
                 processFilesImpl(files);
             }
