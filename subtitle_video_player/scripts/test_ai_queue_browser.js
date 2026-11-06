@@ -833,12 +833,15 @@ async function main() {
             assert.ok(quickEdge.left >= 8 && quickEdge.right <= quickEdge.width - 8);
             assert.ok(quickEdge.top >= quickEdge.buttonBottom - 1);
             assert.ok(Math.abs(quickEdge.menuBottom - quickEdge.top) < 1);
-            const drag = await page.locator('#subtitles .subtitle').first().evaluate(node => {
+            await page.locator('#aiSelectionBubble').evaluate(node => { node.style.left = '8px'; });
+            const subtitle = page.locator('#subtitles .subtitle').first();
+            const highlightBackground = () => subtitle.evaluate(node => getComputedStyle(node, '::highlight(svp-quick-quote)').backgroundColor);
+            const drag = await subtitle.evaluate(node => {
                 const text = node.firstChild;
-                const start = text.data.indexOf('submitted');
+                const start = text.data.indexOf('proposal');
                 const range = document.createRange();
                 range.setStart(text, start);
-                range.setEnd(text, start + 'submitted'.length);
+                range.setEnd(text, start + 'proposal'.length);
                 const rect = range.getBoundingClientRect();
                 return { left: rect.left + 0.5, right: rect.right - 0.5, y: rect.top + rect.height / 2 };
             });
@@ -847,31 +850,45 @@ async function main() {
             await page.mouse.move(drag.right, drag.y, { steps: 8 });
             await page.waitForTimeout(220);
             assert.equal(await page.locator('#aiSelectionBubble').isHidden(), true);
-            assert.equal(await page.evaluate(() => String(getSelection())), 'submitted');
+            assert.equal(await page.evaluate(() => String(getSelection())), 'proposal');
             assert.notEqual(await page.evaluate(() => document.activeElement.id), 'aiSelectionQuickInput');
             await page.mouse.up();
-            await page.waitForFunction(() => document.activeElement.id === 'aiSelectionQuickInput');
-            await page.mouse.move(0, 500);
-            await page.keyboard.type('快捷引用提问');
-            assert.equal(await page.locator('#aiSelectionQuickInput').inputValue(), '快捷引用提问');
-            const highlightedQuote = await page.locator('#subtitles .subtitle').first().evaluate(node => ({
-                text: Array.from(CSS.highlights.get('svp-quick-quote'), range => String(range)),
-                background: getComputedStyle(node, '::highlight(svp-quick-quote)').backgroundColor
-            }));
-            assert.deepEqual(highlightedQuote, { text: ['submitted'], background: 'rgb(255, 224, 138)' });
+            await quickInput.waitFor({ state: 'visible' });
+            assert.notEqual(await page.evaluate(() => document.activeElement.id), 'aiSelectionQuickInput');
+            assert.equal(await page.evaluate(() => String(getSelection())), 'proposal');
+            await page.locator('#aiSelectionAsk').hover();
+            await waitQuickOpacity(page, 1);
+            assert.equal(await highlightBackground(), 'rgba(0, 0, 0, 0)');
+            assert.equal(await page.evaluate(() => String(getSelection())), 'proposal');
             await context.grantPermissions(['clipboard-read']);
             await page.keyboard.press('ControlOrMeta+c');
-            assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'submitted');
+            assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'proposal');
+            await quickInput.click();
+            await page.mouse.move(0, 500);
+            await page.keyboard.type('快捷引用提问');
+            assert.equal(await quickInput.inputValue(), '快捷引用提问');
+            assert.deepEqual(await page.evaluate(() => Array.from(CSS.highlights.get('svp-quick-quote'), String)), ['proposal']);
+            assert.equal(await highlightBackground(), 'rgb(255, 224, 138)');
             await quickInput.evaluate(node => node.setSelectionRange(0, 2));
             await page.keyboard.press('ControlOrMeta+c');
             assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '快捷');
+            await quickInput.evaluate(node => node.setSelectionRange(2, 2));
+            await page.keyboard.press('ControlOrMeta+c');
+            assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '快捷');
             await context.clearPermissions();
-            checks.push('copy uses the cited subtitle when the quick input has a caret and uses native copy when draft text is selected');
+            checks.push('subtitle drag and ask hover preserve native selection and copy; the quick input copies only selected draft text');
+            await page.keyboard.press('Tab');
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'aiSelectionQuickSend');
+            assert.equal(await highlightBackground(), 'rgb(255, 224, 138)');
+            await page.keyboard.press('Tab');
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'aiSelectionAsk');
+            assert.equal(await highlightBackground(), 'rgba(0, 0, 0, 0)');
+            await quickInput.click();
             await page.keyboard.press('Enter'); await waitRequests(page, quickStart + 1);
             assert.equal(await page.evaluate(() => CSS.highlights.has('svp-quick-quote')), false);
             const quickPayload = await page.evaluate(() => queueTest.requests.at(-1).payload.user_message);
             assert.match(quickPayload, /当前播放到 0:00:02/);
-            assert.match(quickPayload, /【引用字幕 [^\n]+】"submitted"\n快捷引用提问/);
+            assert.match(quickPayload, /【引用字幕 [^\n]+】"proposal"\n快捷引用提问/);
             assert.equal(await page.locator('#aiChatWindow').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#aiSelectionBubble').evaluate(node => node.hidden), true);
             assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
@@ -888,7 +905,7 @@ async function main() {
             await finish(page, true); await finish(page);
             assert.equal(await page.locator('#aiChatInput').inputValue(), '保留大浮窗草稿');
             assert.equal(await page.locator('#aiChatQuoteChip').evaluate(node => node.hidden), false);
-            checks.push('releasing a subtitle drag focuses quick ask, highlights the quoted text while typing, clears the highlight on send, and protects the main draft and quote');
+            checks.push('clicking quick ask highlights the new quote through the send button, stops highlighting outside the form, and sends without replacing the main draft or quote');
             checks.push('quick ask respects enabled background mode, flips at viewport edges, handles empty and composing Enter, and joins FIFO');
 
             await show(page);

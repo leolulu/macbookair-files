@@ -2636,13 +2636,13 @@
             box-shadow: 0 0 0 2px rgba(77, 141, 255, 0.2);
         }
 
-        body:has(#aiSelectionBubble:focus-within) #subtitles ::highlight(svp-quick-quote) {
+        body:has(#aiSelectionQuickForm:focus-within) #subtitles ::highlight(svp-quick-quote) {
             color: #292314;
             background-color: #ffe08a;
         }
 
         /* 词级字幕的透明副本保持不可见。 */
-        body:has(#aiSelectionBubble:focus-within) #subtitles .transparent-sentence::highlight(svp-quick-quote) {
+        body:has(#aiSelectionQuickForm:focus-within) #subtitles .transparent-sentence::highlight(svp-quick-quote) {
             color: transparent;
             background-color: transparent;
         }
@@ -9874,8 +9874,7 @@
                     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
                         return null;
                     }
-                    var rawSelectionText = sel.toString();
-                    var text = rawSelectionText.replace(/\s+/g, ' ').trim();
+                    var text = sel.toString().replace(/\s+/g, ' ').trim();
                     if (!text) {
                         return null;
                     }
@@ -9936,7 +9935,6 @@
                     }
                     return {
                         text: text,
-                        rawText: rawSelectionText,
                         timeLabel: timeLabel,
                         sentence: sentence,
                         startIdx: startIdx,
@@ -9979,9 +9977,9 @@
                     }
                 }
 
-                function refreshSelectionBubble() {
+                function refreshSelectionBubble(latestSelection) {
                     if (subtitleSelectionPointerId !== null) return;
-                    var info = selectionQuickInfo || readSubtitleSelection();
+                    var info = latestSelection || selectionQuickInfo || readSubtitleSelection();
                     if (!info) {
                         hideSelectionBubble();
                         return;
@@ -10117,14 +10115,13 @@
                 document.addEventListener('pointerup', function (event) {
                     if (event.pointerId !== subtitleSelectionPointerId) return;
                     subtitleSelectionPointerId = null;
-                    // 先让本次点击用原生选区判断是否跳转字幕，再聚焦输入框。
+                    // 等本次点击处理完，再用原生选区更新气泡。快捷引用由悬停或聚焦时缓存。
                     requestAnimationFrame(function () {
                         if (subtitleSelectionPointerId !== null) return;
                         var info = readSubtitleSelection();
                         clearTimeout(selectionRefreshTimer);
-                        selectionQuickInfo = info || selectionQuickInfo;
-                        refreshSelectionBubble();
-                        if (info) selectionQuickInput.focus({ preventScroll: true });
+                        if (info) selectionQuickInfo = null;
+                        refreshSelectionBubble(info);
                     });
                 });
 
@@ -10321,13 +10318,6 @@
                         sendFromSelectionQuickInput();
                     }
                     event.stopPropagation();
-                });
-
-                selectionQuickInput.addEventListener('copy', function (event) {
-                    if (!selectionQuickInfo || !event.clipboardData
-                        || selectionQuickInput.selectionStart !== selectionQuickInput.selectionEnd) return;
-                    event.clipboardData.setData('text/plain', selectionQuickInfo.rawText);
-                    event.preventDefault();
                 });
 
                 selectionQuickSend.addEventListener('click', sendFromSelectionQuickInput);
