@@ -111,6 +111,83 @@ async function load(page, name = 'queue.srt') {
     await page.locator('#videoFile').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(srt) });
     await page.waitForFunction(() => document.querySelector('#subtitles').textContent.includes('submitted'));
 }
+
+async function verifySupSession(page, checks) {
+    await page.evaluate(() => {
+        const sup = queueTest.sup = { runs: [], cache: new Map() };
+        const readAsText = FileReader.prototype.readAsText;
+        FileReader.prototype.readAsText = function (file) {
+            if (file.name !== 'delayed-before-sup.srt') return readAsText.apply(this, arguments);
+            FileReader.prototype.readAsText = readAsText;
+            sup.finishTextRead = () => this.onload({
+                target: { result: '1\n00:00:01,000 --> 00:00:04,000\nSuperseded SRT text.\n\n' }
+            });
+        };
+        window.SupOcrCache.get = async () => null;
+        window.SupOcrCache.put = async entry => { sup.cache.set(entry.key, structuredClone(entry)); };
+        window.SupPgsParser.parseSupPgsToCues = async () => [{ start: 1, end: 3 }, { start: 6, end: 8 }];
+        window.PaddleSubtitleOcr.recognizeSupItems = (_items, update) => new Promise(resolve => {
+            sup.runs.push({ update, resolve });
+        });
+        Object.defineProperty(document.querySelector('#video'), 'readyState', { value: 1, configurable: true });
+    });
+    const startSup = async (name, count) => {
+        await page.locator('#videoFile').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from('SUP test fixture') });
+        await page.waitForFunction(count => queueTest.sup.runs.length === count, count);
+    };
+    const emit = (run, index, text, complete = false) => page.evaluate(({ run, index, text, complete }) => {
+        const task = queueTest.sup.runs[run];
+        task.update({ index, text, recognized: true });
+        if (complete) task.resolve();
+    }, { run, index, text, complete });
+
+    await page.locator('#videoFile').setInputFiles({ name: 'delayed-before-sup.srt', mimeType: 'text/plain', buffer: Buffer.from('delayed read') });
+    await page.waitForFunction(() => !!queueTest.sup.finishTextRead);
+    await startSup('continuing.sup', 1);
+    await page.evaluate(() => queueTest.sup.finishTextRead());
+    assert.doesNotMatch(await page.locator('#subtitles').textContent(), /Superseded SRT text/);
+    checks.push('a delayed text file read cannot replace a newer SUP subtitle list');
+    await emit(0, 0, 'The first OCR line is ready.');
+    await page.waitForFunction(() => document.querySelector('#subtitles').textContent.includes('first OCR line'));
+    await submit(page, 'OCR 中途提问'); await finish(page);
+    const supId = await page.evaluate(() => queueTest.requests.at(-1).payload.id);
+    await selection(page, '#aiSelectionAnalyze', 'first OCR line'); await finish(page);
+
+    await emit(0, 1, 'The final OCR line is now ready.', true);
+    await submit(page, 'OCR 完成后追问'); await finish(page);
+    const followup = await page.evaluate(() => queueTest.requests.at(-1));
+    assert.equal(followup.payload.id, supId);
+    assert.ok(followup.previous.includes('OCR 中途提问'));
+    assert.match(followup.payload.system_message, /The final OCR line is now ready/);
+    checks.push('SUP completion keeps the same chat history and includes new OCR text in the next request');
+
+    const range = page.locator('.sa-range-editor').last();
+    await range.locator('summary').click();
+    await range.getByRole('button', { name: '加入后一条字幕' }).click();
+    assert.match(await range.locator('textarea').inputValue(), /The final OCR line is now ready/);
+    await range.getByRole('button', { name: '重新解析', exact: true }).click(); await finish(page);
+    assert.equal(await page.evaluate(() => queueTest.requests.at(-1).payload.id), supId);
+    checks.push('a sentence card can use newly recognized adjacent text in the same SUP list');
+
+    await startSup('sup-before-replacement.sup', 2);
+    await fresh(page);
+    await emit(1, 0, 'OCR continues after starting a new chat.');
+    await page.waitForFunction(() => document.querySelector('#subtitles').textContent.includes('OCR continues'));
+    await load(page, 'replacement-after-ocr.srt');
+    const newText = await page.locator('#subtitles').textContent();
+    await emit(1, 1, 'Late OCR from the old SUP.', true);
+    await page.waitForFunction(() => Array.from(queueTest.sup.cache.values()).some(entry =>
+        entry.status === 'complete' && entry.cues[1].text === 'Late OCR from the old SUP.' && entry.cues[1].start === 6));
+    assert.equal(await page.locator('#subtitles').textContent(), newText);
+    await submit(page, '换字幕后的问题'); await finish(page);
+    const replacement = await page.evaluate(() => queueTest.requests.at(-1));
+    assert.notEqual(replacement.payload.id, supId);
+    assert.match(replacement.payload.system_message, /proposal submitted yesterday/);
+    assert.doesNotMatch(replacement.payload.system_message, /Late OCR from the old SUP/);
+    await page.evaluate(() => { delete document.querySelector('#video').readyState; });
+    checks.push('new chat leaves SUP recognition running and late OCR after a subtitle load only updates its original cache');
+}
+
 async function fresh(page) { await show(page); await page.locator('#aiChatNewConversation').click(); await idle(page); await waitPending(page, 0); }
 async function moveChatWindow(page, left, top) {
     const box = await page.locator('#aiChatWindow').boundingBox();
@@ -1099,6 +1176,7 @@ async function main() {
 
             await fresh(page); await submit(page, '换字幕当前项'); await submit(page, '旧字幕队列');
             await quickSelection(page); await quickInput.fill('旧字幕快捷草稿');
+            const subtitleId = await page.evaluate(() => queueTest.requests.at(-1).payload.id);
             const sourceCount = await requests(page); await load(page, 'same-text-new-file.srt'); await idle(page); await waitPending(page, 0);
             assert.equal(await page.locator('#aiSelectionBubble').isHidden(), true);
             assert.equal(await quickInput.inputValue(), '');
@@ -1106,14 +1184,46 @@ async function main() {
             await page.locator('#aiSelectionAsk').evaluate(button => button.click());
             assert.equal(await page.locator('#aiChatQuoteChip').isHidden(), true);
             assert.equal(await requests(page), sourceCount); await submit(page, '新字幕问题'); await finish(page);
-            checks.push('new subtitle file clears queue, draft and selection even when text and weak fingerprint are identical');
-            await submit(page, '换视频当前项'); await submit(page, '旧视频队列');
-            await quickSelection(page); await quickInput.fill('换视频前的快捷草稿');
+            assert.notEqual(await page.evaluate(() => queueTest.requests.at(-1).payload.id), subtitleId);
+            checks.push('loading a subtitle file with identical text still starts a new conversation and clears the old queue and selection');
+
+            await submit(page, '换视频当前项'); await submit(page, '换视频后继续的队列');
+            const videoId = await page.evaluate(() => queueTest.requests.at(-1).payload.id);
+            const retainedSubtitles = await page.locator('#subtitles').textContent();
+            await selection(page, '#aiSelectionAsk');
             await page.evaluate(() => { document.querySelector('#videoUrl').value = 'https://example.invalid/new-video.mp4'; document.querySelector('#loadVideoUrl').click(); });
-            await idle(page); await waitPending(page, 0);
-            assert.equal(await page.locator('#aiSelectionBubble').isHidden(), true);
-            assert.equal(await quickInput.inputValue(), '');
-            checks.push('video source change aborts current response and clears old queue and quick selection');
+            await page.evaluate(() => {
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(new File(['test'], 'dropped-video.mp4', { type: 'video/mp4' }));
+                document.querySelector('#videoFile').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+            });
+            assert.equal(await page.locator('#videoFileName').textContent(), 'dropped-video.mp4');
+            const dufsListing = url => url.origin === 'https://dufs-session.invalid' && url.search === '?json';
+            await page.route(dufsListing, route => route.fulfill({ json: { paths: [{ name: 'dufs-video.mp4', path_type: 'File' }] } }));
+            await page.locator('#dufsUrl').fill('https://dufs-session.invalid/videos/');
+            await page.locator('#fetchDufsFiles').click();
+            await page.locator('input[name="file"][value="dufs-video.mp4"]').check();
+            await page.locator('#loadSelectedFiles').click();
+            await page.locator('#modalOverlay').waitFor({ state: 'hidden' });
+            await page.unroute(dufsListing);
+            assert.equal(await page.locator('#videoFileName').textContent(), 'dufs-video.mp4');
+            assert.equal(await page.locator('#subtitles').textContent(), retainedSubtitles);
+            assert.equal(await page.locator('#aiChatStop').isVisible(), true);
+            assert.equal(await page.locator('#aiChatQuoteChip').isVisible(), true);
+            await waitPending(page, 1);
+            await finish(page, true);
+            assert.equal(await page.evaluate(() => queueTest.requests.at(-1).payload.id), videoId);
+            await finish(page);
+            await page.locator('#textLength').evaluate(node => { node.value = '500'; node.dispatchEvent(new Event('input', { bubbles: true })); });
+            assert.equal(await page.locator('#subtitles .subtitle').count(), 1);
+            await submit(page, '换视频并重新分组后追问'); await finish(page);
+            const videoFollowup = await page.evaluate(() => queueTest.requests.at(-1).payload);
+            assert.equal(videoFollowup.id, videoId);
+            assert.match(videoFollowup.system_message, /dufs-video\.mp4/);
+            await page.locator('#textLength').evaluate((node, value) => { node.value = value; node.dispatchEvent(new Event('input', { bubbles: true })); }, originalLength);
+            checks.push('URL, drop and DUFS video loads preserve the session, queue, quote and SRT regrouping');
+
+            await verifySupSession(page, checks);
 
             await submit(page, '刷新当前项'); await submit(page, '刷新队列项'); await page.reload();
             await idle(page); await waitPending(page, 0); assert.equal(await page.locator('#aiChatQueue').isVisible(), false);

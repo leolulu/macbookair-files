@@ -425,7 +425,7 @@
                 if (!options.getCue) return;
                 var index = direction < 0 ? rangeStart - 1 : rangeEnd + 1;
                 var cue = options.getCue(index, context);
-                if (!cue || !clean(cue.text)) { editStatus.textContent = '没有可加入的字幕，或字幕已更换。'; return; }
+                if (!cue || !clean(cue.text)) { editStatus.textContent = '没有可加入的字幕，或字幕列表已更新。'; return; }
                 var value = direction < 0 ? clean(cue.text) + ' ' + textarea.value : textarea.value + ' ' + clean(cue.text);
                 if (value.length > MAX_SOURCE) { editStatus.textContent = '内容过长，请缩小解析范围。'; return; }
                 textarea.value = value;

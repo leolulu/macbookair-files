@@ -3785,7 +3785,6 @@
                 var videoUrl = document.getElementById('videoUrl').value;
                 var videoElement = document.getElementById('video');
                 if (videoUrl) {
-                    notifyAiContentChanged();
                     if (window.svpPlaybackProgress) {
                         window.svpPlaybackProgress.setSource({
                             id: window.SvpPlaybackProgress.makeUrlSourceId(videoUrl, document.baseURI),
@@ -3814,9 +3813,14 @@
             var toastTimers = {};
             var aiSubtitleLoading = false;
 
-            function notifyAiContentChanged(loadingSubtitles) {
-                if (loadingSubtitles) aiSubtitleLoading = true;
-                document.dispatchEvent(new Event('svp-ai-content-change'));
+            function beginSubtitleLoad() {
+                const items = [];
+                aiSubtitleLoading = true;
+                subtitles = [];
+                tempSubtitles = items;
+                document.dispatchEvent(new Event('svp-ai-subtitle-loading'));
+                clearAllSub();
+                return items;
             }
             var supRunSeq = 0;
             var subtitleSyncOffset = 0;
@@ -3924,7 +3928,7 @@
                     }
 
                     srtLoaded = true;
-                    await loadSubtitles(file);
+                    if (!(await loadSubtitles(file))) return;
                     setCurrentSubtitleContext('local-srt', file, { keepRefreshHandle: true });
                     showFloatingToast(isFirstBind ? '已绑定并刷新当前字幕' : '已刷新当前字幕', 'success', 1800);
                     requestVideoFocusReturn();
@@ -4085,7 +4089,11 @@
                 });
             }
 
-            function flushSupSubtitleDomBatch(queue, limit) {
+            function flushSupSubtitleDomBatch(subtitleList, queue, limit) {
+                if (subtitles !== subtitleList) {
+                    queue.length = 0;
+                    return;
+                }
                 limit = typeof limit === 'number' ? limit : 100;
                 for (var i = 0; i < limit && queue.length > 0; i++) {
                     var update = queue.shift();
@@ -4238,7 +4246,6 @@
                 svpSupLog('processFilesImpl ordered', { names: orderedFiles.map(function (f) { return f.name; }) });
                 for (var i = 0; i < orderedFiles.length; i++) {
                     if (orderedFiles[i].name.toLowerCase().endsWith('.mp4') || orderedFiles[i].name.toLowerCase().endsWith('.webm')) {
-                        notifyAiContentChanged();
                         if (window.svpPlaybackProgress) {
                             window.svpPlaybackProgress.setSource({
                                 id: window.SvpPlaybackProgress.makeFileSourceId(orderedFiles[i].name, orderedFiles[i].size),
@@ -4253,24 +4260,28 @@
                         $('#videoFileName').text(orderedFiles[i].name);
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.ass')) {
                         srtLoaded = true
-                        await loadSubtitles(orderedFiles[i], formatIsAss = true);
-                        setCurrentSubtitleContext('ass', orderedFiles[i]);
+                        if (await loadSubtitles(orderedFiles[i], formatIsAss = true)) {
+                            setCurrentSubtitleContext('ass', orderedFiles[i]);
+                        }
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.srt')) {
                         srtLoaded = true
-                        await loadSubtitles(orderedFiles[i]);
-                        setCurrentSubtitleContext('local-srt', orderedFiles[i]);
+                        if (await loadSubtitles(orderedFiles[i])) {
+                            setCurrentSubtitleContext('local-srt', orderedFiles[i]);
+                        }
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.json')) {
                         if (!srtLoaded) {
-                            await loadSubtitlesFromJSON(orderedFiles[i]);
+                            if (!(await loadSubtitlesFromJSON(orderedFiles[i]))) continue;
                             setCurrentSubtitleContext('json', orderedFiles[i]);
                         }
                         loadDiarizationInfo(orderedFiles[i]);
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.html')) {
-                        await loadSupFromHtml(orderedFiles[i])
-                        setCurrentSubtitleContext('sup-html', orderedFiles[i]);
+                        if (await loadSupFromHtml(orderedFiles[i])) {
+                            setCurrentSubtitleContext('sup-html', orderedFiles[i]);
+                        }
                     } else if (orderedFiles[i].name.toLowerCase().endsWith('.sup')) {
-                        await loadSupFromSup(orderedFiles[i], orderedFiles[i].name)
-                        setCurrentSubtitleContext('sup', orderedFiles[i]);
+                        if (await loadSupFromSup(orderedFiles[i], orderedFiles[i].name)) {
+                            setCurrentSubtitleContext('sup', orderedFiles[i]);
+                        }
                     }
                 }
             }
@@ -4285,18 +4296,20 @@
             $('#VideoUrlWithFile').change(processFiles);
 
             function loadSupFromHtml(file) {
-                notifyAiContentChanged(true);
+                const items = beginSubtitleLoad();
                 return new Promise((resolve, reject) => {
-                    clearAllSub()
                     var reader = new FileReader();
                     reader.onload = function (e) {
+                        if (tempSubtitles !== items) {
+                            resolve(false);
+                            return;
+                        }
                         const htmlContent = e.target.result;
 
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(htmlContent, 'text/html');
 
                         const divs = doc.querySelectorAll('body > div');
-                        tempSubtitles = [];
 
                         divs.forEach(div => {
                             // 获取div内部的文本，即时间和#号开头的文本
@@ -4310,7 +4323,7 @@
                                 const startTime = (parseInt(match[3] || 0) * 3600) + (parseInt(match[4]) * 60) + parseInt(match[5]) + parseInt(match[6]) / 1000;
                                 const endTime = (parseInt(match[8] || 0) * 3600) + (parseInt(match[9]) * 60) + parseInt(match[10]) + parseInt(match[11]) / 1000;
                                 // 添加到结果列表
-                                tempSubtitles.push({
+                                items.push({
                                     start: accTime(startTime),
                                     end: accTime(endTime),
                                     text: "<img class='sup-subtitle-image' src='sup/" + imgSrc + "' />"
@@ -4319,8 +4332,8 @@
                         });
 
                         loadSubtitlesImpl()
-                        visualizeSubtitles(tempSubtitles)
-                        resolve();
+                        visualizeSubtitles(items)
+                        resolve(true);
                     };
                     reader.onerror = reject;
                     reader.readAsText(file);
@@ -4328,10 +4341,8 @@
             }
 
             function loadSupFromSup(file, sourceIdOverride) {
-                notifyAiContentChanged(true);
+                const pendingItems = beginSubtitleLoad();
                 return new Promise((resolve, reject) => {
-                    clearAllSub();
-
                     var runId = ++supRunSeq;
                     svpSupLog('loadSupFromSup start', {
                         runId: runId,
@@ -4350,6 +4361,10 @@
 
                     // Fast path: fully converted result exists.
                     window.SupOcrCache.get(cacheKey).then(async (cached) => {
+                        if (tempSubtitles !== pendingItems) {
+                            resolve(false);
+                            return;
+                        }
                         svpSupLog('loadSupFromSup cache lookup result', {
                             runId: runId,
                             hasCached: !!cached,
@@ -4358,15 +4373,17 @@
                             doneCount: cached && typeof cached.doneCount === 'number' ? cached.doneCount : null,
                         });
                         if (cached && cached.status === 'complete' && Array.isArray(cached.cues) && cached.cues.length > 0) {
-                            showFloatingToast('已从缓存恢复 SUP 转换结果', 'success');
-                            tempSubtitles = cached.cues.map((c) => ({
+                            const supItems = cached.cues.map((c) => ({
                                 start: c.start,
                                 end: c.end,
                                 text: c.text,
                             }));
-                            await loadSupSubtitlesImpl();
-                            svpSupLog('loadSupFromSup cache hit complete - restored', { runId: runId, count: tempSubtitles.length });
-                            resolve();
+                            const subtitleList = await loadSupSubtitlesImpl(supItems);
+                            if (subtitleList) {
+                                showFloatingToast('已从缓存恢复 SUP 转换结果', 'success');
+                                svpSupLog('loadSupFromSup cache hit complete - restored', { runId: runId, count: supItems.length });
+                            }
+                            resolve(Boolean(subtitleList));
                             return;
                         }
 
@@ -4394,8 +4411,12 @@
                                     svpSupLog('loadSupFromSup cache entry created', { runId: runId, cueCount: cacheEntry.cues.length });
                                 }
 
+                                if (tempSubtitles !== pendingItems) {
+                                    resolve(false);
+                                    return;
+                                }
                                 // Build subtitles; use cached text when available, otherwise keep DOM lightweight.
-                                tempSubtitles = cues.map((cue, idx) => {
+                                const supItems = cues.map((cue, idx) => {
                                     const cachedText = (cacheEntry.cues[idx] && cacheEntry.cues[idx].text) ? String(cacheEntry.cues[idx].text) : '';
                                     if (cachedText) {
                                         return {
@@ -4418,25 +4439,29 @@
                                 });
 
                                 let cachedCount = 0;
-                                for (let i = 0; i < tempSubtitles.length; i++) {
-                                    if (tempSubtitles[i].__ocrSkip === true) {
+                                for (let i = 0; i < supItems.length; i++) {
+                                    if (supItems[i].__ocrSkip === true) {
                                         cachedCount++;
                                     }
                                 }
 
                                 if (cachedCount > 0) {
-                                    if (cachedCount >= tempSubtitles.length) {
+                                    if (cachedCount >= supItems.length) {
                                         showFloatingToast('字幕结果已全部从缓存恢复', 'success');
                                     } else {
-                                        showFloatingToast('已恢复 ' + cachedCount + '/' + tempSubtitles.length + ' 条缓存，继续补全 OCR', 'info', 3200);
+                                        showFloatingToast('已恢复 ' + cachedCount + '/' + supItems.length + ' 条缓存，继续补全 OCR', 'info', 3200);
                                     }
                                 } else {
                                     showFloatingToast('开始转换 SUP 字幕，请稍候', 'info');
                                 }
 
-                                svpSupLog('loadSupFromSup prepared subtitles list', { runId: runId, total: tempSubtitles.length, cachedCount: cachedCount });
+                                svpSupLog('loadSupFromSup prepared subtitles list', { runId: runId, total: supItems.length, cachedCount: cachedCount });
 
-                                await loadSupSubtitlesImpl();
+                                const subtitleList = await loadSupSubtitlesImpl(supItems);
+                                if (!subtitleList) {
+                                    resolve(false);
+                                    return;
+                                }
 
                                 // Persist progress immediately so partial runs can resume next time.
                                 let persistTimer = null;
@@ -4494,6 +4519,9 @@
 
                                 setTimeout(async function () {
                                     const waitResult = await waitForVideoReadyForOcr(15000);
+                                    if (subtitles !== subtitleList) {
+                                        return;
+                                    }
                                     svpSupLog('loadSupFromSup video ready gate', { runId: runId, waitResult: waitResult });
                                     if (waitResult.reason !== 'already-ready') {
                                         showFloatingToast('视频已准备，开始 OCR 初始化', 'info', 2200);
@@ -4505,7 +4533,7 @@
 
                                     function scheduleDomFlush(force) {
                                         if (force === true) {
-                                            flushSupSubtitleDomBatch(pendingDomUpdates, pendingDomUpdates.length || 1);
+                                            flushSupSubtitleDomBatch(subtitleList, pendingDomUpdates, pendingDomUpdates.length || 1);
                                             domFlushScheduled = false;
                                             return;
                                         }
@@ -4515,7 +4543,7 @@
                                         domFlushScheduled = true;
                                         yieldToMainThread(16).then(function () {
                                             domFlushScheduled = false;
-                                            flushSupSubtitleDomBatch(pendingDomUpdates, 100);
+                                            flushSupSubtitleDomBatch(subtitleList, pendingDomUpdates, 100);
                                             if (pendingDomUpdates.length > 0) {
                                                 scheduleDomFlush(false);
                                             }
@@ -4529,6 +4557,9 @@
                                         ocrFinalized = true;
                                         scheduleDomFlush(true);
                                         persistCacheEntry(true);
+                                        if (subtitles !== subtitleList) {
+                                            return;
+                                        }
                                         if (failedCount > 0) {
                                             showFloatingToast('SUP OCR 已完成，仍有 ' + failedCount + ' 条未识别；刷新页面可重试', 'warning', 4200);
                                             svpSupLog('loadSupFromSup OCR complete with unresolved items', { runId: runId, total: cacheEntry.cues.length, doneCount: doneCount, resolvedCount: resolvedCount, failedCount: failedCount });
@@ -4538,8 +4569,8 @@
                                         }
                                     }
 
-                                    window.PaddleSubtitleOcr.recognizeSupItems(tempSubtitles, ({ index, text, recognized, attemptsUsed }) => {
-                                        const subtitleItem = tempSubtitles[index];
+                                    window.PaddleSubtitleOcr.recognizeSupItems(supItems, ({ index, text, recognized, attemptsUsed }) => {
+                                        const subtitleItem = supItems[index];
                                         if (!subtitleItem) {
                                             return;
                                         }
@@ -4563,10 +4594,6 @@
                                             };
                                             subtitleItem.text = text;
                                             subtitleItem.listText = text;
-                                            if (subtitles[index]) {
-                                                subtitles[index].text = text;
-                                            }
-                                            pendingDomUpdates.push({ index: index, text: text });
                                         } else {
                                             if (!wasResolved) {
                                                 failedCount++;
@@ -4578,10 +4605,6 @@
                                             };
                                             subtitleItem.text = '';
                                             subtitleItem.listText = buildSupFailedText(index, cacheEntry.cues.length, attemptsUsed);
-                                            if (subtitles[index]) {
-                                                subtitles[index].text = '';
-                                            }
-                                            pendingDomUpdates.push({ index: index, text: subtitleItem.listText });
                                         }
 
                                         subtitleItem.__ocrResolved = true;
@@ -4595,7 +4618,11 @@
                                         }
                                         cacheEntry.doneCount = doneCount;
                                         persistCacheEntry(false);
-                                        scheduleDomFlush(false);
+                                        if (subtitles === subtitleList) {
+                                            subtitleList[index].text = subtitleItem.text;
+                                            pendingDomUpdates.push({ index: index, text: subtitleItem.listText });
+                                            scheduleDomFlush(false);
+                                        }
 
                                         if (resolvedCount >= cacheEntry.cues.length) {
                                             finalizeSupOcrRun();
@@ -4606,7 +4633,9 @@
                                         } else {
                                             scheduleDomFlush(true);
                                             persistCacheEntry(true);
-                                            showFloatingToast('SUP OCR 本轮结束，仍有 ' + (cacheEntry.cues.length - resolvedCount) + ' 条未完成，刷新页面可重试', 'warning', 4200);
+                                            if (subtitles === subtitleList) {
+                                                showFloatingToast('SUP OCR 本轮结束，仍有 ' + (cacheEntry.cues.length - resolvedCount) + ' 条未完成，刷新页面可重试', 'warning', 4200);
+                                            }
                                             svpSupLog('loadSupFromSup OCR finished with unresolved pending items', { runId: runId, total: cacheEntry.cues.length, doneCount: doneCount, resolvedCount: resolvedCount, failedCount: failedCount });
                                         }
                                     }).catch(err => {
@@ -4614,12 +4643,14 @@
                                         cacheEntry.doneCount = doneCount;
                                         scheduleDomFlush(true);
                                         persistCacheEntry(true);
-                                        showFloatingToast('SUP OCR 中断，已保存当前进度', 'warning', 3200);
+                                        if (subtitles === subtitleList) {
+                                            showFloatingToast('SUP OCR 中断，已保存当前进度', 'warning', 3200);
+                                        }
                                         svpSupLog('loadSupFromSup OCR failed', { runId: runId, message: String(err && err.message ? err.message : err), stack: err && err.stack ? String(err.stack) : null });
                                     });
                                 }, 0);
 
-                                resolve();
+                                resolve(true);
                             } catch (err) {
                                 reject(err);
                             }
@@ -4630,31 +4661,38 @@
                 });
             }
 
-            async function loadSupSubtitlesImpl() {
-                subtitles = [];
+            async function loadSupSubtitlesImpl(supItems) {
+                tempSubtitles = supItems;
+                const subtitleList = [];
+                subtitles = subtitleList;
                 bindSupSubtitleClickHandler();
 
                 var subtitlesContainer = document.getElementById('subtitles');
                 var batchSize = 200;
-                for (let i = 0; i < tempSubtitles.length; i += batchSize) {
+                for (let i = 0; i < supItems.length; i += batchSize) {
                     var fragment = document.createDocumentFragment();
-                    var end = Math.min(i + batchSize, tempSubtitles.length);
+                    var end = Math.min(i + batchSize, supItems.length);
                     for (let j = i; j < end; j++) {
-                        subtitles.push({ start: tempSubtitles[j].start, end: tempSubtitles[j].end, text: tempSubtitles[j].text });
+                        const item = supItems[j];
+                        subtitleList.push({ start: item.start, end: item.end, text: item.text });
                         var subtitleDiv = document.createElement('div');
                         subtitleDiv.className = 'subtitle';
                         subtitleDiv.setAttribute('data-index', String(j));
-                        subtitleDiv.textContent = tempSubtitles[j].listText || tempSubtitles[j].text || '';
+                        subtitleDiv.textContent = item.listText || item.text || '';
                         fragment.appendChild(subtitleDiv);
                     }
                     subtitlesContainer.appendChild(fragment);
-                    if (end < tempSubtitles.length) {
+                    if (end < supItems.length) {
                         await yieldToMainThread(16);
+                        if (subtitles !== subtitleList) {
+                            return null;
+                        }
                     }
                 }
                 refreshLayout();
                 aiSubtitleLoading = false;
-                visualizeSubtitles(tempSubtitles);
+                visualizeSubtitles(supItems);
+                return subtitleList;
             }
 
             function loadSubtitlesFromJSONImpl(triggeredFromSentenceLength = false) {
@@ -4748,22 +4786,23 @@
 
 
             function loadSubtitlesFromJSON(file) {
-                notifyAiContentChanged(true);
+                const items = beginSubtitleLoad();
                 return new Promise((resolve, reject) => {
-                    clearAllSub()
                     const reader = new FileReader();
                     reader.onload = function (event) {
+                        if (tempSubtitles !== items) {
+                            resolve(false);
+                            return;
+                        }
                         var asr_data = JSON.parse(event.target.result).asr_info;
 
-                        tempSubtitles = [];
-
                         asr_data.forEach(function (sentence) {
-                            tempSubtitles.push({ start: accTime(sentence.start), end: accTime(sentence.end), text: sentence.text.trim(), words: sentence.words });
+                            items.push({ start: accTime(sentence.start), end: accTime(sentence.end), text: sentence.text.trim(), words: sentence.words });
                         });
 
                         loadSubtitlesFromJSONImpl();
                         aiSubtitleLoading = false;
-                        resolve()
+                        resolve(true);
                     };
                     reader.onerror = reject;
                     reader.readAsText(file);
@@ -5043,7 +5082,6 @@
                 dropZone.addEventListener('drop', function (e) {
                     e.preventDefault();
                     dropZone.style.backgroundColor = '';
-                    srtLoaded = false;
                     let files = e.dataTransfer.files;
                     processFilesImpl(files);
                 });
@@ -5425,19 +5463,20 @@
             }
 
             function loadSubtitles(file, formatIsAss = false) {
-                notifyAiContentChanged(true);
+                const items = beginSubtitleLoad();
                 return new Promise((resolve, reject) => {
-                    clearAllSub()
                     var reader = new FileReader();
                     reader.onload = function (e) {
+                        if (tempSubtitles !== items) {
+                            resolve(false);
+                            return;
+                        }
                         // Parse SRT file
                         var data = e.target.result;
                         if (formatIsAss) {
                             data = ass2srt(data)
                         }
                         var lines = data.split('\n');
-
-                        tempSubtitles = []; // Store unprocessed subtitles
 
                         for (var i = 0; i < lines.length; i++) {
                             if (lines[i].indexOf('-->') !== -1) {
@@ -5452,14 +5491,14 @@
                                     }
                                     text += lines[j] + "\n";
                                 }
-                                tempSubtitles.push({ start: accTime(start), end: accTime(end), text: text.trim() });
+                                items.push({ start: accTime(start), end: accTime(end), text: text.trim() });
                             }
                         }
 
                         loadSubtitlesImpl()
                         aiSubtitleLoading = false;
-                        visualizeSubtitles(tempSubtitles)
-                        resolve();
+                        visualizeSubtitles(items)
+                        resolve(true);
                     };
                     reader.onerror = reject;
                     reader.readAsText(file);
@@ -6983,7 +7022,6 @@
                     var fileName = file.value;
                     var fileUrl = getDufsFileUrl(formatDufsBaseUrl(document.getElementById('dufsUrl').value), fileName);
                     if (fileUrl.toLowerCase().endsWith('.mp4') || fileUrl.toLowerCase().endsWith('.webm')) {
-                        notifyAiContentChanged();
                         if (window.svpPlaybackProgress) {
                             var fileId = window.SvpPlaybackProgress.makeFileSourceId(getDufsDisplayName(fileName), file.size);
                             window.svpPlaybackProgress.setSource({
@@ -7004,24 +7042,28 @@
 
                             if (fileUrl.toLowerCase().endsWith('.srt')) {
                                 srtLoaded = true;
-                                await loadSubtitles(blob);
-                                setCurrentSubtitleContext('remote-srt', blob, { fallbackName: fileName });
+                                if (await loadSubtitles(blob)) {
+                                    setCurrentSubtitleContext('remote-srt', blob, { fallbackName: fileName });
+                                }
                             } else if (fileUrl.toLowerCase().endsWith('.ass')) {
                                 srtLoaded = true;
-                                await loadSubtitles(blob, formatIsAss = true);
-                                setCurrentSubtitleContext('ass', blob, { fallbackName: fileName });
+                                if (await loadSubtitles(blob, formatIsAss = true)) {
+                                    setCurrentSubtitleContext('ass', blob, { fallbackName: fileName });
+                                }
                             } else if (fileUrl.toLowerCase().endsWith('.json')) {
                                 if (!srtLoaded) {
-                                    await loadSubtitlesFromJSON(blob);
+                                    if (!(await loadSubtitlesFromJSON(blob))) continue;
                                     setCurrentSubtitleContext('json', blob, { fallbackName: fileName });
                                 }
                                 loadDiarizationInfo(blob);
                             } else if (fileUrl.toLowerCase().endsWith('.html')) {
-                                await loadSupFromHtml(blob);
-                                setCurrentSubtitleContext('sup-html', blob, { fallbackName: fileName });
+                                if (await loadSupFromHtml(blob)) {
+                                    setCurrentSubtitleContext('sup-html', blob, { fallbackName: fileName });
+                                }
                             } else if (fileUrl.toLowerCase().endsWith('.sup')) {
-                                await loadSupFromSup(blob, fileUrl);
-                                setCurrentSubtitleContext('sup', blob, { fallbackName: fileName });
+                                if (await loadSupFromSup(blob, fileUrl)) {
+                                    setCurrentSubtitleContext('sup', blob, { fallbackName: fileName });
+                                }
                             }
 
                         } catch (error) {
@@ -7601,7 +7643,7 @@
                         if ($('#clickToPlay').prop('checked')) videoElement.play();
                     },
                     getCue: function (index, context) {
-                        return context.cueSource === subtitles && context.fingerprint === subtitleFingerprint() ? subtitles[index] : null;
+                        return context.cueSource === subtitles ? subtitles[index] : null;
                     },
                     onAnalyze: dispatchSentenceAnalysis
                 }) : null;
@@ -8171,7 +8213,6 @@
 
                 // ---------- 会话状态 ----------
                 var conversationId = generateConversationId();
-                var conversationFingerprint = null;
                 var pendingQuote = null;
                 var isGenerating = false;
                 var activeAbortController = null;
@@ -8188,36 +8229,6 @@
 
                 function generateConversationId() {
                     return 'svp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-                }
-
-                function subtitleFingerprint() {
-                    if (!subtitles.length) {
-                        return 'empty';
-                    }
-                    var first = String(subtitles[0].text || '');
-                    var last = String(subtitles[subtitles.length - 1].text || '');
-                    return subtitles.length + '|' + first.slice(0, 50) + '|' + last.slice(0, 50);
-                }
-
-                function ensureConversationFreshness() {
-                    var fp = subtitleFingerprint();
-                    if (conversationFingerprint === null) {
-                        conversationFingerprint = fp;
-                        return;
-                    }
-                    if (fp !== conversationFingerprint) {
-                        // 文件切换由加载入口清理；同一文件的 OCR 更新或重新分组不丢弃正在处理的队列。
-                        if (isGenerating || requestQueue.snapshot().pending.length) {
-                            conversationFingerprint = fp;
-                            return;
-                        }
-                        resetRequestQueue();
-                        conversationFingerprint = fp;
-                        conversationId = generateConversationId();
-                        setConversationStarted(false);
-                        appendMetaLine('字幕已更换，已自动开启新对话（此前内容不再作为上下文）');
-                        showFloatingToast('字幕已更换，AI已开启新对话', 'info', 2400);
-                    }
                 }
 
                 // ---------- 消息渲染 ----------
@@ -8666,17 +8677,15 @@
                     updateToggleButtonState();
                 }
 
-                document.addEventListener('svp-ai-content-change', function () {
+                document.addEventListener('svp-ai-subtitle-loading', function () {
                     var hadWork = isGenerating || requestQueue.snapshot().pending.length;
                     var hadConversation = conversationStarted;
                     resetRequestQueue();
                     conversationId = generateConversationId();
-                    conversationFingerprint = null;
                     setConversationStarted(false);
                     clearQuoteChip();
-                    resetSubtitleSelection();
-                    if (hadConversation) appendMetaLine('视频或字幕已更换，已开启新对话');
-                    if (hadWork) showFloatingToast('视频或字幕已更换，旧请求及队列已清理', 'info', 2400);
+                    if (hadConversation) appendMetaLine('已重新加载字幕，开启新对话');
+                    if (hadWork) showFloatingToast('正在加载字幕，旧请求及队列已清理', 'info', 2400);
                 });
 
                 function updateSendButtonState() {
@@ -8805,7 +8814,6 @@
                         showFloatingToast(subtitles.length ? 'SUP 字幕还没有可用文本，OCR 完成后再试' : '请先加载字幕再使用 AI 对话', 'warning', 2600);
                         return false;
                     }
-                    ensureConversationFreshness();
                     setConversationStarted(true);
                     options = Object.assign({}, options, {
                         editText: options.editText || options.lookupText || (options.analysis ? options.analysis.source : options.displayText),
@@ -8951,7 +8959,7 @@
                             retryButton.textContent = '重试';
                             retryButton.onclick = function () {
                                 if (options.context.contentVersion !== contentVersion) {
-                                    showFloatingToast('视频或字幕已更换，请在当前内容中重新提问', 'warning', 2400);
+                                    showFloatingToast('字幕已重新加载，请在当前对话中重新提问', 'warning', 2400);
                                     return;
                                 }
                                 requestQueue.retry(Object.assign({}, options, { retryAiDiv: aiDiv }), entry.id);
@@ -9068,7 +9076,6 @@
                     if (lookupSpeech) lookupSpeech.stop();
                     if (sentenceAnalysis) sentenceAnalysis.reset();
                     conversationId = generateConversationId();
-                    conversationFingerprint = subtitleFingerprint();
                     setConversationStarted(false);
                     messagesBox.innerHTML = '';
                     clearQuoteChip();
@@ -10282,8 +10289,8 @@
                 });
 
                 function dispatchSentenceAnalysis(context, fromSelection) {
-                    if (context.cueSource !== subtitles || context.fingerprint !== subtitleFingerprint()) {
-                        showFloatingToast('字幕已更换，请在当前字幕中重新划选', 'warning', 2400);
+                    if (context.cueSource !== subtitles) {
+                        showFloatingToast('字幕列表已更新，请重新划选', 'warning', 2400);
                         return false;
                     }
                     if (!fromSelection || !aiSettings.backgroundRequest || !chatWindow.hidden) {
@@ -10306,7 +10313,6 @@
                     if (!info || !sentenceAnalysis) return;
                     try {
                         var context = window.SvpSentenceAnalysis.buildRange(subtitles, info);
-                        context.fingerprint = subtitleFingerprint();
                         context.cueSource = subtitles;
                         if (dispatchSentenceAnalysis(context, true)) window.getSelection().removeAllRanges();
                     } catch (err) {
