@@ -4016,9 +4016,8 @@
                 return '[SUP OCR 待处理 ' + (index + 1) + '/' + total + ']';
             }
 
-            function buildSupFailedText(index, total, attemptsUsed) {
-                const attemptText = attemptsUsed && attemptsUsed > 0 ? ('，已重试 ' + attemptsUsed + ' 次') : '';
-                return '[SUP OCR 本轮未识别 ' + (index + 1) + '/' + total + attemptText + '，刷新可重试]';
+            function buildSupFailedText(index, total) {
+                return '[SUP OCR 未识别 ' + (index + 1) + '/' + total + ']';
             }
 
             function waitForVideoReadyForOcr(timeoutMs) {
@@ -4561,7 +4560,7 @@
                                             return;
                                         }
                                         if (failedCount > 0) {
-                                            showFloatingToast('SUP OCR 已完成，仍有 ' + failedCount + ' 条未识别；刷新页面可重试', 'warning', 4200);
+                                            showFloatingToast('SUP OCR 已完成，仍有 ' + failedCount + ' 条未识别', 'warning', 4200);
                                             svpSupLog('loadSupFromSup OCR complete with unresolved items', { runId: runId, total: cacheEntry.cues.length, doneCount: doneCount, resolvedCount: resolvedCount, failedCount: failedCount });
                                         } else {
                                             showFloatingToast('SUP OCR 已完成并写入缓存', 'success');
@@ -4569,7 +4568,7 @@
                                         }
                                     }
 
-                                    window.PaddleSubtitleOcr.recognizeSupItems(supItems, ({ index, text, recognized, attemptsUsed }) => {
+                                    window.PaddleSubtitleOcr.recognizeSupItems(supItems, ({ index, text, recognized }) => {
                                         const subtitleItem = supItems[index];
                                         if (!subtitleItem) {
                                             return;
@@ -4604,7 +4603,7 @@
                                                 text: '',
                                             };
                                             subtitleItem.text = '';
-                                            subtitleItem.listText = buildSupFailedText(index, cacheEntry.cues.length, attemptsUsed);
+                                            subtitleItem.listText = buildSupFailedText(index, cacheEntry.cues.length);
                                         }
 
                                         subtitleItem.__ocrResolved = true;

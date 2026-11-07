@@ -7,11 +7,11 @@
 (function () {
     'use strict';
 
-    const CACHE_VERSION = 1;
+    const CACHE_VERSION = 2;
     const DB_NAME = 'subtitle_video_player_cache';
     const DB_VERSION = 1;
     const STORE = 'sup_ocr';
-    const LS_PREFIX = 'svp:sup_ocr:v1:';
+    const LS_PREFIX = 'svp:sup_ocr:v1:'; // Storage key namespace.
 
     function nowIso() {
         return new Date().toISOString();
@@ -112,8 +112,9 @@
 
     async function get(key) {
         const fromIdb = await idbGet(key);
-        if (fromIdb) return fromIdb;
-        return lsGet(key);
+        if (isUsableEntry(fromIdb)) return fromIdb;
+        const fromLocalStorage = lsGet(key);
+        return isUsableEntry(fromLocalStorage) ? fromLocalStorage : null;
     }
 
     async function put(entry) {

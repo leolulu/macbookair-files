@@ -99,6 +99,19 @@
         return { data: data, width: width, height: height };
     }
 
+    function addWhiteBorder(imageData, padding) {
+        const width = imageData.width + padding * 2;
+        const height = imageData.height + padding * 2;
+        const data = new Uint8ClampedArray(width * height * 4).fill(255);
+        const rowBytes = imageData.width * 4;
+        for (let y = 0; y < imageData.height; y++) {
+            const start = y * rowBytes;
+            const offset = ((y + padding) * width + padding) * 4;
+            data.set(imageData.data.subarray(start, start + rowBytes), offset);
+        }
+        return createImageDataLike(data, width, height);
+    }
+
     function upscaleImageData(imageData, scale) {
         if (!imageData || !imageData.data || !imageData.width || !imageData.height || scale <= 1) {
             return imageData;
@@ -170,11 +183,13 @@
 
     async function recognizeItemWithRetries(imageData) {
         const baseImage = createImageDataLike(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
-        const enlargedImage = upscaleImageData(baseImage, 2);
+        let enlargedImage;
+        const getEnlargedImage = () => (enlargedImage ??= upscaleImageData(baseImage, 2));
         const attempts = [
-            baseImage,
-            enlargedImage,
-            thresholdImageData(enlargedImage, 180),
+            () => addWhiteBorder(baseImage, 32),
+            () => baseImage,
+            getEnlargedImage,
+            () => thresholdImageData(getEnlargedImage(), 180),
         ];
 
         let best = { recognized: false, text: '', score: 0, attemptsUsed: 0 };
@@ -182,7 +197,7 @@
 
         for (let i = 0; i < attempts.length; i++) {
             try {
-                const current = await recognizeOcrInput(attempts[i]);
+                const current = await recognizeOcrInput(attempts[i]());
                 if (current.text) {
                     return {
                         recognized: true,
