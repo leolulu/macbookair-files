@@ -112,6 +112,81 @@
         return createImageDataLike(data, width, height);
     }
 
+    function normalizeLightSubtitle(imageData) {
+        const { data, width, height } = imageData;
+        const rowBytes = width * 4;
+        let hasTransparency = false;
+        let hasLightInk = false;
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const pixel = y * rowBytes + x * 4;
+                const alpha = pixel + 3;
+                if (data[alpha] === 0) {
+                    hasTransparency = true;
+                    continue;
+                }
+                const gray = data[pixel];
+                if (gray !== data[pixel + 1] || gray !== data[pixel + 2]) return null;
+                if (gray >= 112 && data[alpha] >= 128) hasLightInk = true;
+
+                // Light pixels at the silhouette can be an outline around dark lettering.
+                if (gray > 64 && (x === 0 || x === width - 1 || y === 0 || y === height - 1
+                    || data[alpha - 4] === 0 || data[alpha + 4] === 0
+                    || data[alpha - rowBytes] === 0 || data[alpha + rowBytes] === 0)) return null;
+            }
+        }
+        if (!hasTransparency || !hasLightInk) return null;
+
+        const normalized = new Uint8ClampedArray(data.length);
+        for (let i = 0; i < data.length; i += 4) {
+            const ink = Math.max(0, Math.min(255, (data[i] - 24) * 2.2));
+            const gray = 255 - ink * (data[i + 3] / 255);
+            normalized[i] = normalized[i + 1] = normalized[i + 2] = gray;
+            normalized[i + 3] = 255;
+        }
+        return createImageDataLike(normalized, width, height);
+    }
+
+    function expandClippedLeft(image, box) {
+        const { data, width } = image;
+        const [topLeft, topRight, bottomRight, bottomLeft] = box;
+        const left = topLeft[0];
+        const top = topLeft[1];
+        const bottom = bottomLeft[1];
+        if (left < 1 || left >= width || left !== bottomLeft[0]) return null;
+
+        const lineHeight = bottom - top;
+        const minCrossingRows = Math.ceil(lineHeight * 0.8);
+        const hasInk = (x, y) => data[(y * width + x) * 4] <= 128;
+        let crossingRows = 0;
+        for (let y = top; y < bottom; y++) {
+            crossingRows = hasInk(left, y) && hasInk(left - 1, y) ? crossingRows + 1 : 0;
+            if (crossingRows >= minCrossingRows) break;
+        }
+        if (crossingRows < minCrossingRows) return null;
+
+        // A blank gap close to the edge separates the clipped stroke from the next glyph.
+        const gapWidth = Math.ceil(lineHeight / 7);
+        const maxStrokeWidth = Math.ceil(lineHeight / 4);
+        const end = Math.min(topRight[0], left + maxStrokeWidth + gapWidth);
+        let blankColumns = 0;
+        for (let x = left + 1; x < end; x++) {
+            let blank = true;
+            for (let y = top; y < bottom; y++) {
+                if (hasInk(x, y)) {
+                    blank = false;
+                    break;
+                }
+            }
+            blankColumns = blank ? blankColumns + 1 : 0;
+            if (blankColumns >= gapWidth) {
+                const expanded = Math.max(0, left - 4);
+                return [[expanded, top], topRight, bottomRight, [expanded, bottom]];
+            }
+        }
+        return null;
+    }
+
     function upscaleImageData(imageData, scale) {
         if (!imageData || !imageData.data || !imageData.width || !imageData.height || scale <= 1) {
             return imageData;
@@ -181,8 +256,9 @@
         };
     }
 
-    async function recognizeItemWithRetries(imageData) {
+    async function recognizeItemWithRetries(imageData, rawImageData) {
         const baseImage = createImageDataLike(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
+        const highContrastImage = normalizeLightSubtitle(rawImageData);
         let enlargedImage;
         const getEnlargedImage = () => (enlargedImage ??= upscaleImageData(baseImage, 2));
         const attempts = [
@@ -191,6 +267,13 @@
             getEnlargedImage,
             () => thresholdImageData(getEnlargedImage(), 180),
         ];
+        if (highContrastImage) {
+            attempts.unshift(() => {
+                const input = addWhiteBorder(highContrastImage, 32);
+                input.__svpExpandClippedLeft = true;
+                return input;
+            });
+        }
 
         let best = { recognized: false, text: '', score: 0, attemptsUsed: 0 };
         let lastError = null;
@@ -241,7 +324,16 @@
         log('loadEsearchOcrModule fetch start', { url: sourceUrl });
         const source = await fetchTextWithTimeout(sourceUrl, 30000);
         log('loadEsearchOcrModule fetch done', { length: source.length });
-        const patched = source.replace(/export\s*\{[\s\S]*?\};?\s*$/, 'self.__svpEsearchOcr = { det: me, init: hn, ocr: Hi, rec: Pe };');
+        const detect = 'const X = Vi(_.data, _.dims[3], _.dims[2], n);';
+        const region = 'c.push({ box: k, img: q, style: { bg: H, text: z } });';
+        // Carry the per-input option through detection and widen only the recognition image.
+        const patched = source
+            .replace(detect, 'if (f.__svpExpandClippedLeft) n.__svpExpandClippedLeft = true;\n  ' + detect)
+            .replace(region, [
+                'const expanded = m.__svpExpandClippedLeft ? expandClippedLeft(m, E) : null;',
+                'c.push({ box: k, img: expanded ? $i(m, expanded) : q, style: { bg: H, text: z } });',
+            ].join('\n    '))
+            .replace(/export\s*\{[\s\S]*?\};?\s*$/, () => expandClippedLeft.toString() + '\nself.__svpEsearchOcr = { det: me, init: hn, ocr: Hi, rec: Pe };');
         if (!patched.includes('self.__svpEsearchOcr')) {
             throw new Error('Failed to patch esearch-ocr worker export');
         }
@@ -477,7 +569,7 @@
             }
 
             const ocrInput = createImageDataLike(filled, item.imageRawData.width, item.imageRawData.height);
-            const recognizedResult = await recognizeItemWithRetries(ocrInput);
+            const recognizedResult = await recognizeItemWithRetries(ocrInput, item.imageRawData);
 
             textCache.set(hash, recognizedResult);
             completedPending++;

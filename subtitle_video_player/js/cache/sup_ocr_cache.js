@@ -7,7 +7,7 @@
 (function () {
     'use strict';
 
-    const CACHE_VERSION = 2;
+    const CACHE_VERSION = 4;
     const DB_NAME = 'subtitle_video_player_cache';
     const DB_VERSION = 1;
     const STORE = 'sup_ocr';
