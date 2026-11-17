@@ -37,7 +37,42 @@
         }
 
         #container.layout-landscape #options-pane {
-            height: calc(100% - var(--video-side-offset-y, 0px));
+            align-self: start;
+            max-height: calc(100% - var(--video-side-offset-y, 0px));
+        }
+
+        #container.layout-landscape.auto-video-height {
+            /* 先按实际内容给控制区留出高度，再分配视频行的空间。 */
+            grid-template-rows: minmax(0, max-content) minmax(max-content, 1fr);
+        }
+
+        #container.layout-landscape.auto-video-height #video-player,
+        #container.layout-landscape.auto-video-height #options-pane {
+            top: min(var(--video-side-offset-y, 0px), var(--max-video-side-offset-y, 0px));
+        }
+
+        #container.layout-landscape.auto-video-height #options-pane {
+            max-height: none;
+        }
+
+        #container.layout-landscape.auto-video-height #speaker-container {
+            margin-bottom: 2px;
+        }
+
+        #container.layout-landscape.auto-video-height #video-player {
+            display: grid;
+            grid-template-rows: minmax(0, auto) auto;
+            align-self: stretch;
+        }
+
+        #container.layout-landscape.auto-video-height #video {
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        #container.layout-landscape.auto-video-height #subtitles {
+            /* 字幕在栏内滚动，列表内容不参与计算行高。 */
+            contain: size;
         }
 
         #container.layout-landscape:not(.layout-reversed) {
@@ -2842,7 +2877,7 @@
 </head>
 
 <body>
-    <div id="container" class="layout-landscape">
+    <div id="container" class="layout-landscape auto-video-height">
         <div id="video-player">
             <div class="video_container">
                 <video id="video" controls preload="auto" crossorigin="anonymous">
@@ -3576,6 +3611,11 @@
             return $('#container');
         }
 
+        function getVideoSideOffset() {
+            var videoPlayer = document.getElementById('video-player');
+            return parseFloat(getComputedStyle(videoPlayer).top) || 0;
+        }
+
         function isPortraitLayout() {
             return layoutOrientation === 'portrait';
         }
@@ -3617,6 +3657,7 @@
         // 通过拖动水平分割线调整视频高度
         $(function () {
             var video = $('#video');
+            var container = getLayoutContainer();
 
             setLayoutOrientation(inferInitialLayoutOrientation());
 
@@ -3688,11 +3729,17 @@
             $(document).on('mousemove', function (e) {
                 if (!isResizingVertically || isPortraitLayout()) return;
 
+                if (container.hasClass('auto-video-height')) {
+                    // 切到手动高度时沿用屏幕上的垂直位置。
+                    container[0].style.setProperty('--video-side-offset-y', getVideoSideOffset() + 'px');
+                }
+
                 var y = e.clientY;
 
                 var videoHeight = (y - video.offset().top);
 
                 video.css('height', videoHeight + 'px');
+                container.removeClass('auto-video-height');
             }).on('mouseup', function (e) {
                 isResizingVertically = false;
             });
@@ -3730,20 +3777,28 @@
             // 通过视频名称同步调整视频区和控制区的垂直位置
             var videoFileName = document.getElementById('videoFileName');
             var layoutContainer = document.getElementById('container');
+            var videoPlayer = document.getElementById('video-player');
+            var optionsPane = document.getElementById('options-pane');
             var isDraggingVideoSide = false;
             var fileNameDragStartY = 0;
             var fileNameDragStartOffset = 0;
-            var fileNameViewportMargin = 8;
-
-            function getVideoSideOffset() {
-                return parseFloat(layoutContainer.style.getPropertyValue('--video-side-offset-y')) || 0;
-            }
 
             function getMaximumVideoSideOffset() {
-                var currentOffset = getVideoSideOffset();
-                var fileNameRect = videoFileName.getBoundingClientRect();
-                var fileNameBottomWithoutOffset = fileNameRect.bottom - currentOffset;
-                return Math.max(0, window.innerHeight - fileNameViewportMargin - fileNameBottomWithoutOffset);
+                var viewportHeight = layoutContainer.getBoundingClientRect().height;
+                var controlsOverflow = optionsPane.scrollHeight - optionsPane.clientHeight;
+                var controlsHeight = optionsPane.getBoundingClientRect().height + controlsOverflow;
+                var occupiedHeight = videoPlayer.getBoundingClientRect().height + controlsHeight;
+                return Math.max(0, Math.floor(viewportHeight - occupiedHeight));
+            }
+
+            if (typeof ResizeObserver === 'function') {
+                var videoSideObserver = new ResizeObserver(function () {
+                    if (isPortraitLayout() || !layoutContainer.classList.contains('auto-video-height')) return;
+                    layoutContainer.style.setProperty('--max-video-side-offset-y', getMaximumVideoSideOffset() + 'px');
+                });
+                [layoutContainer, videoPlayer, optionsPane].forEach(function (element) {
+                    videoSideObserver.observe(element, { box: 'border-box' });
+                });
             }
 
             function stopFileNameDrag() {
@@ -3765,8 +3820,12 @@
                     return;
                 }
                 var nextOffset = fileNameDragStartOffset + event.clientY - fileNameDragStartY;
-                nextOffset = Math.max(0, Math.min(getMaximumVideoSideOffset(), nextOffset));
-                layoutContainer.style.setProperty('--video-side-offset-y', nextOffset + 'px');
+                // 起点已溢出时，仍允许把左侧向上拖回视口。
+                var maximumOffset = Math.max(fileNameDragStartOffset, getMaximumVideoSideOffset());
+                nextOffset = Math.max(0, Math.min(maximumOffset, nextOffset));
+                if (nextOffset !== getVideoSideOffset()) {
+                    layoutContainer.style.setProperty('--video-side-offset-y', nextOffset + 'px');
+                }
             }).on('mouseup.videoFileNameDrag', stopFileNameDrag);
             $(window).on('blur.videoFileNameDrag', stopFileNameDrag);
 
