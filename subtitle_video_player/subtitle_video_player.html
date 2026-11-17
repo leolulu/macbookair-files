@@ -7711,8 +7711,6 @@
                     try {
                         wordVideos = window.SvpWordVideo.createController(window, messagesBox, {
                             mainVideo: videoElement,
-                            beforeChange: isPinnedToBottom,
-                            afterChange: function (pinned) { if (pinned) scrollToBottom(); },
                             beforePlay: function () {
                                 if (lookupSpeech) lookupSpeech.stop();
                                 if (sentenceAnalysis) sentenceAnalysis.stopSpeech();
@@ -8294,10 +8292,6 @@
                 // 自动滚动锚定在"最新内容贴底边",缓冲区留给手动上滚
                 function bottomBufferHeight() {
                     return messagesBox.clientHeight * 0.5;
-                }
-
-                function isPinnedToBottom() {
-                    return messagesBox.scrollHeight - messagesBox.scrollTop - messagesBox.clientHeight < bottomBufferHeight() + 48;
                 }
 
                 function scrollToBottom() {

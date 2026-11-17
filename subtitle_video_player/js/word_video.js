@@ -243,15 +243,6 @@
     function createController(host, container, options) {
         options = options || {};
         var doc = container.ownerDocument, records = new Map();
-        function hook(name, value) {
-            try { if (options[name]) return options[name](value); }
-            catch (error) { host.console.warn('单词视频回调失败:', error); }
-        }
-        function change(action) {
-            var pinned = hook('beforeChange');
-            action();
-            hook('afterChange', pinned);
-        }
         var viewportFrame = null, savedOverflowAnchor = '';
         function restoreViewportAnchor() {
             if (viewportFrame === null) return;
@@ -259,7 +250,7 @@
             viewportFrame = null;
             container.style.overflowAnchor = savedOverflowAnchor;
         }
-        // User expansion owns its viewport; it must not invoke the chat's bottom-follow hook.
+        // Preserve explicit player positioning while the layout settles.
         function changeViewport(action, settle) {
             if (viewportFrame === null) savedOverflowAnchor = container.style.overflowAnchor;
             else host.cancelAnimationFrame(viewportFrame);
@@ -312,123 +303,120 @@
             return node;
         }
         function status(record, label, retry) {
-            change(function () {
-                record.attachment.hidden = false;
-                record.attachment.className = 'word-video-attachment word-video-status';
-                record.attachment.replaceChildren();
-                var text = doc.createElement('span'); text.textContent = label;
-                record.attachment.appendChild(text);
-                if (retry) {
-                    var retryButton = button('重试', 'word-video-retry');
-                    retryButton.addEventListener('click', function () { start(record); });
-                    record.attachment.appendChild(retryButton);
-                }
-            });
+            record.attachment.hidden = false;
+            record.attachment.className = 'word-video-attachment word-video-status';
+            record.attachment.replaceChildren();
+            var text = doc.createElement('span'); text.textContent = label;
+            record.attachment.appendChild(text);
+            if (retry) {
+                var retryButton = button('重试', 'word-video-retry');
+                retryButton.addEventListener('click', function () { start(record); });
+                record.attachment.appendChild(retryButton);
+            }
         }
         function ready(record, result) {
-            change(function () {
-                record.state = 'ready';
-                record.attachment.hidden = false;
-                record.attachment.className = 'word-video-attachment';
-                record.attachment.replaceChildren();
-                var header = button('', 'word-video-header');
-                header.setAttribute('aria-expanded', 'false');
-                header.setAttribute('aria-label', '播放 ' + result.word + ' 的单词视频');
-                var thumbnail = doc.createElement('span'); thumbnail.className = 'word-video-thumbnail';
-                if (result.video.coverUrl) {
-                    var image = doc.createElement('img');
-                    image.src = result.video.coverUrl; image.alt = ''; image.loading = 'lazy';
-                    image.addEventListener('error', function () { image.remove(); }, { once: true });
-                    thumbnail.appendChild(image);
-                }
-                var play = doc.createElement('span'); play.className = 'word-video-play'; play.textContent = '▶'; play.setAttribute('aria-hidden', 'true');
-                thumbnail.appendChild(play);
-                var info = doc.createElement('span'); info.className = 'word-video-info';
-                var title = doc.createElement('span'); title.className = 'word-video-title'; title.textContent = '单词视频 · ' + result.word;
-                var subtitle = doc.createElement('span'); subtitle.className = 'word-video-subtitle';
-                var seconds = result.video.videoTime;
-                subtitle.textContent = '百度翻译' + (seconds === null ? '' : ' · ' + Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0'));
-                if (result.word !== result.original) subtitle.textContent += ' · 相关词形';
-                info.append(title, subtitle);
-                var toggle = doc.createElement('span'); toggle.className = 'word-video-toggle'; toggle.textContent = '播放';
-                header.append(thumbnail, info, toggle);
-                var stage = doc.createElement('div'); stage.className = 'word-video-stage'; stage.hidden = true;
-                var video = doc.createElement('video'); record.video = video;
-                video.controls = true; video.playsInline = true; video.preload = 'none';
-                video.setAttribute('controlslist', 'nodownload');
-                if (result.video.coverUrl) video.poster = result.video.coverUrl;
-                // Baidu's CDN does not grant CORS. Native media playback must omit crossorigin.
-                stage.appendChild(video);
-                record.resizeVideo = function () {
-                    if (stage.hidden || !record.attachment.clientWidth || !container.clientHeight) return;
-                    var ratio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
-                    var maximumHeight = Math.max(0, Math.min(container.clientHeight * 2 / 3, container.clientHeight - header.offsetHeight - 24));
-                    var width = Math.min(record.attachment.clientWidth, maximumHeight * ratio);
-                    stage.style.width = Math.floor(width) + 'px';
-                    stage.style.height = Math.floor(width / ratio) + 'px';
-                };
-                function revealVideo() {
-                    if (stage.hidden || !container.contains(stage) || !container.clientHeight) return;
-                    var view = container.getBoundingClientRect();
-                    var top = view.top + container.clientTop + 8;
-                    var bottom = view.top + container.clientTop + container.clientHeight - 8;
-                    var player = stage.getBoundingClientRect(), heading = header.getBoundingClientRect();
-                    var delta = player.bottom > bottom ? player.bottom - bottom : 0;
-                    if (heading.top - delta < top) delta = heading.top - top;
-                    if (delta) container.scrollTop += delta;
-                    record.revealScrollTop = container.scrollTop;
-                }
-                var notice = doc.createElement('div'); notice.className = 'word-video-notice'; notice.hidden = true;
-                function playbackError() {
-                    notice.hidden = false; notice.textContent = '视频暂时无法播放 ';
-                    var retry = button('重试播放', 'word-video-retry');
-                    retry.addEventListener('click', function () { video.removeAttribute('src'); video.load(); playVideo(); });
-                    notice.appendChild(retry);
-                }
-                function playVideo() {
-                    notice.hidden = true;
-                    if (!video.getAttribute('src')) video.src = result.video.videoUrl;
-                    var playing = video.play();
-                    if (playing && playing.catch) playing.catch(function (error) { if (error.name !== 'AbortError') playbackError(); });
-                }
-                video.addEventListener('play', function () {
-                    records.forEach(function (other) { if (other !== record && other.video) other.video.pause(); });
-                    hook('beforePlay');
-                });
-                video.addEventListener('loadedmetadata', function () {
-                    if (record.resizeVideo) {
-                        var reveal = record.revealOnMetadata && !stage.hidden && Math.abs(container.scrollTop - record.revealScrollTop) <= 1;
-                        record.revealOnMetadata = false;
-                        if (reveal) {
-                            var version = record.viewportVersion;
-                            changeViewport(function () { record.resizeVideo(); revealVideo(); }, function () {
-                                if (record.viewportVersion === version) revealVideo();
-                            });
-                        } else record.resizeVideo();
-                    }
-                    if (!video.videoWidth) { notice.hidden = false; notice.textContent = '当前浏览器仅能播放音频'; }
-                });
-                video.addEventListener('error', playbackError);
-                video.addEventListener('keydown', function (event) { if (event.key !== 'Escape') event.stopPropagation(); });
-                header.addEventListener('click', function () {
-                    var expanded = stage.hidden;
-                    var headingTop = header.getBoundingClientRect().top;
-                    var version = record.viewportVersion = (record.viewportVersion || 0) + 1;
-                    record.revealOnMetadata = expanded && !video.readyState;
-                    changeViewport(function () {
-                        stage.hidden = !expanded;
-                        record.group.classList.toggle('word-video-expanded', expanded);
-                        header.setAttribute('aria-expanded', String(expanded)); toggle.textContent = expanded ? '收起' : '播放';
-                        record.resizeVideo();
-                        if (expanded) revealVideo();
-                        else container.scrollTop += header.getBoundingClientRect().top - headingTop;
-                    }, function () {
-                        if (expanded && record.viewportVersion === version) revealVideo();
-                    });
-                    if (expanded) playVideo(); else video.pause();
-                });
-                record.attachment.append(header, stage, notice);
+            record.state = 'ready';
+            record.attachment.hidden = false;
+            record.attachment.className = 'word-video-attachment';
+            record.attachment.replaceChildren();
+            var header = button('', 'word-video-header');
+            header.setAttribute('aria-expanded', 'false');
+            header.setAttribute('aria-label', '播放 ' + result.word + ' 的单词视频');
+            var thumbnail = doc.createElement('span'); thumbnail.className = 'word-video-thumbnail';
+            if (result.video.coverUrl) {
+                var image = doc.createElement('img');
+                image.src = result.video.coverUrl; image.alt = ''; image.loading = 'lazy';
+                image.addEventListener('error', function () { image.remove(); }, { once: true });
+                thumbnail.appendChild(image);
+            }
+            var play = doc.createElement('span'); play.className = 'word-video-play'; play.textContent = '▶'; play.setAttribute('aria-hidden', 'true');
+            thumbnail.appendChild(play);
+            var info = doc.createElement('span'); info.className = 'word-video-info';
+            var title = doc.createElement('span'); title.className = 'word-video-title'; title.textContent = '单词视频 · ' + result.word;
+            var subtitle = doc.createElement('span'); subtitle.className = 'word-video-subtitle';
+            var seconds = result.video.videoTime;
+            subtitle.textContent = '百度翻译' + (seconds === null ? '' : ' · ' + Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0'));
+            if (result.word !== result.original) subtitle.textContent += ' · 相关词形';
+            info.append(title, subtitle);
+            var toggle = doc.createElement('span'); toggle.className = 'word-video-toggle'; toggle.textContent = '播放';
+            header.append(thumbnail, info, toggle);
+            var stage = doc.createElement('div'); stage.className = 'word-video-stage'; stage.hidden = true;
+            var video = doc.createElement('video'); record.video = video;
+            video.controls = true; video.playsInline = true; video.preload = 'none';
+            video.setAttribute('controlslist', 'nodownload');
+            if (result.video.coverUrl) video.poster = result.video.coverUrl;
+            // Baidu's CDN does not grant CORS. Native media playback must omit crossorigin.
+            stage.appendChild(video);
+            record.resizeVideo = function () {
+                if (stage.hidden || !record.attachment.clientWidth || !container.clientHeight) return;
+                var ratio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+                var maximumHeight = Math.max(0, Math.min(container.clientHeight * 2 / 3, container.clientHeight - header.offsetHeight - 24));
+                var width = Math.min(record.attachment.clientWidth, maximumHeight * ratio);
+                stage.style.width = Math.floor(width) + 'px';
+                stage.style.height = Math.floor(width / ratio) + 'px';
+            };
+            function revealVideo() {
+                if (stage.hidden || !container.contains(stage) || !container.clientHeight) return;
+                var view = container.getBoundingClientRect();
+                var top = view.top + container.clientTop + 8;
+                var bottom = view.top + container.clientTop + container.clientHeight - 8;
+                var player = stage.getBoundingClientRect(), heading = header.getBoundingClientRect();
+                var delta = player.bottom > bottom ? player.bottom - bottom : 0;
+                if (heading.top - delta < top) delta = heading.top - top;
+                if (delta) container.scrollTop += delta;
+                record.revealScrollTop = container.scrollTop;
+            }
+            var notice = doc.createElement('div'); notice.className = 'word-video-notice'; notice.hidden = true;
+            function playbackError() {
+                notice.hidden = false; notice.textContent = '视频暂时无法播放 ';
+                var retry = button('重试播放', 'word-video-retry');
+                retry.addEventListener('click', function () { video.removeAttribute('src'); video.load(); playVideo(); });
+                notice.appendChild(retry);
+            }
+            function playVideo() {
+                notice.hidden = true;
+                if (!video.getAttribute('src')) video.src = result.video.videoUrl;
+                var playing = video.play();
+                if (playing && playing.catch) playing.catch(function (error) { if (error.name !== 'AbortError') playbackError(); });
+            }
+            video.addEventListener('play', function () {
+                records.forEach(function (other) { if (other !== record && other.video) other.video.pause(); });
+                try { if (options.beforePlay) options.beforePlay(); }
+                catch (error) { host.console.warn('单词视频回调失败:', error); }
             });
+            video.addEventListener('loadedmetadata', function () {
+                if (record.resizeVideo) {
+                    var reveal = record.revealOnMetadata && !stage.hidden && Math.abs(container.scrollTop - record.revealScrollTop) <= 1;
+                    record.revealOnMetadata = false;
+                    if (reveal) {
+                        var version = record.viewportVersion;
+                        changeViewport(function () { record.resizeVideo(); revealVideo(); }, function () {
+                            if (record.viewportVersion === version) revealVideo();
+                        });
+                    } else record.resizeVideo();
+                }
+                if (!video.videoWidth) { notice.hidden = false; notice.textContent = '当前浏览器仅能播放音频'; }
+            });
+            video.addEventListener('error', playbackError);
+            video.addEventListener('keydown', function (event) { if (event.key !== 'Escape') event.stopPropagation(); });
+            header.addEventListener('click', function () {
+                var expanded = stage.hidden;
+                var headingTop = header.getBoundingClientRect().top;
+                var version = record.viewportVersion = (record.viewportVersion || 0) + 1;
+                record.revealOnMetadata = expanded && !video.readyState;
+                changeViewport(function () {
+                    stage.hidden = !expanded;
+                    record.group.classList.toggle('word-video-expanded', expanded);
+                    header.setAttribute('aria-expanded', String(expanded)); toggle.textContent = expanded ? '收起' : '播放';
+                    record.resizeVideo();
+                    if (expanded) revealVideo();
+                    else container.scrollTop += header.getBoundingClientRect().top - headingTop;
+                }, function () {
+                    if (expanded && record.viewportVersion === version) revealVideo();
+                });
+                if (expanded) playVideo(); else video.pause();
+            });
+            record.attachment.append(header, stage, notice);
         }
         function start(record) {
             if (records.get(record.message) !== record || !container.contains(record.message)) return;
@@ -444,7 +432,10 @@
                 if (!current()) return;
                 record.controller = null;
                 if (result) ready(record, result);
-                else change(function () { record.state = 'empty'; record.attachment.hidden = true; });
+                else {
+                    record.state = 'empty';
+                    record.attachment.hidden = true;
+                }
             }).catch(function (error) {
                 if (!current()) return;
                 record.controller = null; record.state = 'error';
@@ -462,7 +453,8 @@
                 word: normalizeWord(input.word), sentence: input.sentence,
                 context: { backendUrl: context.backendUrl, provider: context.provider, model: context.model, conversationId: context.conversationId }
             } };
-            change(function () { message.before(group); group.append(message, attachment); });
+            message.before(group);
+            group.append(message, attachment);
             records.set(message, record); start(record);
             if (resizeObserver) resizeObserver.observe(attachment);
         }
@@ -473,7 +465,7 @@
             record.revealOnMetadata = false;
             record.token++;
             if (record.controller) { record.controller.abort(); record.controller = null; }
-            if (record.state !== 'ready') change(function () { record.attachment.hidden = true; });
+            if (record.state !== 'ready') record.attachment.hidden = true;
         }
         function reset() {
             restoreViewportAnchor();
