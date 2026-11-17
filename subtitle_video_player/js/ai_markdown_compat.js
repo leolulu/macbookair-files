@@ -29,7 +29,7 @@
         { marker: '_', kind: 'em' }
     ];
 
-    var LETTER_OR_NUMBER = /[\p{L}\p{N}]$/u;
+    var LETTER_OR_NUMBER = /[\p{L}\p{N}]/u;
 
     function previousSourceChar(tokens) {
         if (!tokens.length) {
