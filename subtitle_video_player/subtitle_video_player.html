@@ -124,6 +124,21 @@
             display: block;
         }
 
+        /* 仅在同步命中测试时，让原生面板按底部控件的实际高度参与检测。 */
+        #video.testing-controls-hit {
+            pointer-events: none;
+        }
+
+        #video.testing-controls-hit::-webkit-media-controls-panel {
+            align-self: flex-end;
+            pointer-events: auto;
+        }
+
+        #video.keyboard-cursor-idle::-webkit-media-controls-panel,
+        #video.keyboard-cursor-idle::-webkit-media-controls-overlay-enclosure {
+            cursor: none;
+        }
+
         #container.layout-portrait #video {
             height: auto !important;
         }
@@ -3693,6 +3708,51 @@
                 }
             `;
 
+            const mainVideo = video[0];
+            let keyboardPlayback = false;
+            let mousePosition = null;
+            let cursorTimer;
+
+            function showVideoCursor() {
+                clearTimeout(cursorTimer);
+                mainVideo.classList.remove('keyboard-cursor-idle');
+            }
+
+            function scheduleCursorHide() {
+                clearTimeout(cursorTimer);
+                if (!keyboardPlayback || !mousePosition || mainVideo.paused ||
+                    mainVideo.classList.contains('keyboard-cursor-idle')) return;
+
+                cursorTimer = setTimeout(function () {
+                    if (!mainVideo.matches(':hover:focus-visible')) return;
+                    const { clientX, clientY } = mousePosition;
+                    // 原生按钮和画面都会命中 video，在同一帧内测完并还原面板。
+                    mainVideo.classList.add('testing-controls-hit');
+                    const overControls = document.elementFromPoint(clientX, clientY) === mainVideo;
+                    mainVideo.classList.remove('testing-controls-hit');
+                    mainVideo.classList.toggle('keyboard-cursor-idle', !overControls);
+                }, 2500);
+            }
+
+            video.on('keydown', function (event) {
+                if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+                    ![' ', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+                keyboardPlayback = true;
+                scheduleCursorHide();
+            });
+            video.on('mouseenter mousemove', function (event) {
+                mousePosition = { clientX: event.clientX, clientY: event.clientY };
+                if (!keyboardPlayback) return;
+                mainVideo.classList.remove('keyboard-cursor-idle');
+                scheduleCursorHide();
+            });
+            video.on('playing', scheduleCursorHide);
+            video.on('pause ended', showVideoCursor);
+            video.on('emptied blur', function () {
+                keyboardPlayback = false;
+                showVideoCursor();
+            });
+
             video.on('mouseenter', function () {
                 var hideControl = $('#hideControl').prop('checked');
                 if (document.head.contains(hideControlsStyle) && !hideControl) {
@@ -3700,6 +3760,8 @@
                 }
             });
             video.on('mouseleave', function () {
+                mousePosition = null;
+                showVideoCursor();
                 if (video.prop('readyState') == 4) {
                     document.head.appendChild(hideControlsStyle);
                 }
