@@ -10126,10 +10126,12 @@
                     selectionBubble.hidden = false;
                     var bubbleRect = selectionBubble.getBoundingClientRect();
                     var positionMode = getEffectiveSelectionBubblePosition();
+                    var subtitlesRect = subtitlesContainer.getBoundingClientRect();
+                    var minLeft = 8;
+                    var maxLeft = window.innerWidth - bubbleRect.width - 8;
                     var left = info.rect.left + info.rect.width / 2 - bubbleRect.width / 2;
                     var top;
                     if (positionMode === 'subtitle-top' || positionMode === 'subtitle-bottom') {
-                        var subtitlesRect = subtitlesContainer.getBoundingClientRect();
                         var subtitleMinLeft = Math.max(8, subtitlesRect.left + 8);
                         var subtitleMaxLeft = Math.min(
                             window.innerWidth - bubbleRect.width - 8,
@@ -10149,18 +10151,28 @@
                                 top = visibleSubtitleTop;
                             }
                         }
-                    } else if (positionMode === 'below') {
-                        top = info.rect.bottom + 8;
-                        if (top + bubbleRect.height > window.innerHeight - 8) {
-                            top = info.rect.top - bubbleRect.height - 8;
-                        }
                     } else {
-                        top = info.rect.top - bubbleRect.height - 8;
-                        if (top < 8) {
+                        var visibleLeft = Math.max(0, subtitlesRect.left);
+                        var visibleRight = Math.min(window.innerWidth, subtitlesRect.right);
+                        var spareWidth = visibleRight - visibleLeft - bubbleRect.width;
+                        if (spareWidth >= 0) {
+                            var inset = Math.min(4, spareWidth / 2);
+                            minLeft = visibleLeft + inset;
+                            maxLeft = visibleRight - bubbleRect.width - inset;
+                        }
+                        if (positionMode === 'below') {
                             top = info.rect.bottom + 8;
+                            if (top + bubbleRect.height > window.innerHeight - 8) {
+                                top = info.rect.top - bubbleRect.height - 8;
+                            }
+                        } else {
+                            top = info.rect.top - bubbleRect.height - 8;
+                            if (top < 8) {
+                                top = info.rect.bottom + 8;
+                            }
                         }
                     }
-                    left = Math.min(Math.max(left, 8), window.innerWidth - bubbleRect.width - 8);
+                    left = Math.min(Math.max(left, minLeft), maxLeft);
                     top = Math.min(Math.max(top, 8), window.innerHeight - bubbleRect.height - 8);
                     selectionBubble.style.left = left + 'px';
                     selectionBubble.style.top = top + 'px';
