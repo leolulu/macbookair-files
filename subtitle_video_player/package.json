@@ -5,6 +5,7 @@
   "scripts": {
     "build:single-html": "node ./scripts/build_single-html.js",
     "test": "node --test ./test/*.test.js",
+    "test:cursor:browser": "node ./scripts/test_video_cursor_browser.js",
     "test:eudic": "node --test ./test/eudic_integration.test.js",
     "test:markdown": "node --test ./test/ai_markdown_compat.test.js",
     "test:sentence": "node --test ./test/sentence_analysis.test.js",
