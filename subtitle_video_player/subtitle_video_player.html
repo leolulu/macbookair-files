@@ -10156,9 +10156,10 @@
                         var visibleRight = Math.min(window.innerWidth, subtitlesRect.right);
                         var spareWidth = visibleRight - visibleLeft - bubbleRect.width;
                         if (spareWidth >= 0) {
-                            var inset = Math.min(4, spareWidth / 2);
-                            minLeft = visibleLeft + inset;
-                            maxLeft = visibleRight - bubbleRect.width - inset;
+                            var outerInset = Math.min(8, spareWidth);
+                            var subtitlesOnLeft = getLayoutContainer().hasClass('layout-reversed');
+                            minLeft = visibleLeft + (subtitlesOnLeft ? outerInset : 0);
+                            maxLeft = visibleRight - bubbleRect.width - (subtitlesOnLeft ? 0 : outerInset);
                         }
                         if (positionMode === 'below') {
                             top = info.rect.bottom + 8;
